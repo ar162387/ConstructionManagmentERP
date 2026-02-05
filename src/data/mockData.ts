@@ -1,0 +1,191 @@
+import {
+  BankAccount,
+  Project,
+  Employee,
+  Transaction,
+  AuditLog,
+  NonConsumableItem,
+} from '@/types';
+
+export const mockBankAccounts: BankAccount[] = [
+  {
+    id: '1',
+    name: 'Main Operations Account',
+    bankName: 'First National Bank',
+    accountNumber: '****4521',
+    balance: 2450000,
+    type: 'business',
+  },
+  {
+    id: '2',
+    name: 'Payroll Account',
+    bankName: 'City Bank',
+    accountNumber: '****7832',
+    balance: 850000,
+    type: 'checking',
+  },
+  {
+    id: '3',
+    name: 'Reserve Fund',
+    bankName: 'First National Bank',
+    accountNumber: '****2198',
+    balance: 1200000,
+    type: 'savings',
+  },
+];
+
+export const mockProjects: Project[] = [
+  {
+    id: '1',
+    name: 'Skyline Tower Construction',
+    description: 'High-rise commercial building project in downtown',
+    status: 'active',
+    budget: 15000000,
+    spent: 8750000,
+    startDate: new Date('2024-01-15'),
+    endDate: new Date('2025-06-30'),
+    managerId: '3',
+  },
+  {
+    id: '2',
+    name: 'Green Valley Residential',
+    description: 'Eco-friendly residential complex with 120 units',
+    status: 'active',
+    budget: 8500000,
+    spent: 3200000,
+    startDate: new Date('2024-03-01'),
+    endDate: new Date('2025-03-01'),
+    managerId: '3',
+  },
+  {
+    id: '3',
+    name: 'Harbor Bridge Renovation',
+    description: 'Structural renovation and modernization of historic bridge',
+    status: 'on_hold',
+    budget: 4200000,
+    spent: 980000,
+    startDate: new Date('2024-02-20'),
+    managerId: '3',
+  },
+  {
+    id: '4',
+    name: 'Metro Station Phase 2',
+    description: 'Underground metro station expansion project',
+    status: 'completed',
+    budget: 12000000,
+    spent: 11850000,
+    startDate: new Date('2023-06-01'),
+    endDate: new Date('2024-08-15'),
+    managerId: '3',
+  },
+];
+
+export const mockEmployees: Employee[] = [
+  {
+    id: '1',
+    projectId: '1',
+    name: 'John Martinez',
+    role: 'Site Supervisor',
+    payType: 'monthly',
+    payRate: 65000,
+    phone: '+1 555-0101',
+    joiningDate: new Date('2024-01-20'),
+    assets: ['Company Phone', 'Safety Equipment'],
+  },
+  {
+    id: '2',
+    projectId: '1',
+    name: 'Emily Rodriguez',
+    role: 'Project Engineer',
+    payType: 'monthly',
+    payRate: 85000,
+    phone: '+1 555-0102',
+    joiningDate: new Date('2024-01-22'),
+    assets: ['Laptop', 'Company Phone'],
+  },
+  {
+    id: '3',
+    projectId: '2',
+    name: 'James Wilson',
+    role: 'Construction Worker',
+    payType: 'daily',
+    payRate: 250,
+    phone: '+1 555-0103',
+    joiningDate: new Date('2024-03-05'),
+    assets: ['Safety Equipment'],
+  },
+];
+
+export const mockTransactions: Transaction[] = [
+  {
+    id: '1',
+    accountId: '1',
+    type: 'outflow',
+    amount: 450000,
+    description: 'Steel materials payment - Skyline Tower',
+    category: 'Materials',
+    paymentMode: 'bank_transfer',
+    projectId: '1',
+    date: new Date('2024-12-15'),
+    createdBy: '2',
+  },
+  {
+    id: '2',
+    accountId: '2',
+    type: 'outflow',
+    amount: 125000,
+    description: 'Monthly payroll - December',
+    category: 'Payroll',
+    paymentMode: 'bank_transfer',
+    date: new Date('2024-12-20'),
+    createdBy: '2',
+  },
+  {
+    id: '3',
+    accountId: '1',
+    type: 'inflow',
+    amount: 2000000,
+    description: 'Client milestone payment - Green Valley',
+    category: 'Revenue',
+    paymentMode: 'bank_transfer',
+    projectId: '2',
+    date: new Date('2024-12-22'),
+    createdBy: '1',
+  },
+];
+
+export const mockAuditLogs: AuditLog[] = [
+  {
+    id: '1',
+    userId: '2',
+    userName: 'Michael Chen',
+    action: 'create',
+    module: 'Transactions',
+    details: 'Created new payment transaction for Steel Solutions',
+    timestamp: new Date('2024-12-20T10:30:00'),
+  },
+  {
+    id: '2',
+    userId: '3',
+    userName: 'David Williams',
+    action: 'create',
+    module: 'Inventory',
+    details: 'Added 500 units of cement to Skyline Tower inventory',
+    timestamp: new Date('2024-12-20T09:15:00'),
+  },
+  {
+    id: '3',
+    userId: '1',
+    userName: 'Sarah Johnson',
+    action: 'update',
+    module: 'Users',
+    details: 'Updated permissions for Admin role',
+    beforeData: { canDelete: false },
+    afterData: { canDelete: true },
+    timestamp: new Date('2024-12-19T16:45:00'),
+  },
+];
+
+// Non-consumable items are now loaded from API (nonConsumableItemService).
+// Legacy mock kept for type compatibility only (empty).
+export const mockNonConsumables: NonConsumableItem[] = [];

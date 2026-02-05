@@ -1,0 +1,74 @@
+---
+description: ProjectFlow ERP - project scope, audit logging, and security policy
+alwaysApply: true
+---
+
+# ProjectFlow ERP - Project Conventions
+
+Apply these conventions to all implementations unless something special is required.
+
+## 1. Project-scoped
+
+The ERP system is **project-scoped**. Data and features are scoped to projects. Site managers only see their assigned project(s); admins and super admins see all projects.
+
+- Filter data by `project_id` where relevant
+- Use `assignedProjects` / `project_id` for authorization
+- ProjectContext and ProjectPolicy enforce project scope
+
+## 2. Centralized audit log
+
+Use the **AuditService** for all significant actions:
+
+- Create, Update, Delete for all entities
+- Login, Logout (already in AuthController)
+- Status changes and other key actions
+
+```php
+AuditService::log($actor, $action, $targetType, $targetId, $beforeData, $afterData, $module, $details, $request);
+```
+
+Do not scatter logging logic; keep it centralized.
+
+## 3. Security policy
+
+### Super Admin
+
+- Full access to everything
+- Can restrict Edit/Delete for admins via `canEdit` / `canDelete`
+- Only super admin can edit users, delete users, toggle admin permissions
+
+### Admin
+
+- Full CRUD on resources (subject to project scope)
+- Edit/Delete access can be restricted by super admin via `canEdit` / `canDelete`
+- Can only create site managers (cannot create admins or super admins)
+- Apply Gates/Policies for `canEdit` / `canDelete` on destructive operations
+
+### Site Manager
+
+- **Create** and **Read** only by default
+- No Edit/Delete unless explicitly required for a special case
+- Limited to assigned project(s) only
+- Company-level: only Vendor Invoices and Vendors (per sidebar rules)
+
+## 4. Hide Edit/Delete UI for unauthorized users
+
+Use `useCanEdit()` and `useCanDelete()` from ProjectContext to **hide** Edit and Delete options independently. Revoking only canEdit hides Edit but keeps Delete visible; revoking only canDelete hides Delete but keeps Edit visible.
+
+- Import: `import { useCanEdit, useCanDelete } from '@/contexts/ProjectContext';`
+- Usage: `const canEdit = useCanEdit(); const canDelete = useCanDelete();`
+- Wrap Edit: `{canEdit && (<DropdownMenuItem>Edit</DropdownMenuItem>)}`
+- Wrap Delete: `{canDelete && (<DropdownMenuItem>Delete</DropdownMenuItem>)}`
+- For actions column visibility: `{(canEdit || canDelete) && <TableCell>...</TableCell>}`
+
+Never show Edit/Delete and then block with an "unauthorized" toast—hide them entirely. User Management uses super_admin-only visibility for Edit/Delete.
+
+## Implementation checklist
+
+When adding a new module or CRUD:
+
+1. Apply project scope (filter by project, check assignedProjects for site managers)
+2. Log create/update/delete via AuditService
+3. Use Policies/Gates for authorization (respect canEdit/canDelete for admin)
+4. Restrict site manager to Create + Read unless special
+5. **Hide** Edit/Delete UI: use `useCanEditDelete()` and wrap Edit/Delete options—never show them then block with a toast
