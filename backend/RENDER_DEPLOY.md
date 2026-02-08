@@ -24,6 +24,8 @@ Add these in Render → Your Service → Environment:
 
 | Variable | Value |
 |----------|-------|
+| `AUTORUN_ENABLED` | `true` (enables Laravel automations: config:cache, migrate, etc.) |
+| `NGINX_HTTP_PORT` | `10000` (Render's default; set via Dockerfile if not overridden) |
 | `APP_ENV` | `production` |
 | `APP_DEBUG` | `false` |
 | `APP_KEY` | Run `php artisan key:generate --show` locally and paste |
@@ -48,7 +50,12 @@ Add these in Render → Your Service → Environment:
 
 ## Notes
 
+- **Startup flow**: The image uses serversideup **AUTORUN** and **entrypoint.d** scripts. On each deploy:
+  1. `entrypoint.d/05-env-setup.sh` ensures `.env` exists (copies from `.env.example` if missing).
+  2. AUTORUN runs Laravel automations: `config:cache`, `route:cache`, `migrate`, `optimize`, `storage:link`, `view:cache`, `event:cache`.
+  3. Nginx and PHP-FPM start via s6 overlay.
 - **PHP 8.4**: The Dockerfile uses `serversideup/php:8.4-fpm-nginx` to match your Laravel/composer.lock requirements.
 - **Port**: The image listens on port 10000 (Render’s default). No extra config needed.
+- **Manual deploy script**: `scripts/00-deploy.sh` is kept for local/manual use (e.g. `docker exec` into a running container). Render deployments use AUTORUN instead.
 - **Cold starts**: On the free tier, the service sleeps after 15 minutes of inactivity. The first request may take 30–60 seconds.
 - **Ephemeral storage**: File uploads in `storage/` are not persisted across deploys. Use S3 or similar for persistent uploads if needed.

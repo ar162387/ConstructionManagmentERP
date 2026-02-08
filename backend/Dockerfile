@@ -17,8 +17,8 @@ WORKDIR /var/www/html
 # Copy application and vendor from build stage
 COPY --from=build /app /var/www/html
 
-# Startup script: prepare app, run migrations, then start server (chmod in COPY - image runs as www-data)
-COPY --chmod=755 scripts/00-deploy.sh /startup.sh
+# entrypoint.d scripts run before CMD (e.g. .env setup); uses serversideup default CMD /init
+COPY --chmod=755 ./entrypoint.d/ /etc/entrypoint.d/
 
 # Ensure www-data can read/write (serversideup runs as www-data; needs .env, storage, cache)
 USER root
@@ -31,5 +31,7 @@ ENV APP_ENV=production
 ENV APP_DEBUG=false
 ENV LOG_CHANNEL=stderr
 
-# Run migrations at startup, then start nginx/php-fpm
-CMD ["/bin/sh", "-c", "/startup.sh && exec /init"]
+# Enable serversideup Laravel AUTORUN (config:cache, route:cache, migrate, optimize, etc.)
+ENV AUTORUN_ENABLED=true
+ENV AUTORUN_LARAVEL_MIGRATION=true
+ENV AUTORUN_LARAVEL_MIGRATION_FORCE=true
