@@ -1,23 +1,34 @@
-FROM richarvey/nginx-php-fpm:3.1.6
+# Stage 1: Install dependencies with PHP 8.4 (matches composer.lock requirements)
+FROM php:8.4-cli AS build
+WORKDIR /app
+
+# Install composer and zip extension (required for composer)
+RUN apt-get update && apt-get install -y git unzip libzip-dev && \
+    docker-php-ext-install zip && \
+    curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
 
 COPY . .
+RUN composer install --no-dev --optimize-autoloader --no-interaction
 
-# Deploy script runs via image's RUN_SCRIPTS (scripts in /var/www/html/scripts/)
-RUN chmod +x scripts/00-deploy.sh
+# Stage 2: Runtime with PHP 8.4 + nginx
+FROM serversideup/php:8.4-fpm-nginx
+WORKDIR /var/www/html
 
-# Image config
-ENV SKIP_COMPOSER=1
-ENV WEBROOT=/var/www/html/public
-ENV PHP_ERRORS_STDERR=1
-ENV RUN_SCRIPTS=1
-ENV REAL_IP_HEADER=1
+# Copy application and vendor from build stage
+COPY --from=build /app /var/www/html
 
-# Laravel config (overridable via Render env vars)
+# Startup script: prepare app, run migrations, then start server
+COPY scripts/00-deploy.sh /startup.sh
+RUN chmod +x /startup.sh
+
+# Ensure www-data can read/write (serversideup runs as www-data; needs .env, storage, cache)
+RUN chown -R www-data:www-data /var/www/html
+
+# Render uses port 10000 by default
+ENV NGINX_HTTP_PORT=10000
 ENV APP_ENV=production
 ENV APP_DEBUG=false
 ENV LOG_CHANNEL=stderr
 
-# Allow composer to run as root
-ENV COMPOSER_ALLOW_SUPERUSER=1
-
-CMD ["/start.sh"]
+# Run migrations at startup, then start nginx/php-fpm
+CMD ["/bin/sh", "-c", "/startup.sh && exec /init"]

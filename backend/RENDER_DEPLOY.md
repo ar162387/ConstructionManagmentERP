@@ -27,7 +27,7 @@ Add these in Render → Your Service → Environment:
 | `APP_ENV` | `production` |
 | `APP_DEBUG` | `false` |
 | `APP_KEY` | Run `php artisan key:generate --show` locally and paste |
-| `APP_URL` | `https://your-service.onrender.com` (your Render URL) |
+| `APP_URL` | Optional – Render sets `RENDER_EXTERNAL_URL` automatically |
 | `DB_CONNECTION` | `pgsql` |
 | `DB_HOST` | Your Neon host (e.g. `ep-bold-morning-aiy9w3d0-pooler.c-4.us-east-1.aws.neon.tech`) |
 | `DB_PORT` | `5432` |
@@ -48,5 +48,7 @@ Add these in Render → Your Service → Environment:
 
 ## Notes
 
+- **PHP 8.4**: The Dockerfile uses `serversideup/php:8.4-fpm-nginx` to match your Laravel/composer.lock requirements.
+- **Port**: The image listens on port 10000 (Render’s default). No extra config needed.
 - **Cold starts**: On the free tier, the service sleeps after 15 minutes of inactivity. The first request may take 30–60 seconds.
 - **Ephemeral storage**: File uploads in `storage/` are not persisted across deploys. Use S3 or similar for persistent uploads if needed.
