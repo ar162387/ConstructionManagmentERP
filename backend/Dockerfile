@@ -17,12 +17,13 @@ WORKDIR /var/www/html
 # Copy application and vendor from build stage
 COPY --from=build /app /var/www/html
 
-# Startup script: prepare app, run migrations, then start server
-COPY scripts/00-deploy.sh /startup.sh
-RUN chmod +x /startup.sh
+# Startup script: prepare app, run migrations, then start server (chmod in COPY - image runs as www-data)
+COPY --chmod=755 scripts/00-deploy.sh /startup.sh
 
 # Ensure www-data can read/write (serversideup runs as www-data; needs .env, storage, cache)
+USER root
 RUN chown -R www-data:www-data /var/www/html
+USER www-data
 
 # Render uses port 10000 by default
 ENV NGINX_HTTP_PORT=10000
