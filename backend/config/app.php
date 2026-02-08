@@ -43,6 +43,18 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Performance Debug Mode
+    |--------------------------------------------------------------------------
+    |
+    | When enabled, request/SQL timing diagnostics are logged and exposed
+    | through debug response headers by RequestTimingMiddleware.
+    |
+    */
+
+    'debug_performance' => (bool) env('PERF_DEBUG', false),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application URL
     |--------------------------------------------------------------------------
     |
