@@ -36,9 +36,9 @@ export default function BankAccounts() {
         {/* Account Cards */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           {bankAccounts.map((acc) => (
-            <div key={acc.id} className="border-2 border-border p-4 space-y-3">
+            <div key={acc.id} className="rounded-xl border border-border/60 bg-card p-5 shadow-sm transition-all hover:shadow-md space-y-3">
               <div className="flex items-center justify-between">
-                <p className="font-bold">{acc.bankName}</p>
+                <p className="font-semibold">{acc.bankName}</p>
                 <span className="text-xs font-mono text-muted-foreground">{acc.accountNumber}</span>
               </div>
               <p className="text-2xl font-bold">{formatCurrency(acc.currentBalance)}</p>
@@ -51,33 +51,33 @@ export default function BankAccounts() {
         </div>
 
         {/* Transactions */}
-        <div className="border-2 border-border">
-          <div className="border-b-2 border-border bg-secondary px-4 py-3">
-            <h2 className="text-sm font-bold uppercase tracking-wider">Recent Transactions</h2>
+        <div className="rounded-xl border border-border/60 bg-card overflow-hidden shadow-sm">
+          <div className="border-b border-border/40 bg-muted/30 px-5 py-4 backdrop-blur-sm">
+            <h2 className="text-sm font-semibold tracking-tight">Recent Transactions</h2>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b-2 border-border bg-primary text-primary-foreground">
-                  <th className="px-4 py-2.5 text-left text-xs font-bold uppercase tracking-wider">Date</th>
-                  <th className="px-4 py-2.5 text-left text-xs font-bold uppercase tracking-wider">Type</th>
-                  <th className="px-4 py-2.5 text-right text-xs font-bold uppercase tracking-wider">Amount</th>
-                  <th className="px-4 py-2.5 text-left text-xs font-bold uppercase tracking-wider">Source</th>
-                  <th className="px-4 py-2.5 text-left text-xs font-bold uppercase tracking-wider">Destination</th>
-                  <th className="px-4 py-2.5 text-left text-xs font-bold uppercase tracking-wider">Mode</th>
-                  <th className="px-4 py-2.5 text-left text-xs font-bold uppercase tracking-wider">Reference</th>
+                <tr className="border-b border-border/40 bg-muted/10 text-muted-foreground">
+                  <th className="px-5 py-3 text-left text-xs font-medium">Date</th>
+                  <th className="px-5 py-3 text-left text-xs font-medium">Type</th>
+                  <th className="px-5 py-3 text-right text-xs font-medium">Amount</th>
+                  <th className="px-5 py-3 text-left text-xs font-medium">Source</th>
+                  <th className="px-5 py-3 text-left text-xs font-medium">Destination</th>
+                  <th className="px-5 py-3 text-left text-xs font-medium">Mode</th>
+                  <th className="px-5 py-3 text-left text-xs font-medium">Reference</th>
                 </tr>
               </thead>
               <tbody>
                 {bankTransactions.map((tx) => (
-                  <tr key={tx.id} className="border-b border-border hover:bg-accent/50 transition-colors">
-                    <td className="px-4 py-3 text-xs">{tx.date}</td>
-                    <td className="px-4 py-3"><StatusBadge status={tx.type} /></td>
-                    <td className="px-4 py-3 text-right font-mono text-xs font-bold">{formatCurrency(tx.amount)}</td>
-                    <td className="px-4 py-3 text-xs">{tx.source}</td>
-                    <td className="px-4 py-3 text-xs">{tx.destination}</td>
-                    <td className="px-4 py-3 text-xs">{tx.mode}</td>
-                    <td className="px-4 py-3 text-xs font-mono text-muted-foreground">{tx.referenceId || "—"}</td>
+                  <tr key={tx.id} className="border-b border-border/40 hover:bg-muted/30 transition-colors">
+                    <td className="px-5 py-3.5 text-xs text-muted-foreground">{tx.date}</td>
+                    <td className="px-5 py-3.5"><StatusBadge status={tx.type} /></td>
+                    <td className="px-5 py-3.5 text-right font-mono text-xs font-medium">{formatCurrency(tx.amount)}</td>
+                    <td className="px-5 py-3.5 text-xs text-muted-foreground">{tx.source}</td>
+                    <td className="px-5 py-3.5 text-xs text-muted-foreground">{tx.destination}</td>
+                    <td className="px-5 py-3.5 text-xs text-muted-foreground">{tx.mode}</td>
+                    <td className="px-5 py-3.5 text-xs font-mono text-muted-foreground/70">{tx.referenceId || "—"}</td>
                   </tr>
                 ))}
               </tbody>

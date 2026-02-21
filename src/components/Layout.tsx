@@ -68,14 +68,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       {/* Sidebar */}
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 w-64 border-r-2 border-border bg-sidebar flex flex-col transition-transform lg:static lg:translate-x-0",
+          "fixed inset-y-0 left-0 z-50 w-64 border-r border-border/50 bg-sidebar flex flex-col transition-transform lg:static lg:translate-x-0",
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
-        <div className="flex items-center justify-between border-b-2 border-border px-4 py-4">
-          <Link to="/" className="flex items-center gap-2">
+        <div className="flex items-center justify-between border-b border-border/50 px-6 py-5">
+          <Link to="/" className="flex items-center gap-2.5">
             <HardHat className="h-6 w-6 text-warning" />
-            <span className="text-lg font-bold uppercase tracking-wider">BuildERP</span>
+            <span className="text-lg font-semibold tracking-tight">BuildERP</span>
           </Link>
           <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setSidebarOpen(false)}>
             <X className="h-5 w-5" />
@@ -85,7 +85,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <nav className="flex-1 overflow-y-auto p-3 space-y-4">
           {navGroups.map((group) => (
             <div key={group.title} className="space-y-1">
-              <p className="px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              <p className="px-3 py-1.5 text-xs font-semibold text-muted-foreground/80 tracking-wide uppercase">
                 {group.title}
               </p>
               {group.items.map((item) => (
@@ -110,7 +110,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                         )}
                       </button>
                       {expandedItems.includes(item.label) && (
-                        <div className="ml-6 border-l-2 border-border space-y-0.5 pl-3">
+                        <div className="ml-6 border-l border-border/50 space-y-0.5 pl-3">
                           {item.children.map((child) => (
                             <Link
                               key={child.path}
@@ -146,9 +146,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           ))}
         </nav>
 
-        <div className="border-t-2 border-border p-3">
-          <div className="flex items-center gap-2 px-3 py-2">
-            <div className="flex h-8 w-8 items-center justify-center border-2 border-border bg-warning text-warning-foreground text-xs font-bold">
+        <div className="border-t border-border/50 p-3">
+          <div className="flex items-center gap-3 px-3 py-2">
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-warning/10 text-warning font-semibold text-xs border border-warning/20">
               SA
             </div>
             <div className="text-sm flex-1 min-w-0">
@@ -162,11 +162,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
       {/* Main content */}
       <div className="flex flex-1 flex-col overflow-hidden">
-        <header className="flex items-center gap-3 border-b-2 border-border px-4 py-3 lg:px-6">
+        <header className="flex items-center gap-3 border-b border-border/50 px-4 py-3 lg:px-6">
           <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setSidebarOpen(true)}>
             <Menu className="h-5 w-5" />
           </Button>
-          <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
+          <h2 className="text-sm font-medium text-muted-foreground">
             Construction Company ERP
           </h2>
         </header>

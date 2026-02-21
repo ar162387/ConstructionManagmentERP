@@ -26,7 +26,7 @@ export default function StatusBadge({ status }: StatusBadgeProps) {
   return (
     <span
       className={cn(
-        "inline-block border-2 px-2 py-0.5 text-xs font-bold uppercase tracking-wider",
+        "inline-flex items-center rounded-md border px-2.5 py-0.5 text-xs font-semibold shadow-sm transition-colors",
         statusStyles[status] || "border-border text-foreground"
       )}
     >

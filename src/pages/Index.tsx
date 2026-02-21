@@ -69,10 +69,10 @@ export default function Index() {
 
   return (
     <Layout>
-      <div className="space-y-6">
+      <div className="space-y-8">
         <div>
-          <h1 className="text-3xl font-bold uppercase tracking-wider">Dashboard</h1>
-          <p className="text-sm text-muted-foreground mt-1">Company-wide overview</p>
+          <h1 className="text-3xl font-semibold tracking-tight">Dashboard</h1>
+          <p className="text-sm text-muted-foreground mt-1.5">Company-wide overview</p>
         </div>
 
         {/* Stats Grid */}
@@ -144,35 +144,35 @@ export default function Index() {
         </div>
 
         {/* Projects Table */}
-        <div className="border-2 border-border">
-          <div className="flex items-center justify-between border-b-2 border-border bg-secondary px-4 py-3">
-            <h2 className="text-sm font-bold uppercase tracking-wider">Projects Overview</h2>
-            <Link to="/projects" className="text-xs font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground">
-              View All →
+        <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
+          <div className="flex items-center justify-between border-b px-6 py-4">
+            <h2 className="text-lg font-semibold leading-none tracking-tight">Projects Overview</h2>
+            <Link to="/projects" className="text-sm font-medium text-primary hover:underline">
+              View All &rarr;
             </Link>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b-2 border-border bg-primary text-primary-foreground">
-                  <th className="px-4 py-2.5 text-left text-xs font-bold uppercase tracking-wider">Project</th>
-                  <th className="px-4 py-2.5 text-left text-xs font-bold uppercase tracking-wider">Status</th>
-                  <th className="px-4 py-2.5 text-right text-xs font-bold uppercase tracking-wider">Budget</th>
-                  <th className="px-4 py-2.5 text-right text-xs font-bold uppercase tracking-wider">Spent</th>
-                  <th className="px-4 py-2.5 text-right text-xs font-bold uppercase tracking-wider">Remaining</th>
+              <thead className="bg-muted/50">
+                <tr className="border-b">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Project</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">Budget</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">Spent</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">Remaining</th>
                 </tr>
               </thead>
               <tbody>
                 {projects.map((project) => (
-                  <tr key={project.id} className="border-b border-border hover:bg-accent/50 transition-colors">
-                    <td className="px-4 py-3">
-                      <Link to={`/projects`} className="font-bold hover:underline">{project.name}</Link>
-                      <p className="text-xs text-muted-foreground">{project.description}</p>
+                  <tr key={project.id} className="border-b border-border/50 hover:bg-muted/50 transition-colors last:border-0">
+                    <td className="px-6 py-4">
+                      <Link to={`/projects`} className="font-medium hover:underline">{project.name}</Link>
+                      <p className="text-xs text-muted-foreground mt-0.5">{project.description}</p>
                     </td>
-                    <td className="px-4 py-3"><StatusBadge status={project.status} /></td>
-                    <td className="px-4 py-3 text-right font-mono text-xs">{formatCurrency(project.allocatedBudget)}</td>
-                    <td className="px-4 py-3 text-right font-mono text-xs">{formatCurrency(project.spent)}</td>
-                    <td className="px-4 py-3 text-right font-mono text-xs">{formatCurrency(project.allocatedBudget - project.spent)}</td>
+                    <td className="px-6 py-4"><StatusBadge status={project.status} /></td>
+                    <td className="px-6 py-4 text-right tabular-nums text-sm">{formatCurrency(project.allocatedBudget)}</td>
+                    <td className="px-6 py-4 text-right tabular-nums text-sm">{formatCurrency(project.spent)}</td>
+                    <td className="px-6 py-4 text-right tabular-nums text-sm font-medium">{formatCurrency(project.allocatedBudget - project.spent)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -191,10 +191,10 @@ export default function Index() {
             <Link
               key={link.path}
               to={link.path}
-              className="border-2 border-border p-4 hover:bg-accent hover:shadow-xs transition-all"
+              className="rounded-xl border bg-card p-5 hover:bg-accent/50 hover:shadow-md transition-all duration-300 hover:-translate-y-0.5"
             >
-              <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{link.label}</p>
-              <p className="mt-1 text-xl font-bold">{link.count}</p>
+              <p className="text-sm font-medium text-muted-foreground">{link.label}</p>
+              <p className="mt-2 text-2xl font-bold tracking-tight">{link.count}</p>
             </Link>
           ))}
         </div>

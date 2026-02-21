@@ -11,15 +11,15 @@ export function ChartCard({ title, subtitle, children, className }: ChartCardPro
   return (
     <div
       className={cn(
-        "border-2 border-border bg-card overflow-hidden",
+        "rounded-xl border bg-card text-card-foreground shadow-sm overflow-hidden transition-all duration-300 hover:shadow-md",
         className
       )}
     >
-      <div className="border-b border-border bg-secondary px-4 py-3">
-        <h3 className="text-sm font-bold uppercase tracking-wider">{title}</h3>
-        {subtitle && <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>}
+      <div className="border-b px-6 py-4">
+        <h3 className="text-lg font-semibold leading-none tracking-tight">{title}</h3>
+        {subtitle && <p className="text-sm text-muted-foreground mt-1.5">{subtitle}</p>}
       </div>
-      <div className="p-4 min-h-[280px] flex items-center justify-center">{children}</div>
+      <div className="p-6 min-h-[280px] flex items-center justify-center">{children}</div>
     </div>
   );
 }

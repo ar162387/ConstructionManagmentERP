@@ -222,13 +222,15 @@ export interface Machine {
   totalCost: number;
   totalPaid: number;
   totalPending: number;
+  /** Project this machine is assigned to (optional; used for project-scoped views) */
+  project?: string;
 }
 
 export const machines: Machine[] = [
-  { id: "M001", name: "Tower Crane TC-200", ownership: "Rented", hourlyRate: 2500, totalHours: 480, totalCost: 1200000, totalPaid: 1000000, totalPending: 200000 },
-  { id: "M002", name: "Excavator CAT 320", ownership: "Company Owned", hourlyRate: 1800, totalHours: 320, totalCost: 576000, totalPaid: 576000, totalPending: 0 },
-  { id: "M003", name: "Concrete Pump", ownership: "Rented", hourlyRate: 3000, totalHours: 150, totalCost: 450000, totalPaid: 350000, totalPending: 100000 },
-  { id: "M004", name: "JCB Backhoe", ownership: "Company Owned", hourlyRate: 1200, totalHours: 200, totalCost: 240000, totalPaid: 240000, totalPending: 0 },
+  { id: "M001", name: "Tower Crane TC-200", ownership: "Rented", hourlyRate: 2500, totalHours: 480, totalCost: 1200000, totalPaid: 1000000, totalPending: 200000, project: "Skyline Tower" },
+  { id: "M002", name: "Excavator CAT 320", ownership: "Company Owned", hourlyRate: 1800, totalHours: 320, totalCost: 576000, totalPaid: 576000, totalPending: 0, project: "Skyline Tower" },
+  { id: "M003", name: "Concrete Pump", ownership: "Rented", hourlyRate: 3000, totalHours: 150, totalCost: 450000, totalPaid: 350000, totalPending: 100000, project: "Green Valley Residency" },
+  { id: "M004", name: "JCB Backhoe", ownership: "Company Owned", hourlyRate: 1200, totalHours: 200, totalCost: 240000, totalPaid: 240000, totalPending: 0, project: "Metro Bridge Expansion" },
 ];
 
 export interface AuditLog {

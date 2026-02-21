@@ -22,13 +22,24 @@ import { toast } from "sonner";
 interface AddMachineDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** When set (e.g. Site Manager), project is fixed to this and selector is hidden */
+  restrictedProjectId?: string;
+  restrictedProjectName?: string;
 }
 
-export function AddMachineDialog({ open, onOpenChange }: AddMachineDialogProps) {
-  const { actions } = useMockStore();
+export function AddMachineDialog({ open, onOpenChange, restrictedProjectId, restrictedProjectName }: AddMachineDialogProps) {
+  const { state, actions } = useMockStore();
   const [name, setName] = useState("");
   const [ownership, setOwnership] = useState<"Company Owned" | "Rented">("Rented");
   const [hourlyRate, setHourlyRate] = useState("");
+  const NONE_PROJECT = "__none__";
+  const [projectId, setProjectId] = useState(state.projects[0]?.id || NONE_PROJECT);
+
+  const projects = state.projects;
+  const effectiveProject = restrictedProjectId && restrictedProjectName
+    ? { name: restrictedProjectName }
+    : projectId === NONE_PROJECT ? null : projects.find((p) => p.id === projectId);
+  const projectName = effectiveProject?.name ?? (projectId && projectId !== NONE_PROJECT ? projects.find((p) => p.id === projectId)?.name : undefined);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,6 +60,7 @@ export function AddMachineDialog({ open, onOpenChange }: AddMachineDialogProps) 
       totalCost: 0,
       totalPaid: 0,
       totalPending: 0,
+      ...(projectName ? { project: projectName } : {}),
     });
     actions.addAuditLog({
       timestamp: new Date().toISOString().slice(0, 19).replace("T", " "),
@@ -90,6 +102,24 @@ export function AddMachineDialog({ open, onOpenChange }: AddMachineDialogProps) 
           <div>
             <Label>Hourly Rate *</Label>
             <Input type="number" min={0} value={hourlyRate} onChange={(e) => setHourlyRate(e.target.value)} className="mt-1" />
+          </div>
+          <div>
+            <Label>Project</Label>
+            {restrictedProjectId && restrictedProjectName ? (
+              <p className="mt-1.5 text-sm font-medium">{restrictedProjectName}</p>
+            ) : (
+              <Select value={projectId} onValueChange={setProjectId}>
+                <SelectTrigger className="mt-1">
+                  <SelectValue placeholder="Select project (optional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NONE_PROJECT}>None</SelectItem>
+                  {projects.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>

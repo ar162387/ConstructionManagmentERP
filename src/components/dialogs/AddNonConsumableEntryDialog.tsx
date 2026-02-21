@@ -25,7 +25,6 @@ const EVENT_TYPES: NonConsumableEventType[] = [
   "Purchase/Add Stock",
   "Assign to Project",
   "Return to Company",
-  "Transfer Project → Project",
   "Repair / Maintenance",
   "Mark Lost",
   "Mark Damaged (Still usable)",
@@ -49,7 +48,6 @@ export function AddNonConsumableEntryDialog({ open, onOpenChange, itemId, itemNa
   const [unitPrice, setUnitPrice] = useState("");
   const [vendorName, setVendorName] = useState("");
   const [projectTo, setProjectTo] = useState("");
-  const [projectFrom, setProjectFrom] = useState("");
   const [remarks, setRemarks] = useState("");
 
   const projects = state.projects;
@@ -69,15 +67,11 @@ export function AddNonConsumableEntryDialog({ open, onOpenChange, itemId, itemNa
       return;
     }
     const projectToName = projectTo ? projects.find((p) => p.id === projectTo)?.name : undefined;
-    const projectFromName = projectFrom ? projects.find((p) => p.id === projectFrom)?.name : undefined;
     if (eventType === "Assign to Project" && !projectToName) {
       toast.error("Select project to assign to");
       return;
     }
-    if (eventType === "Transfer Project → Project" && (!projectFromName || !projectToName)) {
-      toast.error("Select source and destination project");
-      return;
-    }
+    const needsVendor = eventType === "Purchase/Add Stock" || eventType === "Repair / Maintenance";
     actions.addNonConsumableLedgerEntry({
       itemId,
       date,
@@ -85,9 +79,8 @@ export function AddNonConsumableEntryDialog({ open, onOpenChange, itemId, itemNa
       quantity: qty,
       unitPrice: cost,
       cost: cost,
-      vendorName: vendorName || undefined,
-      projectFrom: projectFromName,
-      projectTo: projectToName,
+      vendorName: needsVendor ? (vendorName || undefined) : undefined,
+      projectTo: eventType === "Assign to Project" ? projectToName : undefined,
       remarks: remarks || undefined,
       createdBy: "admin@erp.com",
     });
@@ -105,7 +98,6 @@ export function AddNonConsumableEntryDialog({ open, onOpenChange, itemId, itemNa
     setUnitPrice("");
     setVendorName("");
     setProjectTo("");
-    setProjectFrom("");
     setRemarks("");
   };
 
@@ -138,28 +130,30 @@ export function AddNonConsumableEntryDialog({ open, onOpenChange, itemId, itemNa
             <Input type="number" min={1} value={quantity} onChange={(e) => setQuantity(e.target.value)} className="mt-1" />
           </div>
           {(eventType === "Purchase/Add Stock" || eventType === "Repair / Maintenance") && (
-            <div>
-              <Label>Cost / Unit Price *</Label>
-              <Input type="number" min={0} value={unitPrice} onChange={(e) => setUnitPrice(e.target.value)} className="mt-1" />
-            </div>
+            <>
+              <div>
+                <Label>Cost / Unit Price *</Label>
+                <Input type="number" min={0} value={unitPrice} onChange={(e) => setUnitPrice(e.target.value)} className="mt-1" />
+              </div>
+              <div>
+                <Label>Vendor (optional)</Label>
+                <Select
+                  value={vendorName || NONE_VENDOR_VALUE}
+                  onValueChange={(v) => setVendorName(v === NONE_VENDOR_VALUE ? "" : v)}
+                >
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="Select or leave blank" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NONE_VENDOR_VALUE}>—</SelectItem>
+                    {vendors.map((v) => (
+                      <SelectItem key={v.id} value={v.name}>{v.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </>
           )}
-          <div>
-            <Label>Vendor (optional)</Label>
-            <Select
-              value={vendorName || NONE_VENDOR_VALUE}
-              onValueChange={(v) => setVendorName(v === NONE_VENDOR_VALUE ? "" : v)}
-            >
-              <SelectTrigger className="mt-1">
-                <SelectValue placeholder="Select or leave blank" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={NONE_VENDOR_VALUE}>—</SelectItem>
-                {vendors.map((v) => (
-                  <SelectItem key={v.id} value={v.name}>{v.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
           {eventType === "Assign to Project" && (
             <div>
               <Label>Assign to Project *</Label>
@@ -174,36 +168,6 @@ export function AddNonConsumableEntryDialog({ open, onOpenChange, itemId, itemNa
                 </SelectContent>
               </Select>
             </div>
-          )}
-          {eventType === "Transfer Project → Project" && (
-            <>
-              <div>
-                <Label>From Project *</Label>
-                <Select value={projectFrom} onValueChange={setProjectFrom}>
-                  <SelectTrigger className="mt-1">
-                    <SelectValue placeholder="From" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {projects.map((p) => (
-                      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>To Project *</Label>
-                <Select value={projectTo} onValueChange={setProjectTo}>
-                  <SelectTrigger className="mt-1">
-                    <SelectValue placeholder="To" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {projects.map((p) => (
-                      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </>
           )}
           <div>
             <Label>Remarks</Label>

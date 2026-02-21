@@ -19,12 +19,12 @@ const variantStyles = {
 
 export default function StatCard({ label, value, icon, variant = "default", title }: StatCardProps) {
   return (
-    <div className={cn("border-2 p-4 transition-all hover:shadow-sm", variantStyles[variant])}>
+    <div className={cn("rounded-xl border bg-card/50 backdrop-blur-sm p-5 shadow-sm transition-all duration-300 hover:shadow-md hover:-translate-y-0.5", variantStyles[variant])}>
       <div className="flex items-center justify-between">
-        <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{label}</p>
+        <p className="text-sm font-medium text-muted-foreground">{label}</p>
         {icon && <span className="text-muted-foreground">{icon}</span>}
       </div>
-      <p className="mt-2 text-lg font-bold leading-tight truncate min-w-0" title={title ?? value}>{value}</p>
+      <p className="mt-3 text-2xl font-bold leading-none tracking-tight truncate min-w-0" title={title ?? value}>{value}</p>
     </div>
   );
 }

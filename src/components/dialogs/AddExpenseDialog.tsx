@@ -23,9 +23,12 @@ import { Plus } from "lucide-react";
 interface AddExpenseDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** When set (e.g. Site Manager), project is fixed to this and selector is hidden */
+  restrictedProjectId?: string;
+  restrictedProjectName?: string;
 }
 
-export function AddExpenseDialog({ open, onOpenChange }: AddExpenseDialogProps) {
+export function AddExpenseDialog({ open, onOpenChange, restrictedProjectId, restrictedProjectName }: AddExpenseDialogProps) {
   const { state, actions } = useMockStore();
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [description, setDescription] = useState("");
@@ -38,6 +41,9 @@ export function AddExpenseDialog({ open, onOpenChange }: AddExpenseDialogProps) 
 
   const categories = state.expenseCategories;
   const projects = state.projects;
+  const effectiveProjectId = restrictedProjectId ?? projectId;
+  const effectiveProject = projects.find((p) => p.id === effectiveProjectId);
+  const projectName = effectiveProject?.name ?? restrictedProjectName ?? projects.find((p) => p.id === projectId)?.name;
 
   const handleAddCategory = () => {
     if (newCategory.trim()) {
@@ -53,13 +59,8 @@ export function AddExpenseDialog({ open, onOpenChange }: AddExpenseDialogProps) 
     e.preventDefault();
     const amt = parseFloat(amount);
     const cat = showNewCategory ? newCategory.trim() : category;
-    if (!date || !description.trim() || !cat || isNaN(amt) || amt <= 0 || !projectId) {
+    if (!date || !description.trim() || !cat || isNaN(amt) || amt <= 0 || !projectName) {
       toast.error("Fill all required fields");
-      return;
-    }
-    const project = projects.find((p) => p.id === projectId);
-    if (!project) {
-      toast.error("Invalid project");
       return;
     }
     if (showNewCategory && newCategory.trim()) {
@@ -71,7 +72,7 @@ export function AddExpenseDialog({ open, onOpenChange }: AddExpenseDialogProps) 
       category: showNewCategory ? newCategory.trim() : category,
       paymentMode,
       amount: amt,
-      project: project.name,
+      project: projectName,
     });
     actions.addAuditLog({
       timestamp: new Date().toISOString().slice(0, 19).replace("T", " "),
@@ -131,16 +132,20 @@ export function AddExpenseDialog({ open, onOpenChange }: AddExpenseDialogProps) 
           </div>
           <div>
             <Label>Project *</Label>
-            <Select value={projectId} onValueChange={setProjectId}>
-              <SelectTrigger className="mt-1">
-                <SelectValue placeholder="Select project" />
-              </SelectTrigger>
-              <SelectContent>
-                {projects.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {restrictedProjectId && restrictedProjectName ? (
+              <p className="mt-1.5 text-sm font-medium">{restrictedProjectName}</p>
+            ) : (
+              <Select value={projectId} onValueChange={setProjectId}>
+                <SelectTrigger className="mt-1">
+                  <SelectValue placeholder="Select project" />
+                </SelectTrigger>
+                <SelectContent>
+                  {projects.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
           <div>
             <Label>Payment Mode *</Label>

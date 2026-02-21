@@ -22,9 +22,12 @@ import { toast } from "sonner";
 interface AddEmployeeDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** When set (e.g. Site Manager), project is fixed to this and selector is hidden */
+  restrictedProjectId?: string;
+  restrictedProjectName?: string;
 }
 
-export function AddEmployeeDialog({ open, onOpenChange }: AddEmployeeDialogProps) {
+export function AddEmployeeDialog({ open, onOpenChange, restrictedProjectId, restrictedProjectName }: AddEmployeeDialogProps) {
   const { state, actions } = useMockStore();
   const [name, setName] = useState("");
   const [type, setType] = useState<"Fixed" | "Daily">("Fixed");
@@ -34,6 +37,8 @@ export function AddEmployeeDialog({ open, onOpenChange }: AddEmployeeDialogProps
   const [phone, setPhone] = useState("");
 
   const projects = state.projects;
+  const effectiveProjectId = restrictedProjectId ?? projectId;
+  const effectiveProject = projects.find((p) => p.id === effectiveProjectId) ?? (restrictedProjectName ? { id: restrictedProjectId, name: restrictedProjectName } : null);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -41,13 +46,9 @@ export function AddEmployeeDialog({ open, onOpenChange }: AddEmployeeDialogProps
       toast.error("Name is required");
       return;
     }
-    if (!projectId) {
+    const projectName = effectiveProject?.name ?? restrictedProjectName ?? projects.find((p) => p.id === projectId)?.name;
+    if (!projectName) {
       toast.error("Select a project");
-      return;
-    }
-    const project = projects.find((p) => p.id === projectId);
-    if (!project) {
-      toast.error("Invalid project");
       return;
     }
     if (type === "Fixed") {
@@ -59,7 +60,7 @@ export function AddEmployeeDialog({ open, onOpenChange }: AddEmployeeDialogProps
       actions.addEmployee({
         name: name.trim(),
         type: "Fixed",
-        project: project.name,
+        project: projectName,
         monthlySalary: sal,
         phone: phone.trim(),
         totalPaid: 0,
@@ -74,7 +75,7 @@ export function AddEmployeeDialog({ open, onOpenChange }: AddEmployeeDialogProps
       actions.addEmployee({
         name: name.trim(),
         type: "Daily",
-        project: project.name,
+        project: projectName,
         dailyRate: rate,
         phone: phone.trim(),
         totalPaid: 0,
@@ -122,16 +123,20 @@ export function AddEmployeeDialog({ open, onOpenChange }: AddEmployeeDialogProps
           </div>
           <div>
             <Label>Project *</Label>
-            <Select value={projectId} onValueChange={setProjectId}>
-              <SelectTrigger className="mt-1">
-                <SelectValue placeholder="Select project" />
-              </SelectTrigger>
-              <SelectContent>
-                {projects.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {restrictedProjectId && restrictedProjectName ? (
+              <p className="mt-1.5 text-sm font-medium">{restrictedProjectName}</p>
+            ) : (
+              <Select value={projectId} onValueChange={setProjectId}>
+                <SelectTrigger className="mt-1">
+                  <SelectValue placeholder="Select project" />
+                </SelectTrigger>
+                <SelectContent>
+                  {projects.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
           {type === "Fixed" && (
             <div>
