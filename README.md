@@ -1,47 +1,47 @@
-# Project Ledger Pro
+# Project Ledger Pro (BuildERP)
 
-## How can I edit this code?
+Construction ERP for small-to-mid contractors. It keeps project budgets, materials, people, equipment, and cash in one simple web app so office staff, site managers, and owners all see the same truth.
 
-**Use your preferred IDE**
+**Who benefits**
+- Business owners who want a single view of cost, cash, and dues across jobs
+- Site managers who must log material usage and payments without spreadsheets
+- Account/admin teams who reconcile vendors, wages, and bank movements
 
-Clone this repo and push changes. The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+**What it does (plain language)**
+- Shows a live dashboard of active projects, budget vs. spend, bank balance, and what is still owed
+- Tracks each project from start/end dates to allocated budget and actual spending
+- Keeps one materials system: consumables (cement/steel/etc.) with stock + consumption history, and reusable tools/equipment with where they are (store, in use, repair, lost)
+- Handles vendors, contractors, and employees with their own ledgers so you always know billed, paid, and pending amounts
+- Records all money movement: bank accounts, inflow/outflow transactions, project expenses by category, and a liabilities view that totals dues across people, suppliers, and machines
+- Covers machinery usage (owned or rented) with hours worked, rates, costs, payments, and per-machine ledger
+- Protects data with login + roles (Super Admin, Admin, Site Manager), user management, and a full audit log of creates/edits/deletes
 
-Follow these steps:
+**How information is organized**
+- Company-level: bank accounts, user management, audit logs, and non-consumable assets live here.
+- Project-level: projects, consumable inventory, vendors, contractors, employees, expenses, machinery, and their ledgers are filtered to the chosen project. Site Managers only see their assigned project.
 
+**Feature highlights**
+- Dashboard: KPIs for budget, spend, dues; charts for budget vs. spend, liabilities mix, and expense categories; quick links to key modules.
+- Projects: create/edit projects, set budgets, track spend and timeline, and flag over-budget jobs.
+- Inventory: consumable stock with purchase totals, current balance, and consumption history; non-consumable assets with counts by status and per-asset ledger.
+- Payables & partners: vendor tables plus detailed ledgers with purchases and payments; contractor entries and payouts with remaining balance checks.
+- People & payroll: fixed and daily-wage employees, salary dues, and per-employee payment ledger.
+- Money & controls: bank balances with inflow/outflow lists, expense tracking with categories and filters, liabilities roll-up, machine costs and dues, and print-friendly views for on-site use.
+
+**Run it locally**
 ```sh
-# Step 1: Clone the repository using the project's Git URL.
 git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
 cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
+npm install
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+**Tech stack**
+- React + Vite + TypeScript
+- Tailwind CSS + shadcn/ui components
+- TanStack Query for data fetching
 
-- Navigate to the desired file(s).
-- Click on the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
-
-**Use GitHub Codespaces**
-
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
-
-## What technologies are used for this project?
-
-This project is built with:
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+**Ways to edit**
+- Use any IDE locally (clone, install, run `npm run dev`).
+- Edit files directly in GitHub (pencil icon) and commit.
+- Launch a Codespace from the repo’s Code button for an instant cloud IDE.

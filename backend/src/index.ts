@@ -23,8 +23,36 @@ import { machineRoutes } from "./routes/machines.js";
 const PORT = process.env.PORT ?? 3001;
 const MONGODB_URI = process.env.MONGODB_URI ?? "mongodb://localhost:27017/builderp";
 
+// Allow comma-separated list in env, plus sensible defaults for local + production
+const DEFAULT_CORS_ORIGINS = [
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+  "http://localhost:4173",
+  "http://127.0.0.1:4173",
+  "https://construction-managment-erp.vercel.app",
+];
+
+const envCorsOrigins = (process.env.CORS_ORIGINS ?? "")
+  .split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
+
+const ALLOWED_ORIGINS = Array.from(new Set([...DEFAULT_CORS_ORIGINS, ...envCorsOrigins]));
+
 const app = express();
-app.use(cors({ origin: true, credentials: true }));
+
+// Restrictive CORS: allow configured origins and enable cookies/credentials
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Allow non-browser requests (Postman/cURL) with no origin header
+      if (!origin) return callback(null, true);
+      if (ALLOWED_ORIGINS.includes(origin)) return callback(null, true);
+      return callback(new Error(`CORS blocked for origin: ${origin}`));
+    },
+    credentials: true,
+  })
+);
 app.use(express.json());
 
 app.use("/api/auth", authRoutes);

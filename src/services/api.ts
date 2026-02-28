@@ -3,6 +3,8 @@
  * Handles base URL, auth token, and generic fetch wrapper.
  */
 
+// Frontend can switch between environments by setting VITE_API_URL in .env files.
+// Fallback to local dev server if not provided.
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3001";
 
 export const TOKEN_KEY = "builderp_token";
