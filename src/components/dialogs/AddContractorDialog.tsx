@@ -17,7 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useMockStore } from "@/context/MockStore";
+import { createContractor } from "@/services/contractorsService";
 import { toast } from "sonner";
 
 interface AddContractorDialogProps {
@@ -26,50 +26,49 @@ interface AddContractorDialogProps {
   /** When set (e.g. Site Manager), project is fixed to this and selector is hidden */
   restrictedProjectId?: string;
   restrictedProjectName?: string;
+  projects: { id: string; name: string }[];
+  onSuccess?: () => void;
 }
 
-export function AddContractorDialog({ open, onOpenChange, restrictedProjectId, restrictedProjectName }: AddContractorDialogProps) {
-  const { state, actions } = useMockStore();
+export function AddContractorDialog({ open, onOpenChange, restrictedProjectId, restrictedProjectName, projects, onSuccess }: AddContractorDialogProps) {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [description, setDescription] = useState("");
-  const [projectId, setProjectId] = useState(restrictedProjectId ?? state.projects[0]?.id ?? "");
-
-  const projects = state.projects;
+  const [projectId, setProjectId] = useState(restrictedProjectId ?? projects[0]?.id ?? "");
+  const [submitting, setSubmitting] = useState(false);
   const isRestricted = Boolean(restrictedProjectId && restrictedProjectName);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
       toast.error("Name is required");
       return;
     }
-    const project = isRestricted
-      ? { id: restrictedProjectId!, name: restrictedProjectName! }
-      : projects.find((p) => p.id === projectId);
+    const effectiveProjectId = isRestricted ? restrictedProjectId! : projectId;
+    const project = projects.find((p) => p.id === effectiveProjectId);
     if (!project) {
       toast.error("Select a project");
       return;
     }
-    actions.addContractor({
-      name: name.trim(),
-      phone: phone.trim(),
-      description: description.trim(),
-      project: project.name,
-    });
-    actions.addAuditLog({
-      timestamp: new Date().toISOString().slice(0, 19).replace("T", " "),
-      user: "admin@erp.com",
-      role: "Admin",
-      action: "Create",
-      module: "Contractor",
-      description: `Added contractor: ${name.trim()}`,
-    });
-    toast.success("Contractor added");
-    onOpenChange(false);
-    setName("");
-    setPhone("");
-    setDescription("");
+    setSubmitting(true);
+    try {
+      await createContractor({
+        projectId: effectiveProjectId,
+        name: name.trim(),
+        phone: phone.trim(),
+        description: description.trim(),
+      });
+      toast.success("Contractor added");
+      onOpenChange(false);
+      setName("");
+      setPhone("");
+      setDescription("");
+      onSuccess?.();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to add contractor");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -109,8 +108,8 @@ export function AddContractorDialog({ open, onOpenChange, restrictedProjectId, r
             )}
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button type="submit" variant="warning">Add Contractor</Button>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>Cancel</Button>
+            <Button type="submit" variant="warning" disabled={submitting}>Add Contractor</Button>
           </DialogFooter>
         </form>
       </DialogContent>

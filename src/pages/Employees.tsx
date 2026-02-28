@@ -1,16 +1,16 @@
-import { useState, useMemo } from "react";
+import { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import Layout from "@/components/Layout";
 import PageHeader from "@/components/PageHeader";
 import StatusBadge from "@/components/StatusBadge";
 import { formatCurrency } from "@/lib/mock-data";
-import { useMockStore } from "@/context/MockStore";
+import { useAuth } from "@/context/AuthContext";
+import { useProjects } from "@/hooks/useProjects";
+import { useEmployees } from "@/hooks/useEmployees";
 import { AddEmployeeDialog } from "@/components/dialogs/AddEmployeeDialog";
-import { AttendanceDialog } from "@/components/dialogs/AttendanceDialog";
-import { EmployeePaymentDialog } from "@/components/dialogs/EmployeePaymentDialog";
-import { EmployeeAdvanceDialog } from "@/components/dialogs/EmployeeAdvanceDialog";
-import { SalaryLedgerDialog } from "@/components/dialogs/SalaryLedgerDialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -18,221 +18,339 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Calendar, Banknote, Wallet, History, MoreHorizontal } from "lucide-react";
-import type { Employee } from "@/lib/mock-data";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ChevronLeft, ChevronRight, Loader2, Plus } from "lucide-react";
+import { buildMonthOptionsUpToCurrent, getFirstMonth, monthLabel, shiftMonth } from "@/lib/employee-ledger";
+import type { ApiEmployeeWithSnapshot } from "@/services/employeesService";
 
 const ALL_PROJECTS = "__all__";
+type PaymentStatusFilter = "All" | "Paid" | "Partial" | "Due" | "Late";
+type EmployeeTab = "Fixed" | "Daily";
 
-function EmployeeTable({
+function employeeRateLabel(employee: ApiEmployeeWithSnapshot) {
+  return employee.type === "Fixed"
+    ? `${formatCurrency(employee.monthlySalary ?? 0)}/mo`
+    : `${formatCurrency(employee.dailyRate ?? 0)}/day`;
+}
+
+function thisMonthLabel(employee: ApiEmployeeWithSnapshot, snapshot: ApiEmployeeWithSnapshot["snapshot"]): string {
+  if (!snapshot?.attendance) return "—";
+  const att = snapshot.attendance;
+  if (att.type === "Fixed") {
+    const ulPlusAbsent = att.unpaidLeave + att.absent;
+    return `Paid leave: ${att.paidLeave}, Unpaid leave: ${ulPlusAbsent}`;
+  }
+  return `Overtime: ${att.overtimeHours}h, Days: ${att.workedDays.toFixed(1)}`;
+}
+
+function EmployeeRows({
   employees,
-  onAttendance,
-  onPayment,
-  onAdvance,
-  onLedger,
+  selectedMonth,
+  navigate,
+  loading,
 }: {
-  employees: Employee[];
-  onAttendance: (emp: Employee) => void;
-  onPayment: (emp: Employee) => void;
-  onAdvance: (emp: Employee) => void;
-  onLedger: (emp: Employee) => void;
+  employees: ApiEmployeeWithSnapshot[];
+  selectedMonth: string;
+  navigate: ReturnType<typeof useNavigate>;
+  loading: boolean;
 }) {
+  const colCount = 9;
+  if (loading) {
+    return (
+      <tr>
+        <td colSpan={colCount} className="px-4 py-8 text-center text-muted-foreground">
+          <span className="inline-flex items-center gap-2">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Loading employees…
+          </span>
+        </td>
+      </tr>
+    );
+  }
+  if (employees.length === 0) {
+    return (
+      <tr>
+        <td colSpan={colCount} className="px-4 py-8 text-center text-muted-foreground">
+          No employees found.
+        </td>
+      </tr>
+    );
+  }
+
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b-2 border-border bg-primary text-primary-foreground">
-            <th className="px-4 py-2.5 text-left text-xs font-bold uppercase tracking-wider">Name</th>
-            <th className="px-4 py-2.5 text-right text-xs font-bold uppercase tracking-wider">Rate</th>
-            <th className="px-4 py-2.5 text-right text-xs font-bold uppercase tracking-wider">Total Paid</th>
-            <th className="px-4 py-2.5 text-right text-xs font-bold uppercase tracking-wider">Due</th>
-            <th className="px-4 py-2.5 text-left text-xs font-bold uppercase tracking-wider">Phone</th>
-            <th className="px-4 py-2.5 text-right text-xs font-bold uppercase tracking-wider w-24">Actions</th>
+    <>
+      {employees.map((employee) => {
+        const firstMonth = getFirstMonth(employee.createdAt);
+        const isBeforeEmployeeCreated = firstMonth ? selectedMonth < firstMonth : false;
+        const snapshot = isBeforeEmployeeCreated ? undefined : employee.snapshot;
+        const totalPaidAllMonths = employee.totalPaid ?? 0;
+
+        return (
+          <tr
+            key={employee.id}
+            className="border-b border-border hover:bg-accent/40 transition-colors cursor-pointer"
+            onClick={() => navigate(`/employees/${employee.id}?month=${selectedMonth}`)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                navigate(`/employees/${employee.id}?month=${selectedMonth}`);
+              }
+            }}
+            role="button"
+            tabIndex={0}
+            aria-label={`Open ${employee.name} ledger`}
+          >
+            <td className="px-4 py-3 font-semibold">{employee.name}</td>
+            <td className="px-4 py-3">{employee.role}</td>
+            <td className="px-4 py-3 text-right font-mono">{employeeRateLabel(employee)}</td>
+            <td className="px-4 py-3 text-xs text-muted-foreground">
+              {isBeforeEmployeeCreated ? "NO DATA" : thisMonthLabel(employee, snapshot)}
+            </td>
+            <td className="px-4 py-3 text-right font-mono">
+              {isBeforeEmployeeCreated ? "NO DATA" : snapshot ? formatCurrency(snapshot.payable) : "—"}
+            </td>
+            <td className="px-4 py-3 text-right font-mono text-success">
+              {isBeforeEmployeeCreated ? "NO DATA" : snapshot ? formatCurrency(snapshot.paid) : "—"}
+            </td>
+            <td className="px-4 py-3 text-right font-mono text-destructive">
+              {isBeforeEmployeeCreated ? "NO DATA" : snapshot && snapshot.remaining > 0 ? formatCurrency(snapshot.remaining) : snapshot ? "-" : "—"}
+            </td>
+            <td className="px-4 py-3 text-right font-mono">{formatCurrency(totalPaidAllMonths)}</td>
+            <td className="px-4 py-3">
+              {isBeforeEmployeeCreated ? "NO DATA" : snapshot ? <StatusBadge status={snapshot.paymentStatus} /> : "—"}
+            </td>
           </tr>
-        </thead>
-        <tbody>
-          {employees.length === 0 ? (
-            <tr>
-              <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
-                No employees in this category. Add one with the button above.
-              </td>
-            </tr>
-          ) : (
-            employees.map((emp) => (
-              <tr key={emp.id} className="border-b border-border hover:bg-accent/50 transition-colors">
-                <td className="px-4 py-3 font-bold">{emp.name}</td>
-                <td className="px-4 py-3 text-right font-mono text-xs">
-                  {emp.type === "Fixed"
-                    ? `${formatCurrency(emp.monthlySalary!)}/mo`
-                    : `${formatCurrency(emp.dailyRate!)}/day`}
-                </td>
-                <td className="px-4 py-3 text-right font-mono text-xs text-success">{formatCurrency(emp.totalPaid)}</td>
-                <td className="px-4 py-3 text-right font-mono text-xs text-destructive">{emp.totalDue > 0 ? formatCurrency(emp.totalDue) : "—"}</td>
-                <td className="px-4 py-3 text-xs font-mono">{emp.phone}</td>
-                <td className="px-4 py-3 text-right">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-8 w-8"><MoreHorizontal className="h-4 w-4" /></Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => onAttendance(emp)}><Calendar className="h-4 w-4 mr-2" />Attendance</DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => onPayment(emp)}><Banknote className="h-4 w-4 mr-2" />Payment</DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => onAdvance(emp)}><Wallet className="h-4 w-4 mr-2" />Advance</DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => onLedger(emp)}><History className="h-4 w-4 mr-2" />Salary Ledger</DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </td>
-              </tr>
-            ))
-          )}
-        </tbody>
-      </table>
-    </div>
+        );
+      })}
+    </>
   );
 }
 
 export default function Employees() {
-  const { state } = useMockStore();
-  const { employees: allEmployees, projects, users, currentUserId } = state;
-
-  const currentUser = useMemo(
-    () => users.find((u) => u.id === currentUserId) ?? users[0],
-    [users, currentUserId]
-  );
+  const navigate = useNavigate();
+  const { user: currentUser } = useAuth();
+  const { projects } = useProjects();
   const isSiteManager = currentUser?.role === "Site Manager";
   const projectFilterName = isSiteManager ? currentUser?.assignedProjectName ?? null : null;
 
   const [selectedProjectId, setSelectedProjectId] = useState<string>(ALL_PROJECTS);
+  const [selectedMonth, setSelectedMonth] = useState<string>(new Date().toISOString().slice(0, 7));
+  const [searchQuery, setSearchQuery] = useState("");
+  const [paymentFilter, setPaymentFilter] = useState<PaymentStatusFilter>("All");
   const [addOpen, setAddOpen] = useState(false);
-  const [attendanceOpen, setAttendanceOpen] = useState(false);
-  const [paymentOpen, setPaymentOpen] = useState(false);
-  const [advanceOpen, setAdvanceOpen] = useState(false);
-  const [ledgerOpen, setLedgerOpen] = useState(false);
-  const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
+  const [activeTab, setActiveTab] = useState<EmployeeTab>("Fixed");
 
-  const employeesInScope = useMemo(() => {
-    if (isSiteManager && projectFilterName) {
-      return allEmployees.filter((e) => e.project === projectFilterName);
-    }
-    if (selectedProjectId === ALL_PROJECTS) return allEmployees;
-    const proj = projects.find((p) => p.id === selectedProjectId);
-    if (!proj) return allEmployees;
-    return allEmployees.filter((e) => e.project === proj.name);
-  }, [allEmployees, isSiteManager, projectFilterName, selectedProjectId, projects]);
+  const projectIdForApi = isSiteManager ? undefined : selectedProjectId;
+  const { employees: allEmployees, loading, error, refetch } = useEmployees(
+    projectIdForApi,
+    selectedMonth
+  );
 
-  const fixedEmployees = employeesInScope.filter((e) => e.type === "Fixed");
-  const dailyEmployees = employeesInScope.filter((e) => e.type === "Daily");
+  const monthOptions = useMemo(() => buildMonthOptionsUpToCurrent(12), []);
+  const currentMonth = useMemo(() => new Date().toISOString().slice(0, 7), []);
+  const canGoNext = selectedMonth < currentMonth;
 
   const projectsForSelector = useMemo(
-    () => projects.filter((p) => p.status === "Active" || p.status === "On Hold"),
+    () => projects.filter((project) => project.status === "Active" || project.status === "On Hold"),
     [projects]
   );
 
-  const openAttendance = (emp: Employee) => { setSelectedEmployee(emp); setAttendanceOpen(true); };
-  const openPayment = (emp: Employee) => { setSelectedEmployee(emp); setPaymentOpen(true); };
-  const openAdvance = (emp: Employee) => { setSelectedEmployee(emp); setAdvanceOpen(true); };
-  const openLedger = (emp: Employee) => { setSelectedEmployee(emp); setLedgerOpen(true); };
+  const filteredEmployees = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return allEmployees.filter((employee) => {
+      const snapshot = employee.snapshot;
+      const matchesSearch =
+        q.length === 0 ||
+        employee.name.toLowerCase().includes(q) ||
+        employee.role.toLowerCase().includes(q) ||
+        (employee.phone ?? "").toLowerCase().includes(q);
+      const matchesPayment =
+        paymentFilter === "All" || snapshot?.paymentStatus === paymentFilter;
+      return matchesSearch && matchesPayment;
+    });
+  }, [allEmployees, paymentFilter, searchQuery]);
 
-  const closeAndClear = () => {
-    setAttendanceOpen(false);
-    setPaymentOpen(false);
-    setAdvanceOpen(false);
-    setLedgerOpen(false);
-    setSelectedEmployee(null);
-  };
+  const fixedEmployees = useMemo(
+    () => filteredEmployees.filter((e) => e.type === "Fixed"),
+    [filteredEmployees]
+  );
+  const dailyEmployees = useMemo(
+    () => filteredEmployees.filter((e) => e.type === "Daily"),
+    [filteredEmployees]
+  );
 
   const subtitle =
     isSiteManager && projectFilterName
-      ? `Fixed salary & daily wage workers — ${projectFilterName}`
+      ? `Month-scoped employee payroll - ${projectFilterName}`
       : selectedProjectId === ALL_PROJECTS
-        ? "Fixed salary & daily wage workers — All Projects"
-        : `Fixed salary & daily wage workers — ${projects.find((p) => p.id === selectedProjectId)?.name ?? "Project"}`;
+        ? "Month-scoped employee payroll - All Projects"
+        : `Month-scoped employee payroll - ${projects.find((p) => p.id === selectedProjectId)?.name ?? "Project"}`;
 
   return (
     <Layout>
       <PageHeader
         title="Employees"
         subtitle={subtitle}
-        printTargetId="employees-table"
-        actions={<Button variant="warning" size="sm" onClick={() => setAddOpen(true)}><Plus className="h-4 w-4 mr-1" />Add Employee</Button>}
+        printTargetId="employees-main-table"
+        actions={
+          <Button variant="warning" size="sm" onClick={() => setAddOpen(true)}>
+            <Plus className="h-4 w-4 mr-1" />
+            Add Employee
+          </Button>
+        }
       />
+
       <AddEmployeeDialog
         open={addOpen}
-        onOpenChange={setAddOpen}
+        onOpenChange={(open) => {
+          setAddOpen(open);
+          if (!open) refetch();
+        }}
         restrictedProjectId={isSiteManager ? currentUser?.assignedProjectId : undefined}
         restrictedProjectName={isSiteManager ? currentUser?.assignedProjectName : undefined}
+        projects={projects.map((p) => ({ id: p.id, name: p.name }))}
       />
-      <AttendanceDialog open={attendanceOpen} onOpenChange={(o) => { if (!o) closeAndClear(); else setAttendanceOpen(o); }} employee={selectedEmployee} />
-      <EmployeePaymentDialog open={paymentOpen} onOpenChange={(o) => { if (!o) closeAndClear(); else setPaymentOpen(o); }} employee={selectedEmployee} />
-      <EmployeeAdvanceDialog open={advanceOpen} onOpenChange={(o) => { if (!o) closeAndClear(); else setAdvanceOpen(o); }} employee={selectedEmployee} />
-      <SalaryLedgerDialog open={ledgerOpen} onOpenChange={(o) => { if (!o) closeAndClear(); else setLedgerOpen(o); }} employee={selectedEmployee} />
 
-      <div className="flex flex-wrap items-end gap-4 p-4 border-2 border-border mb-4">
-        {!isSiteManager && (
-          <div className="min-w-[200px]">
-            <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Project</Label>
-            <Select
-              value={selectedProjectId}
-              onValueChange={setSelectedProjectId}
-            >
+      <div className="border-2 border-border p-4 space-y-4 mb-4">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {!isSiteManager && (
+            <div>
+              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Project</Label>
+              <Select value={selectedProjectId} onValueChange={setSelectedProjectId}>
+                <SelectTrigger className="mt-1">
+                  <SelectValue placeholder="All Projects" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL_PROJECTS}>All Projects</SelectItem>
+                  {projectsForSelector.map((project) => (
+                    <SelectItem key={project.id} value={project.id}>
+                      {project.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {isSiteManager && projectFilterName && (
+            <div>
+              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Project</Label>
+              <p className="mt-1.5 text-sm font-medium">{projectFilterName}</p>
+            </div>
+          )}
+
+          <div>
+            <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Month</Label>
+            <div className="mt-1 flex items-center gap-2">
+              <Button
+                type="button"
+                size="icon"
+                variant="outline"
+                onClick={() => setSelectedMonth((c) => shiftMonth(c, -1))}
+                aria-label="Previous month"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                <SelectTrigger className="flex-1">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {monthOptions.map((month) => (
+                    <SelectItem key={month} value={month}>
+                      {monthLabel(month)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                type="button"
+                size="icon"
+                variant="outline"
+                disabled={!canGoNext}
+                onClick={() => setSelectedMonth((c) => shiftMonth(c, 1))}
+                aria-label="Next month"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+
+          <div>
+            <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Search</Label>
+            <Input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="mt-1"
+              placeholder="Name, role, phone"
+            />
+          </div>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          <div>
+            <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Payment Status</Label>
+            <Select value={paymentFilter} onValueChange={(v) => setPaymentFilter(v as PaymentStatusFilter)}>
               <SelectTrigger className="mt-1">
-                <SelectValue placeholder="All Projects" />
+                <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={ALL_PROJECTS}>All Projects</SelectItem>
-                {projectsForSelector.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.name}
-                  </SelectItem>
-                ))}
+                <SelectItem value="All">All Payment Status</SelectItem>
+                <SelectItem value="Paid">Paid</SelectItem>
+                <SelectItem value="Partial">Partial</SelectItem>
+                <SelectItem value="Due">Due</SelectItem>
+                <SelectItem value="Late">Late</SelectItem>
               </SelectContent>
             </Select>
-            <p className="text-xs text-muted-foreground mt-1">Group employees by project</p>
           </div>
-        )}
-        {isSiteManager && projectFilterName && (
-          <div className="min-w-[200px]">
-            <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Project</Label>
-            <p className="mt-1.5 text-sm font-medium">{projectFilterName}</p>
-            <p className="text-xs text-muted-foreground">Your assigned project (Site Manager)</p>
-          </div>
-        )}
+        </div>
       </div>
 
-      <Tabs defaultValue="Fixed" className="w-full">
-        <TabsList className="mb-2">
-          <TabsTrigger value="Fixed">Fixed Salary ({fixedEmployees.length})</TabsTrigger>
-          <TabsTrigger value="Daily">Daily Wage ({dailyEmployees.length})</TabsTrigger>
-        </TabsList>
-        <TabsContent value="Fixed">
-          <div id="employees-table" className="border-2 border-border">
-            <EmployeeTable
-              employees={fixedEmployees}
-              onAttendance={openAttendance}
-              onPayment={openPayment}
-              onAdvance={openAdvance}
-              onLedger={openLedger}
+      {error && (
+        <p className="text-destructive text-sm mb-2">{error}</p>
+      )}
+      {loading && (
+        <p className="text-muted-foreground text-sm mb-2">Loading employees…</p>
+      )}
+
+      <div className="flex justify-start mb-2">
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as EmployeeTab)}>
+          <TabsList className="w-full md:w-auto">
+            <TabsTrigger value="Fixed" className="flex-1 md:flex-none min-w-[140px]">Fixed Salary ({fixedEmployees.length})</TabsTrigger>
+            <TabsTrigger value="Daily" className="flex-1 md:flex-none min-w-[140px]">Daily Wage ({dailyEmployees.length})</TabsTrigger>
+          </TabsList>
+        </Tabs>
+      </div>
+
+      <div id="employees-main-table" className="border-2 border-border overflow-x-auto mb-4">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b-2 border-border bg-primary text-primary-foreground">
+              <th className="px-4 py-2.5 text-left font-bold uppercase tracking-wider">Name</th>
+              <th className="px-4 py-2.5 text-left font-bold uppercase tracking-wider">Role</th>
+              <th className="px-4 py-2.5 text-right font-bold uppercase tracking-wider">Rate</th>
+              <th className="px-4 py-2.5 text-left font-bold uppercase tracking-wider">This Month</th>
+              <th className="px-4 py-2.5 text-right font-bold uppercase tracking-wider">Payable</th>
+              <th className="px-4 py-2.5 text-right font-bold uppercase tracking-wider">Paid</th>
+              <th className="px-4 py-2.5 text-right font-bold uppercase tracking-wider">Remaining</th>
+              <th className="px-4 py-2.5 text-right font-bold uppercase tracking-wider">Total Paid (All Months)</th>
+              <th className="px-4 py-2.5 text-left font-bold uppercase tracking-wider">Payment Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <EmployeeRows
+              employees={activeTab === "Fixed" ? fixedEmployees : dailyEmployees}
+              selectedMonth={selectedMonth}
+              navigate={navigate}
+              loading={loading}
             />
-          </div>
-        </TabsContent>
-        <TabsContent value="Daily">
-          <div id="employees-table" className="border-2 border-border">
-            <EmployeeTable
-              employees={dailyEmployees}
-              onAttendance={openAttendance}
-              onPayment={openPayment}
-              onAdvance={openAdvance}
-              onLedger={openLedger}
-            />
-          </div>
-        </TabsContent>
-      </Tabs>
+          </tbody>
+        </table>
+      </div>
+
+      <p className="text-xs text-muted-foreground">
+        Tip: click any employee row to open the dedicated employee ledger page.
+      </p>
     </Layout>
   );
 }

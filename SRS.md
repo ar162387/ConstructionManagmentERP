@@ -370,6 +370,24 @@ Vendor ledger view:
 
   * allows paying pending dues later (linked to bank/cash)
 
+### 3.5.1 Vendor vs Item Ledger: Two Views of the Same Money
+
+**Current behaviour (pool vs per-entry):**
+
+* **Vendor ledger** uses *pool* accounting: Total Billed = sum of all purchase (item ledger) totals for that vendor. Total Paid = sum of `paidAmount` on each purchase entry **plus** sum of all standalone "Record Payment" (VendorPayment) amounts. Remaining = max(0, Total Billed − Total Paid). So when you record a payment, vendor-level remaining can go to zero even if no single purchase line was updated.
+
+* **Item ledger** (e.g. Cement Ledger) uses *per-entry* stored amounts: Each row stores its own `paidAmount` and `remaining` (total − paid). These are updated only when creating/editing that specific ledger entry. "Record Payment" on the vendor does **not** update any item ledger entry; it only adds a VendorPayment record.
+
+So it is correct that: Vendor ledger shows "Remaining: 0" when total payments have cleared the vendor balance; a specific cement ledger entry can still show "Due: 26,500" because that entry’s `paidAmount` was never increased — the payment was recorded at vendor level only.
+
+**Ways to align the two views (technical options):**
+
+1. **Payment allocation (recommended):** When recording a vendor payment, allow the user to optionally allocate the payment to one or more purchase (ledger) entries. Backend stores allocations (e.g. paymentId, ledgerEntryId, amount) and derives each entry’s "paid" from entry.paidAmount + sum(allocations), or on allocate updates the chosen ItemLedgerEntry.paidAmount so the cement ledger row shows settled. Both vendor and item ledgers stay consistent.
+
+2. **Derived/FIFO display:** Keep VendorPayment as a pool. On the item ledger, compute an effective remaining per entry (e.g. FIFO: apply vendor payments in date order to oldest-due entries). When the vendor is fully paid, every entry shows 0 due. Single source of truth remains the pool; item view is derived for display only.
+
+3. **Leave as-is and document:** Document that "Record Payment" only affects vendor-level balance. To make a specific cement entry show as paid, the user edits that ledger entry and increases paid amount. No backend changes but can be confusing.
+
 ---
 
 # 3.6 Employee Management (Project Level)
@@ -404,6 +422,14 @@ Vendor ledger view:
   * base = dailyRate
   * overtime = overtimeHours * (dailyRate/8)
 * Payment tracking (paid/due)
+
+### Employee Payment Ledger – Validation and Referential Integrity
+
+* **Per-month cap**: For each employee and month, total paid (Advance + Salary/Wage) must not exceed payable. Payable is computed from attendance (fixed: base salary minus unpaid-leave deduction; daily: daily wage component + overtime pay). All validations are enforced on the backend on create and update payment.
+* **Attendance after salary paid**: If salary for a month is already paid (PAID ≥ PAYABLE), then marking unpaid leave or any attendance change that would reduce Total Payable below PAID is not allowed. This prevents the invalid state where you have paid more than the payable amount. Backend rejects the attendance save with a clear message; the user must record an adjustment (e.g. refund) before changing attendance.
+* **Advance for a specific month**: Advance is stored with a `month` (YYYY-MM) and counts toward that month’s paid. No unallocated advance pool.
+* **Edit/Delete**: Site Manager cannot edit or delete employee payments (entry-only). Admin/Super Admin can. When a payment is edited (including month change), both affected months must still satisfy paid ≤ payable. Delete removes the record; totals are derived from remaining records.
+* **Employee delete**: An employee cannot be deleted if they have any payment records. The system returns a clear message (e.g. “Cannot delete employee: N payment record(s) exist. Remove or reassign payments first.”). See backend referential integrity: Employee → EmployeePayment.
 
 ---
 

@@ -1,0 +1,14 @@
+---
+description: Remove mock data when backend functionality is implemented; use real MongoDB
+alwaysApply: true
+---
+
+# Mock Data → Real MongoDB Migration
+
+When implementing backend functionality for a feature:
+
+1. **Remove mock data** for that feature once the real backend (MongoDB) is wired up.
+2. **Use real MongoDB** as the data source — no mixing mock and real data for the same feature.
+3. Update the relevant services, context, or data-fetching layer to call the backend API instead of returning mock/hardcoded data.
+
+As you progress feature by feature, each completed backend integration should result in mock data being fully removed for that feature.

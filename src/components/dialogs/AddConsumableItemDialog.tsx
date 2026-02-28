@@ -9,57 +9,46 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useMockStore } from "@/context/MockStore";
+import { createConsumableItem } from "@/services/consumableItemsService";
 import { toast } from "sonner";
 
 interface AddConsumableItemDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  projectId: string | null;
+  onSuccess: () => void;
 }
 
-export function AddConsumableItemDialog({ open, onOpenChange }: AddConsumableItemDialogProps) {
-  const { actions } = useMockStore();
+export function AddConsumableItemDialog({ open, onOpenChange, projectId, onSuccess }: AddConsumableItemDialogProps) {
   const [name, setName] = useState("");
   const [unit, setUnit] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) {
-      toast.error("Item name is required");
-      return;
+    if (!name.trim()) { toast.error("Item name is required"); return; }
+    if (!unit.trim()) { toast.error("Unit is required"); return; }
+    if (!projectId) { toast.error("No project selected"); return; }
+    setLoading(true);
+    try {
+      await createConsumableItem({ projectId, name: name.trim(), unit: unit.trim() });
+      toast.success("Item added");
+      onSuccess();
+      onOpenChange(false);
+      setName("");
+      setUnit("");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to add item");
+    } finally {
+      setLoading(false);
     }
-    if (!unit.trim()) {
-      toast.error("Unit is required");
-      return;
-    }
-    actions.addConsumableItem({
-      name: name.trim(),
-      unit: unit.trim(),
-      currentStock: 0,
-      totalPurchased: 0,
-      totalAmount: 0,
-      totalPaid: 0,
-      totalPending: 0,
-    });
-    actions.addAuditLog({
-      timestamp: new Date().toISOString().slice(0, 19).replace("T", " "),
-      user: "admin@erp.com",
-      role: "Admin",
-      action: "Create",
-      module: "Consumable Inventory",
-      description: `Added item: ${name.trim()} (${unit.trim()})`,
-    });
-    toast.success("Item added");
-    onOpenChange(false);
-    setName("");
-    setUnit("");
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Add Consumable Item (Item Master)</DialogTitle>
+          <DialogTitle>Add Consumable Item</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -72,7 +61,7 @@ export function AddConsumableItemDialog({ open, onOpenChange }: AddConsumableIte
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button type="submit" variant="warning">Add Item</Button>
+            <Button type="submit" variant="warning" disabled={loading}>{loading ? "Adding…" : "Add Item"}</Button>
           </DialogFooter>
         </form>
       </DialogContent>

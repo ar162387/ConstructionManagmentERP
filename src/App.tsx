@@ -4,6 +4,9 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { MockStoreProvider } from "@/context/MockStore";
+import { AuthProvider } from "@/context/AuthContext";
+import { ProtectedRoute } from "@/components/ProtectedRoute";
+import Login from "./pages/Login";
 import Index from "./pages/Index";
 import Projects from "./pages/Projects";
 import ConsumableInventory from "./pages/ConsumableInventory";
@@ -14,6 +17,7 @@ import Vendors from "./pages/Vendors";
 import VendorLedger from "./pages/VendorLedger";
 import Contractors from "./pages/Contractors";
 import Employees from "./pages/Employees";
+import EmployeeLedger from "./pages/EmployeeLedger";
 import BankAccounts from "./pages/BankAccounts";
 import Expenses from "./pages/Expenses";
 import Machinery from "./pages/Machinery";
@@ -32,26 +36,30 @@ const App = () => (
         <Toaster />
         <Sonner />
         <BrowserRouter>
+          <AuthProvider>
           <Routes>
-          <Route path="/" element={<Index />} />
-          <Route path="/projects" element={<Projects />} />
-          <Route path="/inventory/consumable" element={<ConsumableInventory />} />
-          <Route path="/inventory/consumable/:itemId" element={<ItemLedger />} />
-          <Route path="/inventory/non-consumable" element={<NonConsumableInventory />} />
-          <Route path="/inventory/non-consumable/:itemId" element={<NonConsumableItemLedger />} />
-          <Route path="/vendors" element={<Vendors />} />
-          <Route path="/vendors/:vendorId" element={<VendorLedger />} />
-          <Route path="/contractors" element={<Contractors />} />
-          <Route path="/employees" element={<Employees />} />
-          <Route path="/bank-accounts" element={<BankAccounts />} />
-          <Route path="/expenses" element={<Expenses />} />
-          <Route path="/machinery" element={<Machinery />} />
-          <Route path="/machinery/:machineId" element={<MachineLedger />} />
-          <Route path="/liabilities" element={<Liabilities />} />
-          <Route path="/audit-logs" element={<AuditLogs />} />
-          <Route path="/users" element={<UserManagement />} />
-          <Route path="*" element={<NotFound />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
+          <Route path="/projects" element={<ProtectedRoute><Projects /></ProtectedRoute>} />
+          <Route path="/inventory/consumable" element={<ProtectedRoute><ConsumableInventory /></ProtectedRoute>} />
+          <Route path="/inventory/consumable/:itemId" element={<ProtectedRoute><ItemLedger /></ProtectedRoute>} />
+          <Route path="/inventory/non-consumable" element={<ProtectedRoute><NonConsumableInventory /></ProtectedRoute>} />
+          <Route path="/inventory/non-consumable/:itemId" element={<ProtectedRoute><NonConsumableItemLedger /></ProtectedRoute>} />
+          <Route path="/vendors" element={<ProtectedRoute><Vendors /></ProtectedRoute>} />
+          <Route path="/vendors/:vendorId" element={<ProtectedRoute><VendorLedger /></ProtectedRoute>} />
+          <Route path="/contractors" element={<ProtectedRoute><Contractors /></ProtectedRoute>} />
+          <Route path="/employees" element={<ProtectedRoute><Employees /></ProtectedRoute>} />
+          <Route path="/employees/:employeeId" element={<ProtectedRoute><EmployeeLedger /></ProtectedRoute>} />
+          <Route path="/bank-accounts" element={<ProtectedRoute><BankAccounts /></ProtectedRoute>} />
+          <Route path="/expenses" element={<ProtectedRoute><Expenses /></ProtectedRoute>} />
+          <Route path="/machinery" element={<ProtectedRoute><Machinery /></ProtectedRoute>} />
+          <Route path="/machinery/:machineId" element={<ProtectedRoute><MachineLedger /></ProtectedRoute>} />
+          <Route path="/liabilities" element={<ProtectedRoute><Liabilities /></ProtectedRoute>} />
+          <Route path="/audit-logs" element={<ProtectedRoute requiredRole="Super Admin"><AuditLogs /></ProtectedRoute>} />
+          <Route path="/users" element={<ProtectedRoute requiredRole="Admin"><UserManagement /></ProtectedRoute>} />
+          <Route path="*" element={<ProtectedRoute><NotFound /></ProtectedRoute>} />
         </Routes>
+          </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
     </MockStoreProvider>

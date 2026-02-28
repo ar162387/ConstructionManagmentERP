@@ -16,20 +16,22 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useMockStore } from "@/context/MockStore";
+import { useExpenseCategories } from "@/hooks/useExpenses";
+import { createExpense } from "@/services/expensesService";
 import { toast } from "sonner";
 import { Plus } from "lucide-react";
 
 interface AddExpenseDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** When set (e.g. Site Manager), project is fixed to this and selector is hidden */
-  restrictedProjectId?: string;
-  restrictedProjectName?: string;
+  projectId: string | null;
+  /** Increment to refetch categories (e.g. after add/edit expense with new category) */
+  categoriesRefreshKey?: number;
+  onSuccess?: () => void;
 }
 
-export function AddExpenseDialog({ open, onOpenChange, restrictedProjectId, restrictedProjectName }: AddExpenseDialogProps) {
-  const { state, actions } = useMockStore();
+export function AddExpenseDialog({ open, onOpenChange, projectId, categoriesRefreshKey, onSuccess }: AddExpenseDialogProps) {
+  const categories = useExpenseCategories(projectId, categoriesRefreshKey);
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("");
@@ -37,58 +39,48 @@ export function AddExpenseDialog({ open, onOpenChange, restrictedProjectId, rest
   const [showNewCategory, setShowNewCategory] = useState(false);
   const [paymentMode, setPaymentMode] = useState<"Cash" | "Bank" | "Online">("Cash");
   const [amount, setAmount] = useState("");
-  const [projectId, setProjectId] = useState(state.projects[0]?.id || "");
-
-  const categories = state.expenseCategories;
-  const projects = state.projects;
-  const effectiveProjectId = restrictedProjectId ?? projectId;
-  const effectiveProject = projects.find((p) => p.id === effectiveProjectId);
-  const projectName = effectiveProject?.name ?? restrictedProjectName ?? projects.find((p) => p.id === projectId)?.name;
+  const [loading, setLoading] = useState(false);
 
   const handleAddCategory = () => {
     if (newCategory.trim()) {
-      actions.addExpenseCategory(newCategory.trim());
       setCategory(newCategory.trim());
       setShowNewCategory(false);
       setNewCategory("");
-      toast.success("Category added");
+      toast.success("Category will be created on save");
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const amt = parseFloat(amount);
     const cat = showNewCategory ? newCategory.trim() : category;
-    if (!date || !description.trim() || !cat || isNaN(amt) || amt <= 0 || !projectName) {
+    if (!date || !description.trim() || !cat || isNaN(amt) || amt <= 0 || !projectId) {
       toast.error("Fill all required fields");
       return;
     }
-    if (showNewCategory && newCategory.trim()) {
-      actions.addExpenseCategory(newCategory.trim());
+    setLoading(true);
+    try {
+      await createExpense({
+        projectId,
+        date,
+        description: description.trim(),
+        category: cat,
+        paymentMode,
+        amount: amt,
+      });
+      toast.success("Expense added");
+      onOpenChange(false);
+      setDescription("");
+      setCategory("");
+      setAmount("");
+      setNewCategory("");
+      setShowNewCategory(false);
+      onSuccess?.();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to add expense");
+    } finally {
+      setLoading(false);
     }
-    actions.addExpense({
-      date,
-      description: description.trim(),
-      category: showNewCategory ? newCategory.trim() : category,
-      paymentMode,
-      amount: amt,
-      project: projectName,
-    });
-    actions.addAuditLog({
-      timestamp: new Date().toISOString().slice(0, 19).replace("T", " "),
-      user: "admin@erp.com",
-      role: "Admin",
-      action: "Create",
-      module: "Expense",
-      description: `Expense: ${description.trim()} — ${amt}`,
-    });
-    toast.success("Expense added");
-    onOpenChange(false);
-    setDescription("");
-    setCategory("");
-    setAmount("");
-    setNewCategory("");
-    setShowNewCategory(false);
   };
 
   return (
@@ -131,23 +123,6 @@ export function AddExpenseDialog({ open, onOpenChange, restrictedProjectId, rest
             )}
           </div>
           <div>
-            <Label>Project *</Label>
-            {restrictedProjectId && restrictedProjectName ? (
-              <p className="mt-1.5 text-sm font-medium">{restrictedProjectName}</p>
-            ) : (
-              <Select value={projectId} onValueChange={setProjectId}>
-                <SelectTrigger className="mt-1">
-                  <SelectValue placeholder="Select project" />
-                </SelectTrigger>
-                <SelectContent>
-                  {projects.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-          </div>
-          <div>
             <Label>Payment Mode *</Label>
             <Select value={paymentMode} onValueChange={(v) => setPaymentMode(v as "Cash" | "Bank" | "Online")}>
               <SelectTrigger className="mt-1">
@@ -162,11 +137,18 @@ export function AddExpenseDialog({ open, onOpenChange, restrictedProjectId, rest
           </div>
           <div>
             <Label>Amount *</Label>
-            <Input type="number" min={0.01} value={amount} onChange={(e) => setAmount(e.target.value)} className="mt-1" />
+            <Input
+              type="text"
+              inputMode="decimal"
+              placeholder="e.g. 10000"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ""))}
+              className="mt-1"
+            />
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button type="submit" variant="warning">Add Expense</Button>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>Cancel</Button>
+            <Button type="submit" variant="warning" disabled={loading}>Add Expense</Button>
           </DialogFooter>
         </form>
       </DialogContent>

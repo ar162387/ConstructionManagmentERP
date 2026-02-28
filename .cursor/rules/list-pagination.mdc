@@ -1,0 +1,58 @@
+---
+description: List/table pagination — apply to all list views
+alwaysApply: true
+---
+
+# List and Table Pagination
+
+**Apply pagination to every list or table view** that displays multiple entries (e.g. inventory, vendors, contractors, employees, ledgers, expenses, machinery, audit logs).
+
+## Requirements
+
+1. **Rows per page** — Customisable; **default 12** per page. Expose a "Rows per page" dropdown with options (e.g. 12, 24, 50, 100).
+2. **Navigation** — Provide **Previous** and **Next** buttons to move between pages.
+3. **Summary** — Show "Showing X–Y of Z" (1-based indices) and "Page N of M".
+
+## Implementation
+
+**Prefer backend-aligned (server-side) pagination** when the API supports it — pass `page` and `pageSize` (default 12) in the request; use the returned slice and `total` for the table and for **`TablePagination`**. This keeps the site fast by only fetching the current page (e.g. vendor ledger, item ledger, audit logs).
+
+When the API does not support pagination yet, use **client-side** pagination:
+- Use the shared **`useTablePagination`** hook from `@/hooks/useTablePagination` with the full list and optional `{ defaultPageSize: 12 }`.
+- Render the list/table using **`paginatedItems`** from the hook.
+
+In both cases, add the **`TablePagination`** component from `@/components/TablePagination` below the table (pass pageSize, onPageSizeChange, page, totalPages, totalItems, onPrevious, onNext, canPrevious, canNext, startIndexOneBased, endIndex, pageSizeOptions).
+
+When adding a new list/table feature, implement pagination by default.
+
+---
+
+## Print / Export rule
+
+When implementing print or export for any list/table page, **only render the main heading and the data table**. Hide pagination controls, filters, KPIs/summary cards, and other surrounding UI so exported/printed output is just the heading plus the table.
+
+---
+
+## Backend pagination (API contract)
+
+For any list/table endpoint that can return many records, implement **server-side pagination** so the site stays fast:
+
+1. **Query parameters**
+   - `page` (optional) — 1-based page number; default `1`.
+   - `pageSize` (optional) — rows per page; **default 12**. Cap at a maximum (e.g. 100 or 500) to avoid abuse.
+
+2. **Response shape**
+   - Return the **paginated slice** (e.g. `rows`, `entries`, `logs`, or `items`) for the requested page only.
+   - Always include **`total`** — the full count of matching records (before pagination), so the frontend can show "Showing X–Y of Z" and "Page N of M".
+
+   Examples:
+   - `{ rows, totalBilled, totalPaid, remaining, total }` (vendor ledger)
+   - `{ entries, total }` (item ledger)
+   - `{ logs, total }` (audit logs)
+   - `{ items, total }` (generic list)
+
+3. **Behaviour**
+   - Compute `skip = (page - 1) * pageSize` and return only `limit = pageSize` records (or slice in-memory after fetching if necessary).
+   - Ensure `page` and `pageSize` are validated (e.g. positive integers, pageSize within allowed range).
+
+When adding a new backend list endpoint, support `page` and `pageSize` and return a slice plus `total` so the frontend can use **`TablePagination`** with server-side pagination.

@@ -17,34 +17,42 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useMockStore } from "@/context/MockStore";
+import { createContractorEntry } from "@/services/contractorLedgerService";
+import type { ApiContractorWithTotals } from "@/services/contractorsService";
 import { toast } from "sonner";
 
 interface AddContractorEntryDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   defaultContractorId?: string;
-  /** When set, only contractors for this project are shown (e.g. Site Manager or Admin filtered by project) */
-  projectFilterName?: string;
+  projectId: string;
+  contractors: ApiContractorWithTotals[];
+  onSuccess?: () => void;
 }
 
-export function AddContractorEntryDialog({ open, onOpenChange, defaultContractorId, projectFilterName }: AddContractorEntryDialogProps) {
-  const { state, actions } = useMockStore();
-  const allContractors = state.contractors;
-  const contractors = projectFilterName
-    ? allContractors.filter((c) => c.project === projectFilterName)
-    : allContractors;
+export function AddContractorEntryDialog({
+  open,
+  onOpenChange,
+  defaultContractorId,
+  projectId,
+  contractors,
+  onSuccess,
+}: AddContractorEntryDialogProps) {
   const [contractorId, setContractorId] = useState(defaultContractorId ?? contractors[0]?.id ?? "");
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [amount, setAmount] = useState("");
   const [remarks, setRemarks] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (open && defaultContractorId && contractors.some((c) => c.id === defaultContractorId)) setContractorId(defaultContractorId);
-    else if (open && contractors[0]) setContractorId(contractors[0].id);
+    if (open && defaultContractorId && contractors.some((c) => c.id === defaultContractorId)) {
+      setContractorId(defaultContractorId);
+    } else if (open && contractors[0]) {
+      setContractorId(contractors[0].id);
+    }
   }, [open, defaultContractorId, contractors]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!contractorId) {
       toast.error("Select a contractor");
@@ -55,24 +63,25 @@ export function AddContractorEntryDialog({ open, onOpenChange, defaultContractor
       toast.error("Valid date and amount are required");
       return;
     }
-    actions.addContractorEntry({
-      contractorId,
-      date,
-      amount: amt,
-      remarks: remarks.trim(),
-    });
-    actions.addAuditLog({
-      timestamp: new Date().toISOString().slice(0, 19).replace("T", " "),
-      user: "admin@erp.com",
-      role: "Admin",
-      action: "Create",
-      module: "Contractor",
-      description: `Entry: ${contractors.find((c) => c.id === contractorId)?.name} — ${amt.toLocaleString()}`,
-    });
-    toast.success("Entry added");
-    onOpenChange(false);
-    setAmount("");
-    setRemarks("");
+    setSubmitting(true);
+    try {
+      await createContractorEntry({
+        contractorId,
+        projectId,
+        date,
+        amount: amt,
+        remarks: remarks.trim(),
+      });
+      toast.success("Entry added");
+      onOpenChange(false);
+      setAmount("");
+      setRemarks("");
+      onSuccess?.();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to add entry");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -84,13 +93,13 @@ export function AddContractorEntryDialog({ open, onOpenChange, defaultContractor
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <Label>Contractor *</Label>
-            <Select value={contractorId} onValueChange={setContractorId}>
+            <Select value={contractorId} onValueChange={setContractorId} disabled={contractors.length === 0}>
               <SelectTrigger className="mt-1">
-                <SelectValue placeholder="Select contractor" />
+                <SelectValue placeholder={contractors.length === 0 ? "No contractors" : "Select contractor"} />
               </SelectTrigger>
               <SelectContent>
                 {contractors.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>{c.name} — {c.project}</SelectItem>
+                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -101,15 +110,15 @@ export function AddContractorEntryDialog({ open, onOpenChange, defaultContractor
           </div>
           <div>
             <Label>Amount *</Label>
-            <Input type="number" min={0.01} value={amount} onChange={(e) => setAmount(e.target.value)} className="mt-1" />
+            <Input type="number" min={0.01} step="any" value={amount} onChange={(e) => setAmount(e.target.value)} className="mt-1" />
           </div>
           <div>
             <Label>Remarks</Label>
             <Textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} rows={2} className="mt-1" />
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button type="submit" variant="warning">Add Entry</Button>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>Cancel</Button>
+            <Button type="submit" variant="warning" disabled={submitting || contractors.length === 0}>Add Entry</Button>
           </DialogFooter>
         </form>
       </DialogContent>

@@ -2,13 +2,17 @@ import { useState, useMemo, useEffect } from "react";
 import Layout from "@/components/Layout";
 import PageHeader from "@/components/PageHeader";
 import StatCard from "@/components/StatCard";
-import { formatCurrency, formatCurrencyCompact } from "@/lib/mock-data";
-import { useMockStore } from "@/context/MockStore";
+import { formatCurrency } from "@/lib/mock-data";
+import { useAuth } from "@/context/AuthContext";
+import { useProjects } from "@/hooks/useProjects";
+import { useContractors } from "@/hooks/useContractors";
+import { useContractorLedger } from "@/hooks/useContractorLedger";
 import { AddContractorDialog } from "@/components/dialogs/AddContractorDialog";
 import { AddContractorEntryDialog } from "@/components/dialogs/AddContractorEntryDialog";
+import { EditContractorDialog } from "@/components/dialogs/EditContractorDialog";
 import { ContractorPaymentDialog } from "@/components/dialogs/ContractorPaymentDialog";
+import { Combobox } from "@/components/ui/combobox";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -17,10 +21,27 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, ChevronLeft, ChevronRight, Banknote } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Plus, ChevronLeft, ChevronRight, Banknote, Pencil, Trash2 } from "lucide-react";
+import PrintExportButton from "@/components/PrintExportButton";
+import { deleteContractor } from "@/services/contractorsService";
+import { deleteContractorEntry, deleteContractorPayment } from "@/services/contractorLedgerService";
+import { toast } from "sonner";
+import type { ApiContractorWithTotals } from "@/services/contractorsService";
+import type { ApiContractorLedgerRow } from "@/services/contractorLedgerService";
+import { TablePagination } from "@/components/TablePagination";
 
 const ALL_CONTRACTORS = "__all__";
-const ALL_PROJECTS = "__all__";
+const PAGE_SIZE_OPTIONS = [12, 24, 50, 100];
 
 function getMonthLabel(ym: string) {
   const [y, m] = ym.split("-");
@@ -40,110 +61,159 @@ function nextMonth(ym: string): string {
   return `${y}-${String(m + 1).padStart(2, "0")}`;
 }
 
+function getContractorStatusLabel(c: ApiContractorWithTotals): string {
+  if (c.totalAmount === 0 && c.totalPaid === 0) return "N/A";
+  if (c.remaining > 0) return "Remaining";
+  return "Paid";
+}
+
 export default function Contractors() {
-  const { state } = useMockStore();
-  const { contractors, contractorEntries, contractorPayments, projects, users, currentUserId } = state;
-
-  const currentUser = useMemo(
-    () => users.find((u) => u.id === currentUserId) ?? users[0],
-    [users, currentUserId]
-  );
+  const { user: currentUser } = useAuth();
+  const { projects } = useProjects();
   const isSiteManager = currentUser?.role === "Site Manager";
-  const projectFilterName = isSiteManager ? currentUser?.assignedProjectName ?? null : null;
+  const canEditDelete = currentUser?.role !== "Site Manager";
 
-  const [selectedProjectId, setSelectedProjectId] = useState<string>(ALL_PROJECTS);
-  const [selectedId, setSelectedId] = useState<string>(ALL_CONTRACTORS);
+  const [selectedProjectId, setSelectedProjectId] = useState<string>("");
+  const effectiveProjectId = isSiteManager ? (currentUser?.assignedProjectId ?? null) : (selectedProjectId || null);
+
+  const { contractors, loading: contractorsLoading, error: contractorsError, refetch: refetchContractors } = useContractors(effectiveProjectId);
   const [currentMonth, setCurrentMonth] = useState(() => new Date().toISOString().slice(0, 7));
-  const [contractorSearch, setContractorSearch] = useState("");
+  const [selectedContractorId, setSelectedContractorId] = useState<string>(ALL_CONTRACTORS);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(12);
+
+  const { ledger, loading: ledgerLoading, error: ledgerError, refetch: refetchLedger } = useContractorLedger(
+    effectiveProjectId,
+    currentMonth,
+    selectedContractorId === ALL_CONTRACTORS ? null : selectedContractorId,
+    page,
+    pageSize
+  );
+
   const [addContractorOpen, setAddContractorOpen] = useState(false);
   const [addEntryOpen, setAddEntryOpen] = useState(false);
   const [paymentOpen, setPaymentOpen] = useState(false);
+  const [editContractor, setEditContractor] = useState<ApiContractorWithTotals | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
+  const [deleteContractorState, setDeleteContractorState] = useState<ApiContractorWithTotals | null>(null);
+  const [deleteEntryState, setDeleteEntryState] = useState<ApiContractorLedgerRow | null>(null);
+  const [deletePaymentState, setDeletePaymentState] = useState<ApiContractorLedgerRow | null>(null);
 
-  const contractorsInScope = useMemo(() => {
-    if (isSiteManager && projectFilterName) {
-      return contractors.filter((c) => c.project === projectFilterName);
-    }
-    if (selectedProjectId === ALL_PROJECTS) return contractors;
-    const proj = projects.find((p) => p.id === selectedProjectId);
-    if (!proj) return contractors;
-    return contractors.filter((c) => c.project === proj.name);
-  }, [contractors, isSiteManager, projectFilterName, selectedProjectId, projects]);
-
-  const contractorIdsInScope = useMemo(() => new Set(contractorsInScope.map((c) => c.id)), [contractorsInScope]);
-
-  const filteredContractorsForDropdown = useMemo(() => {
-    if (!contractorSearch.trim()) return contractorsInScope;
-    const q = contractorSearch.trim().toLowerCase();
-    return contractorsInScope.filter(
-      (c) => c.name.toLowerCase().includes(q) || c.project.toLowerCase().includes(q)
-    );
-  }, [contractorsInScope, contractorSearch]);
-
-  const entriesInMonth = useMemo(() => {
-    const inMonth = contractorEntries.filter((e) => e.date.startsWith(currentMonth));
-    return inMonth.filter((e) => contractorIdsInScope.has(e.contractorId));
-  }, [contractorEntries, currentMonth, contractorIdsInScope]);
-
-  const paymentsInMonth = useMemo(() => {
-    const inMonth = contractorPayments.filter((p) => p.date.startsWith(currentMonth));
-    return inMonth.filter((p) => contractorIdsInScope.has(p.contractorId));
-  }, [contractorPayments, currentMonth, contractorIdsInScope]);
-
-  const tableEntries = useMemo(() => {
-    let list = entriesInMonth.map((e) => {
-      const contractor = contractorsInScope.find((c) => c.id === e.contractorId);
-      return { ...e, contractorName: contractor?.name ?? "—", project: contractor?.project ?? "" };
-    });
-    if (selectedId !== ALL_CONTRACTORS) {
-      list = list.filter((e) => e.contractorId === selectedId);
-    }
-    return list.sort((a, b) => b.date.localeCompare(a.date));
-  }, [entriesInMonth, selectedId, contractorsInScope]);
-
-  const monthlyTotal = useMemo(() => {
-    let entries = entriesInMonth;
-    if (selectedId !== ALL_CONTRACTORS) entries = entries.filter((e) => e.contractorId === selectedId);
-    return entries.reduce((s, e) => s + e.amount, 0);
-  }, [entriesInMonth, selectedId]);
-
-  const monthlyPaid = useMemo(() => {
-    let payments = paymentsInMonth;
-    if (selectedId !== ALL_CONTRACTORS) payments = payments.filter((p) => p.contractorId === selectedId);
-    return payments.reduce((s, p) => s + p.amount, 0);
-  }, [paymentsInMonth, selectedId]);
-
-  const monthlyRemaining = monthlyTotal - monthlyPaid;
-  const selectedContractor = selectedId !== ALL_CONTRACTORS ? contractorsInScope.find((c) => c.id === selectedId) ?? null : null;
-
-  const canGoNext = currentMonth < new Date().toISOString().slice(0, 7);
-
-  const projectsForSelector = useMemo(() => projects.filter((p) => p.status === "Active" || p.status === "On Hold"), [projects]);
+  const projectsForSelector = useMemo(
+    () => projects.filter((p) => p.status === "Active" || p.status === "On Hold" || p.status === "Completed"),
+    [projects]
+  );
+  const selectedContractor = selectedContractorId !== ALL_CONTRACTORS
+    ? contractors.find((c) => c.id === selectedContractorId) ?? null
+    : null;
 
   useEffect(() => {
-    if (selectedId !== ALL_CONTRACTORS && !contractorsInScope.some((c) => c.id === selectedId)) {
-      setSelectedId(ALL_CONTRACTORS);
+    if (!isSiteManager && projectsForSelector.length > 0 && !selectedProjectId) {
+      setSelectedProjectId(projectsForSelector[0].id);
+    } else if (isSiteManager && currentUser?.assignedProjectId) {
+      setSelectedProjectId(currentUser.assignedProjectId);
     }
-  }, [contractorsInScope, selectedId]);
+  }, [isSiteManager, currentUser?.assignedProjectId, projectsForSelector, selectedProjectId]);
+
+  useEffect(() => {
+    if (selectedContractorId !== ALL_CONTRACTORS && !contractors.some((c) => c.id === selectedContractorId)) {
+      setSelectedContractorId(ALL_CONTRACTORS);
+    }
+  }, [contractors, selectedContractorId]);
+
+  const comboboxOptions = useMemo(() => {
+    const opts: { value: string; label: string }[] = [
+      { value: ALL_CONTRACTORS, label: "All Contractors" },
+      ...contractors.map((c) => ({
+        value: c.id,
+        label: `${c.name} — ${getContractorStatusLabel(c)}`,
+      })),
+    ];
+    return opts;
+  }, [contractors]);
+
+  const totalPages = ledger ? Math.max(1, Math.ceil(ledger.total / pageSize)) : 1;
+  const canGoNext = currentMonth < new Date().toISOString().slice(0, 7);
+
+  const handlePageSizeChange = (size: number) => {
+    setPageSize(size);
+    setPage(1);
+  };
+
+  const handleDeleteContractorClick = (c: ApiContractorWithTotals) => {
+    if (c.remaining > 0) {
+      toast.error(`Cannot delete "${c.name}" — they have remaining amount of ${formatCurrency(c.remaining)}. Clear the outstanding balance first.`);
+      return;
+    }
+    setDeleteContractorState(c);
+  };
+
+  const handleDeleteContractorConfirm = async () => {
+    if (!deleteContractorState) return;
+    try {
+      await deleteContractor(deleteContractorState.id);
+      toast.success("Contractor deleted");
+      setDeleteContractorState(null);
+      setSelectedContractorId(ALL_CONTRACTORS);
+      refetchContractors();
+      refetchLedger();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to delete contractor");
+    }
+  };
+
+  const handleDeleteEntry = async () => {
+    if (!deleteEntryState) return;
+    try {
+      await deleteContractorEntry(deleteEntryState.id);
+      toast.success("Entry deleted");
+      setDeleteEntryState(null);
+      refetchLedger();
+      refetchContractors();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to delete entry");
+    }
+  };
+
+  const handleDeletePayment = async () => {
+    if (!deletePaymentState) return;
+    try {
+      await deleteContractorPayment(deletePaymentState.id);
+      toast.success("Payment deleted");
+      setDeletePaymentState(null);
+      refetchLedger();
+      refetchContractors();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to delete payment");
+    }
+  };
+
+  const handleRowClick = (row: ApiContractorLedgerRow) => {
+    if (row.contractorId && selectedContractorId === ALL_CONTRACTORS) {
+      setSelectedContractorId(row.contractorId);
+      setPage(1);
+    }
+  };
 
   return (
     <Layout>
       <PageHeader
         title="Contractors"
         subtitle="Project-scoped contractors — entries and payments by month"
-        printTargetId="contractors-content"
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => setAddContractorOpen(true)}>
               <Plus className="h-4 w-4 mr-1" /> Add Contractor
             </Button>
-            <Button variant="warning" size="sm" onClick={() => setAddEntryOpen(true)}>
+            <Button variant="warning" size="sm" onClick={() => setAddEntryOpen(true)} disabled={!effectiveProjectId}>
               <Plus className="h-4 w-4 mr-1" /> Add Entry
             </Button>
             {selectedContractor && (
-              <Button variant="default" size="sm" onClick={() => setPaymentOpen(true)}>
+              <Button variant="default" size="sm" onClick={() => setPaymentOpen(true)} disabled={selectedContractor.remaining <= 0}>
                 <Banknote className="h-4 w-4 mr-1" /> Record Payment
               </Button>
             )}
+            <PrintExportButton title="Contractors" printTargetId="contractors-content" />
           </div>
         }
       />
@@ -153,84 +223,148 @@ export default function Contractors() {
         onOpenChange={setAddContractorOpen}
         restrictedProjectId={isSiteManager ? currentUser?.assignedProjectId : undefined}
         restrictedProjectName={isSiteManager ? currentUser?.assignedProjectName : undefined}
+        projects={projects.map((p) => ({ id: p.id, name: p.name }))}
+        onSuccess={() => { refetchContractors(); refetchLedger(); }}
       />
       <AddContractorEntryDialog
         open={addEntryOpen}
         onOpenChange={setAddEntryOpen}
         defaultContractorId={selectedContractor?.id}
-        projectFilterName={
-          isSiteManager
-            ? projectFilterName ?? undefined
-            : selectedProjectId !== ALL_PROJECTS
-              ? projects.find((p) => p.id === selectedProjectId)?.name
-              : undefined
-        }
+        projectId={effectiveProjectId ?? ""}
+        contractors={contractors}
+        onSuccess={() => { refetchLedger(); refetchContractors(); }}
+      />
+      <EditContractorDialog
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        contractor={editContractor}
+        onSuccess={() => { refetchContractors(); setEditContractor(null); }}
       />
       <ContractorPaymentDialog
         open={paymentOpen}
         onOpenChange={setPaymentOpen}
         contractor={selectedContractor}
-        remainingBalance={selectedContractor ? monthlyRemaining : undefined}
+        remainingBalance={selectedContractor?.remaining}
+        onSuccess={() => { refetchLedger(); refetchContractors(); }}
       />
+      <AlertDialog open={!!deleteContractorState} onOpenChange={(open) => !open && setDeleteContractorState(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete contractor?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete &quot;{deleteContractorState?.name}&quot;. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteContractorConfirm} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog open={!!deleteEntryState} onOpenChange={(open) => !open && setDeleteEntryState(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete entry?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will remove this contractor entry. This may affect balances.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteEntry} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog open={!!deletePaymentState} onOpenChange={(open) => !open && setDeletePaymentState(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete payment?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will remove this payment record and restore the contractor balance.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeletePayment} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <div id="contractors-content" className="space-y-4">
-        <div className="flex flex-wrap items-end gap-4 p-4 border-2 border-border">
-          {!isSiteManager && (
+        <div className="flex flex-wrap items-end gap-4 p-4 border-2 border-border print-hidden">
+          {canEditDelete && (
             <div className="min-w-[200px]">
               <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Project</Label>
               <Select
                 value={selectedProjectId}
                 onValueChange={(v) => {
                   setSelectedProjectId(v);
-                  setSelectedId(ALL_CONTRACTORS);
+                  setSelectedContractorId(ALL_CONTRACTORS);
+                  setPage(1);
                 }}
               >
                 <SelectTrigger className="mt-1">
-                  <SelectValue placeholder="All Projects" />
+                  <SelectValue placeholder="Select project" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={ALL_PROJECTS}>All Projects</SelectItem>
                   {projectsForSelector.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.name}
-                    </SelectItem>
+                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
           )}
-          {isSiteManager && projectFilterName && (
-            <div className="min-w-[200px]">
-              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Project</Label>
-              <p className="mt-1.5 text-sm font-medium">{projectFilterName}</p>
-              <p className="text-xs text-muted-foreground">Your assigned project (Site Manager)</p>
+          <div className="flex-1 min-w-[220px] flex items-end gap-2">
+            <div className="flex-1 min-w-0">
+              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Contractor</Label>
+              <div className="mt-1">
+                <Combobox
+                  className="w-full min-w-[260px] h-10"
+                  options={comboboxOptions}
+                  value={selectedContractorId}
+                  onValueChange={(v) => {
+                    setSelectedContractorId(v ?? ALL_CONTRACTORS);
+                    setPage(1);
+                  }}
+                  placeholder="All Contractors"
+                  searchPlaceholder="Search contractors…"
+                  emptyText="No contractors found."
+                  disabled={!effectiveProjectId || contractorsLoading}
+                  renderValue={(opt) => (opt ? opt.label : "All Contractors")}
+                />
+              </div>
             </div>
-          )}
-          <div className="flex-1 min-w-[200px]">
-            <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Contractor</Label>
-            <div className="flex gap-2 mt-1">
-              <Input
-                placeholder="Search contractors…"
-                value={contractorSearch}
-                onChange={(e) => setContractorSearch(e.target.value)}
-                className="max-w-[180px]"
-              />
-              <Select value={selectedId} onValueChange={setSelectedId}>
-                <SelectTrigger className="flex-1 min-w-[180px]">
-                  <SelectValue placeholder="All Contractors" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={ALL_CONTRACTORS}>All Contractors</SelectItem>
-                  {filteredContractorsForDropdown.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.name} — {c.project}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {selectedContractor && canEditDelete && (
+              <div className="flex items-center gap-1 shrink-0 pb-0.5">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-9 w-9"
+                  onClick={() => { setEditContractor(selectedContractor); setEditOpen(true); }}
+                  title="Edit contractor"
+                >
+                  <Pencil className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-9 w-9 text-destructive hover:text-destructive"
+                  onClick={() => handleDeleteContractorClick(selectedContractor)}
+                  disabled={selectedContractor.remaining > 0}
+                  title={selectedContractor.remaining > 0 ? "Clear balance before deleting" : "Delete contractor"}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 print-hidden">
             <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Month</Label>
             <div className="flex items-center border-2 border-border">
               <Button
@@ -259,74 +393,148 @@ export default function Contractors() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <StatCard
-            label="Total Amount"
-            value={formatCurrencyCompact(monthlyTotal)}
-            title={formatCurrency(monthlyTotal)}
-          />
-          <StatCard
-            label="Paid Amount"
-            value={formatCurrencyCompact(monthlyPaid)}
-            variant="success"
-            title={formatCurrency(monthlyPaid)}
-          />
-          <StatCard
-            label="Remaining Balance"
-            value={formatCurrencyCompact(monthlyRemaining)}
-            variant={monthlyRemaining > 0 ? "destructive" : "success"}
-            title={formatCurrency(monthlyRemaining)}
-          />
-        </div>
+        {!effectiveProjectId && (
+          <p className="text-muted-foreground p-4">Select a project to view contractors and ledger.</p>
+        )}
 
-        <div className="border-2 border-border">
-          <div className="border-b-2 border-border bg-secondary px-4 py-3">
-            <h2 className="text-sm font-bold uppercase tracking-wider">
-              Entries — {getMonthLabel(currentMonth)}
-              {selectedContractor ? ` (${selectedContractor.name})` : ""}
-            </h2>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b-2 border-border bg-primary text-primary-foreground">
-                  {selectedId === ALL_CONTRACTORS && (
-                    <th className="px-4 py-2.5 text-left text-xs font-bold uppercase tracking-wider">Contractor</th>
-                  )}
-                  <th className="px-4 py-2.5 text-left text-xs font-bold uppercase tracking-wider">Date</th>
-                  <th className="px-4 py-2.5 text-right text-xs font-bold uppercase tracking-wider">Amount</th>
-                  <th className="px-4 py-2.5 text-left text-xs font-bold uppercase tracking-wider">Remarks</th>
-                </tr>
-              </thead>
-              <tbody>
-                {tableEntries.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={selectedId === ALL_CONTRACTORS ? 4 : 3}
-                      className="px-4 py-8 text-center text-muted-foreground"
-                    >
-                      No entries for this month{selectedContractor ? ` for ${selectedContractor.name}` : ""}. Add an entry above.
-                    </td>
-                  </tr>
+        {effectiveProjectId && (contractorsError || ledgerError) && (
+          <p className="text-destructive text-sm p-4">{contractorsError ?? ledgerError}</p>
+        )}
+
+        {effectiveProjectId && !contractorsError && !ledgerError && (
+          <>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 print-hidden">
+              <StatCard
+                label="Total Amount"
+                value={ledger ? formatCurrency(ledger.totalAmount) : "—"}
+              />
+              <StatCard
+                label="Paid Amount"
+                value={ledger ? formatCurrency(ledger.totalPaid) : "—"}
+                variant="success"
+              />
+              <StatCard
+                label="Remaining Balance"
+                value={ledger ? formatCurrency(ledger.remaining) : "—"}
+                variant={ledger && ledger.remaining > 0 ? "destructive" : "success"}
+              />
+            </div>
+
+            <div className="border-2 border-border">
+              <div className="border-b-2 border-border bg-secondary px-4 py-3">
+                <h2 className="text-sm font-bold uppercase tracking-wider">
+                  Ledger — {getMonthLabel(currentMonth)}
+                  {selectedContractor ? ` (${selectedContractor.name})` : ""}
+                </h2>
+              </div>
+              <div className="overflow-x-auto">
+                {ledgerLoading ? (
+                  <p className="px-4 py-8 text-center text-muted-foreground">Loading ledger…</p>
                 ) : (
-                  tableEntries.map((e) => (
-                    <tr key={e.id} className="border-b border-border hover:bg-accent/50 transition-colors">
-                      {selectedId === ALL_CONTRACTORS && (
-                        <td className="px-4 py-3">
-                          <span className="font-bold">{e.contractorName}</span>
-                          <p className="text-xs text-muted-foreground">{e.project}</p>
-                        </td>
+                  <table className="w-full text-base">
+                    <thead>
+                      <tr className="border-b-2 border-border bg-primary text-primary-foreground">
+                        {selectedContractorId === ALL_CONTRACTORS && (
+                          <th className="px-4 py-2.5 text-left text-sm font-bold uppercase tracking-wider">Contractor</th>
+                        )}
+                        <th className="px-4 py-2.5 text-left text-sm font-bold uppercase tracking-wider">Date</th>
+                        <th className="px-4 py-2.5 text-left text-sm font-bold uppercase tracking-wider">Type</th>
+                        <th className="px-4 py-2.5 text-right text-sm font-bold uppercase tracking-wider">Amount</th>
+                        <th className="px-4 py-2.5 text-left text-sm font-bold uppercase tracking-wider">Remarks / Ref</th>
+                        {canEditDelete && (
+                          <th className="px-4 py-2.5 text-right text-sm font-bold uppercase tracking-wider print-hidden">Actions</th>
+                        )}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {!ledger || ledger.rows.length === 0 ? (
+                        <tr>
+                          <td
+                            colSpan={selectedContractorId === ALL_CONTRACTORS ? (canEditDelete ? 6 : 5) : (canEditDelete ? 5 : 4)}
+                            className="px-4 py-8 text-center text-muted-foreground"
+                          >
+                            No entries or payments for this month{selectedContractor ? ` for ${selectedContractor.name}` : ""}. Add an entry above.
+                          </td>
+                        </tr>
+                      ) : (
+                        ledger.rows.map((row) => (
+                          <tr
+                            key={`${row.type}-${row.id}`}
+                            className={`border-b border-border hover:bg-accent/50 transition-colors ${selectedContractorId === ALL_CONTRACTORS && row.contractorId ? "cursor-pointer" : ""}`}
+                            onClick={() => handleRowClick(row)}
+                            role={selectedContractorId === ALL_CONTRACTORS && row.contractorId ? "button" : undefined}
+                          >
+                            {selectedContractorId === ALL_CONTRACTORS && (
+                              <td className="px-4 py-3">
+                                <span className="font-bold">{row.contractorName ?? "—"}</span>
+                              </td>
+                            )}
+                            <td className="px-4 py-3 text-sm">{row.date}</td>
+                            <td className="px-4 py-3">
+                              <span
+                                className={`text-xs font-bold uppercase px-1.5 py-0.5 rounded ${
+                                  row.type === "payment" ? "bg-success/20 text-success" : "bg-primary/10"
+                                }`}
+                              >
+                                {row.type === "payment" ? "Payment" : "Entry"}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-right font-mono text-sm">{formatCurrency(row.amount)}</td>
+                            <td className="px-4 py-3 text-sm text-muted-foreground">
+                              {row.type === "payment" ? (row.referenceId ?? "—") : (row.remarks ?? "—")}
+                            </td>
+                            {canEditDelete && (
+                              <td className="px-4 py-3 text-right print-hidden" onClick={(e) => e.stopPropagation()}>
+                                {row.type === "entry" && (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => setDeleteEntryState(row)}
+                                    title="Delete entry"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                                  </Button>
+                                )}
+                                {row.type === "payment" && (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => setDeletePaymentState(row)}
+                                    title="Delete payment"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                                  </Button>
+                                )}
+                              </td>
+                            )}
+                          </tr>
+                        ))
                       )}
-                      <td className="px-4 py-3 text-xs">{e.date}</td>
-                      <td className="px-4 py-3 text-right font-mono text-xs">{formatCurrency(e.amount)}</td>
-                      <td className="px-4 py-3 text-xs text-muted-foreground">{e.remarks || "—"}</td>
-                    </tr>
-                  ))
+                    </tbody>
+                  </table>
                 )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+              </div>
+              {ledger && ledger.rows.length > 0 && (
+                <div className="print-hidden">
+                  <TablePagination
+                    pageSize={pageSize}
+                    onPageSizeChange={handlePageSizeChange}
+                    page={page}
+                    totalPages={totalPages}
+                    totalItems={ledger.total}
+                    onPrevious={() => setPage((p) => Math.max(1, p - 1))}
+                    onNext={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    canPrevious={page > 1}
+                    canNext={page < totalPages}
+                    pageSizeOptions={PAGE_SIZE_OPTIONS}
+                    startIndexOneBased={ledger.total === 0 ? 0 : (page - 1) * pageSize + 1}
+                    endIndex={Math.min(page * pageSize, ledger.total)}
+                  />
+                </div>
+              )}
+            </div>
+          </>
+        )}
       </div>
     </Layout>
   );

@@ -1,0 +1,47 @@
+---
+description: RBAC and referential integrity rules for BuildERP
+alwaysApply: true
+---
+
+# RBAC and Referential Integrity
+
+## Role-Based Access (Site Manager vs Admin vs Super Admin)
+
+- **Site Manager**: Entry-only (Create). No Edit or Delete for any entity in project-level modules.
+- **Admin / Super Admin**: Create, Edit, Delete for entities they can access.
+
+When implementing edit or delete functionality, enforce RBAC: hide or disable Edit/Delete actions for Site Manager.
+
+## Referential Integrity on Edit/Delete
+
+When implementing edit or delete for any entity that has dependents:
+
+1. **Identify dependents** — e.g. deleting Project must check: vendors, contractors, employees, expenses, machines, stock consumption, ledger entries.
+2. **Delete options**: (a) cascade delete, (b) prevent delete if dependents exist, (c) reassign dependents (e.g. set `projectId` to null or another project).
+3. **Edit options**: If changing a referenced field (e.g. project ID), update or validate all dependent records.
+4. **Document decisions** — for each entity, document chosen strategy in code comments or SRS.
+5. **User feedback** — on delete, show clear message if blocked (e.g. "Cannot delete: 5 vendors and 12 employees still reference this project").
+
+## Project-Scoped Modules (Project Selector)
+
+**Apply this pattern to every tab scoped under Projects.** All such modules must work the same way so behaviour is consistent.
+
+All data under the Projects tab — from **Inventory** (consumable/non-consumable) through **Liabilities** — is scoped per project.
+
+### Same behaviour for every project-level module
+
+- **Project selector at top** — Add a project dropdown at the top of the page. **Admin / Super Admin** see and use this selector; **Site Manager** do not (they use their assigned project only).
+- **List by selected project** — Whatever project is selected (or assigned, for Site Manager) filters the list. Only that project’s entities are shown.
+- **Create for selected project** — When creating any entity (vendor, contractor, expense, etc.), associate it with the currently selected (or assigned) project. No need to add a project field inside the create dialog — the page’s selected project is used.
+- **Backend** — Entities in these modules have a `projectId` (or equivalent). List API accepts a project filter; create API uses the project from the request (or from the actor’s assigned project for Site Manager).
+
+Modules in scope: inventory (consumable/non-consumable), vendors, contractors, employees, expenses, machinery, ledgers, liabilities, and any other tab under Projects.
+
+### Key Entity Dependencies
+
+- **Project**: Vendors, Contractors, Employees, Expenses, Machines, StockConsumption, NonConsumableLedger (projectTo/projectFrom), Users (assignedProjectId)
+- **Vendor**: LedgerEntry (vendor name), ContractorPayment
+- **Contractor**: ContractorEntry, ContractorPayment
+- **ConsumableItem**: LedgerEntry, StockConsumptionEntry items
+- **Machine**: MachineLedgerEntry
+- **User**: AuditLog (userId)

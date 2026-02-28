@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -17,165 +17,264 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useMockStore } from "@/context/MockStore";
+import {
+  createNonConsumableLedgerEntry,
+  updateNonConsumableLedgerEntry,
+  type NonConsumableEventType,
+  type ApiNonConsumableLedgerEntry,
+} from "@/services/nonConsumableLedgerService";
 import { toast } from "sonner";
-import type { NonConsumableEventType } from "@/lib/mock-data";
 
-const EVENT_TYPES: NonConsumableEventType[] = [
-  "Purchase/Add Stock",
-  "Assign to Project",
-  "Return to Company",
-  "Repair / Maintenance",
-  "Mark Lost",
-  "Mark Damaged (Still usable)",
-  "Mark Damaged (Not usable)",
+const EVENT_TYPE_OPTIONS: { value: NonConsumableEventType; label: string }[] = [
+  { value: "Purchase", label: "Purchase (Add to Company Store)" },
+  { value: "AssignToProject", label: "Assign to Project" },
+  { value: "ReturnToCompany", label: "Return to Company" },
+  { value: "Repair", label: "Repair / Maintenance" },
+  { value: "ReturnFromRepair", label: "Return from Repair" },
+  { value: "MarkLost", label: "Mark Lost" },
 ];
-
-const NONE_VENDOR_VALUE = "__none__";
 
 interface AddNonConsumableEntryDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   itemId: string;
   itemName: string;
+  /** Projects for dropdown (Assign projectTo, Return/Repair/Lost projectFrom). */
+  projects: { id: string; name: string }[];
+  /** Per-project in-use for validation (Return/Repair/Lost). */
+  inUseByProject: Record<string, number>;
+  /** Current item balances for validation */
+  companyStore: number;
+  inUse: number;
+  underRepair: number;
+  /** Pass existing entry to enable edit mode. */
+  editEntry?: ApiNonConsumableLedgerEntry | null;
+  onSuccess: () => void;
 }
 
-export function AddNonConsumableEntryDialog({ open, onOpenChange, itemId, itemName }: AddNonConsumableEntryDialogProps) {
-  const { state, actions } = useMockStore();
+export function AddNonConsumableEntryDialog({
+  open,
+  onOpenChange,
+  itemId,
+  itemName,
+  projects,
+  inUseByProject,
+  companyStore,
+  inUse,
+  underRepair,
+  editEntry,
+  onSuccess,
+}: AddNonConsumableEntryDialogProps) {
+  const isEdit = !!editEntry;
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
-  const [eventType, setEventType] = useState<NonConsumableEventType>("Purchase/Add Stock");
+  const [eventType, setEventType] = useState<NonConsumableEventType>("Purchase");
+  const [selectedProjectId, setSelectedProjectId] = useState<string>("");
   const [quantity, setQuantity] = useState("");
-  const [unitPrice, setUnitPrice] = useState("");
-  const [vendorName, setVendorName] = useState("");
-  const [projectTo, setProjectTo] = useState("");
+  const [totalCost, setTotalCost] = useState("");
   const [remarks, setRemarks] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const projects = state.projects;
-  const vendors = state.vendors;
+  useEffect(() => {
+    if (open) {
+      if (editEntry) {
+        setDate(editEntry.date);
+        setEventType(editEntry.eventType);
+        setQuantity(String(editEntry.quantity));
+        setTotalCost(editEntry.totalCost != null ? String(editEntry.totalCost) : "");
+        setRemarks(editEntry.remarks ?? "");
+        setSelectedProjectId(editEntry.projectTo ?? editEntry.projectFrom ?? "");
+      } else {
+        setDate(new Date().toISOString().slice(0, 10));
+        setEventType("Purchase");
+        setSelectedProjectId("");
+        setQuantity("");
+        setTotalCost("");
+        setRemarks("");
+      }
+    }
+  }, [open, editEntry]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const qty = parseInt(quantity, 10);
     if (!date || isNaN(qty) || qty <= 0) {
-      toast.error("Date and quantity are required");
+      toast.error("Date and quantity are required (quantity > 0)");
       return;
     }
-    const needsCost = eventType === "Purchase/Add Stock" || eventType === "Repair / Maintenance";
-    const cost = needsCost ? parseFloat(unitPrice) : undefined;
-    if (needsCost && (isNaN(cost!) || cost! < 0)) {
-      toast.error("Cost is required for this event type");
+
+    const needsCost = eventType === "Purchase" || eventType === "Repair";
+    const cost = needsCost ? parseFloat(totalCost) : undefined;
+    if (needsCost && (cost == null || isNaN(cost) || cost < 0)) {
+      toast.error("Total cost is required for this event type (must be >= 0)");
       return;
     }
-    const projectToName = projectTo ? projects.find((p) => p.id === projectTo)?.name : undefined;
-    if (eventType === "Assign to Project" && !projectToName) {
-      toast.error("Select project to assign to");
-      return;
+
+    if (eventType === "AssignToProject") {
+      if (!selectedProjectId) {
+        toast.error("Select a project");
+        return;
+      }
+      if (qty > companyStore) {
+        toast.error(`Quantity exceeds Company Store (${companyStore} available)`);
+        return;
+      }
     }
-    const needsVendor = eventType === "Purchase/Add Stock" || eventType === "Repair / Maintenance";
-    actions.addNonConsumableLedgerEntry({
-      itemId,
-      date,
-      eventType,
-      quantity: qty,
-      unitPrice: cost,
-      cost: cost,
-      vendorName: needsVendor ? (vendorName || undefined) : undefined,
-      projectTo: eventType === "Assign to Project" ? projectToName : undefined,
-      remarks: remarks || undefined,
-      createdBy: "admin@erp.com",
-    });
-    actions.addAuditLog({
-      timestamp: new Date().toISOString().slice(0, 19).replace("T", " "),
-      user: "admin@erp.com",
-      role: "Admin",
-      action: "Create",
-      module: "Non-Consumable Inventory",
-      description: `${eventType}: ${itemName} x ${qty}`,
-    });
-    toast.success("Entry added");
-    onOpenChange(false);
-    setQuantity("");
-    setUnitPrice("");
-    setVendorName("");
-    setProjectTo("");
-    setRemarks("");
+
+    if (eventType === "ReturnToCompany" || eventType === "Repair" || eventType === "MarkLost") {
+      if (!selectedProjectId) {
+        toast.error("Select a project");
+        return;
+      }
+      const projectInUse = inUseByProject[selectedProjectId] ?? 0;
+      if (qty > projectInUse) {
+        toast.error(`Quantity exceeds In Use for this project (${projectInUse} available)`);
+        return;
+      }
+    }
+
+    if (eventType === "ReturnFromRepair") {
+      if (qty > underRepair) {
+        toast.error(`Quantity exceeds Under Repair (${underRepair} available)`);
+        return;
+      }
+    }
+
+    setLoading(true);
+    try {
+      const input = {
+        date,
+        eventType,
+        quantity: qty,
+        totalCost: needsCost ? (cost ?? 0) : undefined,
+        projectTo: eventType === "AssignToProject" ? selectedProjectId : undefined,
+        projectFrom:
+          eventType === "ReturnToCompany" ||
+          eventType === "Repair" ||
+          eventType === "MarkLost"
+            ? selectedProjectId
+            : undefined,
+        remarks: remarks.trim() || undefined,
+      };
+
+      if (isEdit && editEntry) {
+        await updateNonConsumableLedgerEntry(itemId, editEntry.id, input);
+        toast.success("Entry updated");
+      } else {
+        await createNonConsumableLedgerEntry(itemId, input);
+        toast.success("Entry added");
+      }
+      onSuccess();
+      onOpenChange(false);
+      setQuantity("");
+      setTotalCost("");
+      setRemarks("");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to save entry");
+    } finally {
+      setLoading(false);
+    }
   };
+
+  const needsCost = eventType === "Purchase" || eventType === "Repair";
+  const needsProject =
+    eventType === "AssignToProject" ||
+    eventType === "ReturnToCompany" ||
+    eventType === "Repair" ||
+    eventType === "MarkLost";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Add Ledger Entry — {itemName}</DialogTitle>
+          <DialogTitle>{isEdit ? "Edit" : "Add"} Ledger Entry — {itemName}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <Label>Date *</Label>
-            <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="mt-1" />
+            <Input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="mt-1"
+            />
           </div>
           <div>
             <Label>Event Type *</Label>
-            <Select value={eventType} onValueChange={(v) => setEventType(v as NonConsumableEventType)}>
+            <Select
+              value={eventType}
+              onValueChange={(v) => setEventType(v as NonConsumableEventType)}
+            >
               <SelectTrigger className="mt-1">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {EVENT_TYPES.map((t) => (
-                  <SelectItem key={t} value={t}>{t}</SelectItem>
+                {EVENT_TYPE_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
-          <div>
-            <Label>Quantity *</Label>
-            <Input type="number" min={1} value={quantity} onChange={(e) => setQuantity(e.target.value)} className="mt-1" />
-          </div>
-          {(eventType === "Purchase/Add Stock" || eventType === "Repair / Maintenance") && (
-            <>
-              <div>
-                <Label>Cost / Unit Price *</Label>
-                <Input type="number" min={0} value={unitPrice} onChange={(e) => setUnitPrice(e.target.value)} className="mt-1" />
-              </div>
-              <div>
-                <Label>Vendor (optional)</Label>
-                <Select
-                  value={vendorName || NONE_VENDOR_VALUE}
-                  onValueChange={(v) => setVendorName(v === NONE_VENDOR_VALUE ? "" : v)}
-                >
-                  <SelectTrigger className="mt-1">
-                    <SelectValue placeholder="Select or leave blank" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={NONE_VENDOR_VALUE}>—</SelectItem>
-                    {vendors.map((v) => (
-                      <SelectItem key={v.id} value={v.name}>{v.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </>
-          )}
-          {eventType === "Assign to Project" && (
+          {needsProject && (
             <div>
-              <Label>Assign to Project *</Label>
-              <Select value={projectTo} onValueChange={setProjectTo}>
+              <Label>Project *</Label>
+              <Select
+                value={selectedProjectId}
+                onValueChange={setSelectedProjectId}
+              >
                 <SelectTrigger className="mt-1">
                   <SelectValue placeholder="Select project" />
                 </SelectTrigger>
                 <SelectContent>
                   {projects.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
           )}
           <div>
+            <Label>Quantity *</Label>
+            <Input
+              type="number"
+              min={1}
+              value={quantity}
+              onChange={(e) => setQuantity(e.target.value)}
+              className="mt-1"
+            />
+          </div>
+          {needsCost && (
+            <div>
+              <Label>Total Cost *</Label>
+              <Input
+                type="number"
+                min={0}
+                step="0.01"
+                value={totalCost}
+                onChange={(e) => setTotalCost(e.target.value)}
+                className="mt-1"
+              />
+            </div>
+          )}
+          <div>
             <Label>Remarks</Label>
-            <Textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} rows={2} className="mt-1" />
+            <Textarea
+              value={remarks}
+              onChange={(e) => setRemarks(e.target.value)}
+              rows={2}
+              className="mt-1"
+            />
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button type="submit" variant="warning">Add Entry</Button>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" variant="warning" disabled={loading || (needsProject && !selectedProjectId)}>
+              {loading ? "Saving…" : isEdit ? "Update Entry" : "Add Entry"}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>

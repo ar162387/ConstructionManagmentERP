@@ -2,23 +2,26 @@ import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, FolderKanban, Package, Wrench, Users, Building2,
-  Receipt, Truck, HardHat, ClipboardList, BarChart3, Menu, X, ChevronDown, ChevronRight, UserCog
+  Receipt, Truck, HardHat, ClipboardList, BarChart3, Menu, X, ChevronDown, ChevronRight, UserCog, LogOut
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/context/AuthContext";
 
 interface NavItem {
   label: string;
   path: string;
   icon: React.ReactNode;
   children?: { label: string; path: string }[];
+  /** Minimum role to see (Super Admin | Admin). Site Manager sees none of these. */
+  minRole?: "Admin" | "Super Admin";
 }
 
 const companyNavItems: NavItem[] = [
   { label: "Dashboard", path: "/", icon: <LayoutDashboard className="h-4 w-4" /> },
   { label: "Bank & Accounts", path: "/bank-accounts", icon: <Building2 className="h-4 w-4" /> },
-  { label: "User Management", path: "/users", icon: <UserCog className="h-4 w-4" /> },
-  { label: "Audit Logs", path: "/audit-logs", icon: <ClipboardList className="h-4 w-4" /> },
+  { label: "User Management", path: "/users", icon: <UserCog className="h-4 w-4" />, minRole: "Admin" },
+  { label: "Audit Logs", path: "/audit-logs", icon: <ClipboardList className="h-4 w-4" />, minRole: "Super Admin" },
 ];
 
 const projectNavItems: NavItem[] = [
@@ -38,12 +41,8 @@ const projectNavItems: NavItem[] = [
   { label: "Liabilities", path: "/liabilities", icon: <BarChart3 className="h-4 w-4" /> },
 ];
 
-const navGroups = [
-  { title: "Company", items: companyNavItems },
-  { title: "Project", items: projectNavItems },
-];
-
 export default function Layout({ children }: { children: React.ReactNode }) {
+  const { user, logout } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [expandedItems, setExpandedItems] = useState<string[]>(["Inventory"]);
   const location = useLocation();
@@ -57,6 +56,23 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const isActive = (path: string) => location.pathname === path;
   const isChildActive = (item: NavItem) =>
     item.children?.some((c) => location.pathname === c.path);
+
+  const canSeeItem = (item: NavItem) => {
+    if (!item.minRole) return true;
+    const role = user?.role ?? "";
+    if (item.minRole === "Super Admin") return role === "Super Admin";
+    if (item.minRole === "Admin") return role === "Admin" || role === "Super Admin";
+    return true;
+  };
+
+  const isSiteManager = (user?.role ?? "") === "Site Manager";
+  const filteredCompanyItems = companyNavItems.filter(canSeeItem);
+  const filteredNavGroups = isSiteManager
+    ? [{ title: "Project", items: projectNavItems }]
+    : [
+        { title: "Company", items: filteredCompanyItems },
+        { title: "Project", items: projectNavItems },
+      ];
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
@@ -72,18 +88,27 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
-        <div className="flex items-center justify-between border-b border-border/50 px-6 py-5">
-          <Link to="/" className="flex items-center gap-2.5">
-            <HardHat className="h-6 w-6 text-warning" />
-            <span className="text-lg font-semibold tracking-tight">BuildERP</span>
-          </Link>
-          <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setSidebarOpen(false)}>
-            <X className="h-5 w-5" />
-          </Button>
+        <div className="border-b border-border/50 px-6 py-5">
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex flex-col gap-1 min-w-0 flex-1">
+              <Link to="/" className="flex items-center gap-2.5">
+                <HardHat className="h-6 w-6 text-warning shrink-0" />
+                <span className="text-lg font-semibold tracking-tight">BuildERP</span>
+              </Link>
+              {isSiteManager && user?.assignedProjectName && (
+                <p className="font-bold text-sm truncate text-foreground" title={user.assignedProjectName}>
+                  {user.assignedProjectName}
+                </p>
+              )}
+            </div>
+            <Button variant="ghost" size="icon" className="lg:hidden shrink-0" onClick={() => setSidebarOpen(false)}>
+              <X className="h-5 w-5" />
+            </Button>
+          </div>
         </div>
 
         <nav className="flex-1 overflow-y-auto p-3 space-y-4">
-          {navGroups.map((group) => (
+          {filteredNavGroups.map((group) => (
             <div key={group.title} className="space-y-1">
               <p className="px-3 py-1.5 text-xs font-semibold text-muted-foreground/80 tracking-wide uppercase">
                 {group.title}
@@ -146,17 +171,25 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           ))}
         </nav>
 
-        <div className="border-t border-border/50 p-3">
+        <div className="border-t border-border/50 p-3 space-y-1">
           <div className="flex items-center gap-3 px-3 py-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-warning/10 text-warning font-semibold text-xs border border-warning/20">
-              SA
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-warning/10 text-warning font-semibold text-xs border border-warning/20 shrink-0">
+              {user?.name.slice(0, 2).toUpperCase() ?? "—"}
             </div>
             <div className="text-sm flex-1 min-w-0">
-              <p className="font-bold truncate">Super Admin</p>
-              <p className="text-muted-foreground text-xs truncate">superadmin@erp.com</p>
+              <p className="font-bold truncate">{user?.name ?? "—"}</p>
+              <p className="text-muted-foreground text-xs truncate">{user?.email ?? "—"}</p>
             </div>
           </div>
-          <p className="text-xs text-muted-foreground px-3 pb-1">Prototype: full access (no backend)</p>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground"
+            onClick={logout}
+          >
+            <LogOut className="h-4 w-4" />
+            Log out
+          </Button>
         </div>
       </aside>
 

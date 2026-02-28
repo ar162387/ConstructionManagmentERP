@@ -10,47 +10,51 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { useMockStore } from "@/context/MockStore";
+import { createVendor } from "@/services/vendorsService";
 import { toast } from "sonner";
 
 interface AddVendorDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  projectId: string | null;
+  onSuccess?: () => void;
 }
 
-export function AddVendorDialog({ open, onOpenChange }: AddVendorDialogProps) {
-  const { actions } = useMockStore();
+export function AddVendorDialog({ open, onOpenChange, projectId, onSuccess }: AddVendorDialogProps) {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [description, setDescription] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
       toast.error("Vendor name is required");
       return;
     }
-    actions.addVendor({
-      name: name.trim(),
-      phone: phone.trim(),
-      description: description.trim(),
-      totalBilled: 0,
-      totalPaid: 0,
-      remaining: 0,
-    });
-    actions.addAuditLog({
-      timestamp: new Date().toISOString().slice(0, 19).replace("T", " "),
-      user: "admin@erp.com",
-      role: "Admin",
-      action: "Create",
-      module: "Vendor",
-      description: `Added vendor: ${name.trim()}`,
-    });
-    toast.success("Vendor added");
-    onOpenChange(false);
-    setName("");
-    setPhone("");
-    setDescription("");
+    if (!projectId) {
+      toast.error("Please select a project first");
+      return;
+    }
+    setLoading(true);
+    try {
+      await createVendor({
+        projectId,
+        name: name.trim(),
+        phone: phone.trim(),
+        description: description.trim(),
+      });
+      toast.success("Vendor added");
+      onOpenChange(false);
+      setName("");
+      setPhone("");
+      setDescription("");
+      onSuccess?.();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to add vendor");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -73,8 +77,8 @@ export function AddVendorDialog({ open, onOpenChange }: AddVendorDialogProps) {
             <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} className="mt-1" />
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button type="submit" variant="warning">Add Vendor</Button>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>Cancel</Button>
+            <Button type="submit" variant="warning" disabled={loading}>{loading ? "Adding…" : "Add Vendor"}</Button>
           </DialogFooter>
         </form>
       </DialogContent>

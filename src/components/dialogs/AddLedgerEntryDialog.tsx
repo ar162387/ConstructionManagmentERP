@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -17,88 +17,139 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useMockStore } from "@/context/MockStore";
+import { useVendors } from "@/hooks/useVendors";
 import { toast } from "sonner";
-import type { LedgerEntry } from "@/lib/mock-data";
+import { createItemLedgerEntry, updateItemLedgerEntry, type ApiItemLedgerEntry } from "@/services/itemLedgerService";
 
 interface AddLedgerEntryDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   itemId: string;
   itemName: string;
+  /** Used to scope vendor dropdown to this project only. */
+  projectId: string;
+  /** Pass existing entry to enable edit mode. */
+  editEntry?: ApiItemLedgerEntry | null;
+  onSuccess: () => void;
 }
 
-export function AddLedgerEntryDialog({ open, onOpenChange, itemId, itemName }: AddLedgerEntryDialogProps) {
-  const { state, actions } = useMockStore();
+export function AddLedgerEntryDialog({
+  open,
+  onOpenChange,
+  itemId,
+  itemName,
+  projectId,
+  editEntry,
+  onSuccess,
+}: AddLedgerEntryDialogProps) {
+  const isEdit = !!editEntry;
+  const { vendors } = useVendors(projectId);
+
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [quantity, setQuantity] = useState("");
   const [unitPrice, setUnitPrice] = useState("");
-  const [paidAmount, setPaidAmount] = useState("0");
+  const [paidAmount, setPaidAmount] = useState("");
   const [vendorId, setVendorId] = useState("");
   const [biltyNumber, setBiltyNumber] = useState("");
   const [vehicleNumber, setVehicleNumber] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<"Cash" | "Bank" | "Online">("Cash");
   const [referenceId, setReferenceId] = useState("");
   const [remarks, setRemarks] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const vendors = state.vendors;
+  // When dialog opens, reset form. In edit mode pre-fill all fields including vendor.
+  useEffect(() => {
+    if (open) {
+      if (editEntry) {
+        setDate(editEntry.date);
+        setQuantity(String(editEntry.quantity));
+        setUnitPrice(String(editEntry.unitPrice));
+        setPaidAmount(String(editEntry.paidAmount));
+        setVendorId(editEntry.vendorId ?? "");
+        setBiltyNumber(editEntry.biltyNumber ?? "");
+        setVehicleNumber(editEntry.vehicleNumber ?? "");
+        setPaymentMethod(editEntry.paymentMethod);
+        setReferenceId(editEntry.referenceId ?? "");
+        setRemarks(editEntry.remarks ?? "");
+      } else {
+        setDate(new Date().toISOString().slice(0, 10));
+        setQuantity("");
+        setUnitPrice("");
+        setPaidAmount("");
+        setVendorId("");
+        setBiltyNumber("");
+        setVehicleNumber("");
+        setPaymentMethod("Cash");
+        setReferenceId("");
+        setRemarks("");
+      }
+    }
+  }, [open, editEntry]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // Ensure vendor is pre-selected once vendors list is loaded (fixes Select not showing value when options load async)
+  useEffect(() => {
+    if (open && isEdit && editEntry?.vendorId && vendors.length > 0) {
+      const exists = vendors.some((v) => v.id === editEntry.vendorId);
+      if (exists) setVendorId(editEntry.vendorId);
+    }
+  }, [open, isEdit, editEntry?.vendorId, vendors]);
+
+  const totalPrice = (() => {
+    const qty = parseInt(quantity, 10);
+    const up = parseFloat(unitPrice);
+    if (isNaN(qty) || isNaN(up)) return null;
+    return qty * up;
+  })();
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const qty = parseInt(quantity, 10);
     const up = parseFloat(unitPrice);
-    const paid = parseFloat(paidAmount);
-    if (!date || isNaN(qty) || qty <= 0 || isNaN(up) || up < 0) {
-      toast.error("Date, quantity and unit price are required");
-      return;
+    if (!date) { toast.error("Date is required"); return; }
+    if (isNaN(qty) || qty < 1) { toast.error("Quantity must be at least 1"); return; }
+    if (isNaN(up) || up < 0) { toast.error("Unit price must be >= 0"); return; }
+    if (!vendorId) { toast.error("Please select a vendor"); return; }
+
+    const total = qty * up;
+    const paid = paidAmount === "" ? 0 : parseFloat(paidAmount);
+    if (isNaN(paid) || paid < 0) { toast.error("Paid amount must be >= 0"); return; }
+    if (paid > total) { toast.error("Paid amount cannot exceed total price"); return; }
+
+    setLoading(true);
+    try {
+      const payload = {
+        vendorId,
+        date,
+        quantity: qty,
+        unitPrice: up,
+        paidAmount: paid,
+        biltyNumber: biltyNumber || undefined,
+        vehicleNumber: vehicleNumber || undefined,
+        paymentMethod,
+        referenceId: paymentMethod !== "Cash" ? referenceId || undefined : undefined,
+        remarks: remarks || undefined,
+      };
+
+      if (isEdit && editEntry) {
+        await updateItemLedgerEntry(itemId, editEntry.id, payload);
+        toast.success("Ledger entry updated");
+      } else {
+        await createItemLedgerEntry(itemId, payload);
+        toast.success("Ledger entry added");
+      }
+      onSuccess();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to save entry");
+    } finally {
+      setLoading(false);
     }
-    const totalPrice = qty * up;
-    const remaining = totalPrice - (isNaN(paid) ? 0 : paid);
-    const vendor = vendors.find((v) => v.id === vendorId);
-    if (!vendor) {
-      toast.error("Please select a vendor");
-      return;
-    }
-    const entry: Omit<LedgerEntry, "id"> = {
-      date,
-      quantity: qty,
-      unitPrice: up,
-      totalPrice,
-      paidAmount: isNaN(paid) ? 0 : paid,
-      remaining,
-      vendor: vendor.name,
-      biltyNumber: biltyNumber || undefined,
-      vehicleNumber: vehicleNumber || undefined,
-      paymentMethod,
-      referenceId: paymentMethod !== "Cash" ? referenceId || undefined : undefined,
-      remarks: remarks || undefined,
-    };
-    actions.addLedgerEntry(itemId, entry);
-    actions.addAuditLog({
-      timestamp: new Date().toISOString().slice(0, 19).replace("T", " "),
-      user: "admin@erp.com",
-      role: "Admin",
-      action: "Create",
-      module: "Consumable Inventory",
-      description: `Added ledger entry: ${itemName} - ${qty} @ ${up}`,
-    });
-    toast.success("Ledger entry added");
-    onOpenChange(false);
-    setQuantity("");
-    setUnitPrice("");
-    setPaidAmount("0");
-    setVendorId("");
-    setBiltyNumber("");
-    setVehicleNumber("");
-    setReferenceId("");
-    setRemarks("");
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Add Ledger Entry — {itemName}</DialogTitle>
+          <DialogTitle>{isEdit ? "Edit Ledger Entry" : `Add Ledger Entry — ${itemName}`}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -115,13 +166,36 @@ export function AddLedgerEntryDialog({ open, onOpenChange, itemId, itemName }: A
               <Input type="number" min={0} step="0.01" value={unitPrice} onChange={(e) => setUnitPrice(e.target.value)} className="mt-1" />
             </div>
           </div>
+          {totalPrice !== null && (
+            <p className="text-sm text-muted-foreground">
+              Total: <span className="font-bold">{totalPrice.toLocaleString()} PKR</span>
+            </p>
+          )}
           <div>
-            <Label>Paid Amount</Label>
-            <Input type="number" min={0} value={paidAmount} onChange={(e) => setPaidAmount(e.target.value)} className="mt-1" />
+            <Label>Paid Amount <span className="text-muted-foreground">(optional — leave blank for unpaid)</span></Label>
+            <Input
+              type="number"
+              min={0}
+              max={totalPrice ?? undefined}
+              step="0.01"
+              value={paidAmount}
+              onChange={(e) => setPaidAmount(e.target.value)}
+              placeholder="0"
+              className="mt-1"
+            />
+            {totalPrice !== null && paidAmount !== "" && (
+              <p className="text-xs text-muted-foreground mt-1">
+                Due: {Math.max(0, totalPrice - (parseFloat(paidAmount) || 0)).toLocaleString()} PKR
+              </p>
+            )}
           </div>
           <div>
             <Label>Vendor *</Label>
-            <Select value={vendorId} onValueChange={setVendorId}>
+            <Select
+              key={isEdit ? `edit-${editEntry?.id ?? ""}-${vendors.length}` : "add"}
+              value={vendorId}
+              onValueChange={setVendorId}
+            >
               <SelectTrigger className="mt-1">
                 <SelectValue placeholder="Select vendor" />
               </SelectTrigger>
@@ -131,6 +205,9 @@ export function AddLedgerEntryDialog({ open, onOpenChange, itemId, itemName }: A
                 ))}
               </SelectContent>
             </Select>
+            {vendors.length === 0 && (
+              <p className="text-xs text-muted-foreground mt-1">No vendors for this project. Add a vendor first.</p>
+            )}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -167,7 +244,9 @@ export function AddLedgerEntryDialog({ open, onOpenChange, itemId, itemName }: A
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button type="submit" variant="warning">Add Entry</Button>
+            <Button type="submit" variant="warning" disabled={loading}>
+              {loading ? "Saving…" : isEdit ? "Save Changes" : "Add Entry"}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>

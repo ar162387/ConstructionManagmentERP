@@ -56,28 +56,28 @@ export default function BankAccounts() {
             <h2 className="text-sm font-semibold tracking-tight">Recent Transactions</h2>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-base">
               <thead>
                 <tr className="border-b border-border/40 bg-muted/10 text-muted-foreground">
-                  <th className="px-5 py-3 text-left text-xs font-medium">Date</th>
-                  <th className="px-5 py-3 text-left text-xs font-medium">Type</th>
-                  <th className="px-5 py-3 text-right text-xs font-medium">Amount</th>
-                  <th className="px-5 py-3 text-left text-xs font-medium">Source</th>
-                  <th className="px-5 py-3 text-left text-xs font-medium">Destination</th>
-                  <th className="px-5 py-3 text-left text-xs font-medium">Mode</th>
-                  <th className="px-5 py-3 text-left text-xs font-medium">Reference</th>
+                  <th className="px-5 py-3 text-left text-sm font-medium">Date</th>
+                  <th className="px-5 py-3 text-left text-sm font-medium">Type</th>
+                  <th className="px-5 py-3 text-right text-sm font-medium">Amount</th>
+                  <th className="px-5 py-3 text-left text-sm font-medium">Source</th>
+                  <th className="px-5 py-3 text-left text-sm font-medium">Destination</th>
+                  <th className="px-5 py-3 text-left text-sm font-medium">Mode</th>
+                  <th className="px-5 py-3 text-left text-sm font-medium">Reference</th>
                 </tr>
               </thead>
               <tbody>
                 {bankTransactions.map((tx) => (
                   <tr key={tx.id} className="border-b border-border/40 hover:bg-muted/30 transition-colors">
-                    <td className="px-5 py-3.5 text-xs text-muted-foreground">{tx.date}</td>
+                    <td className="px-5 py-3.5 text-sm text-muted-foreground">{tx.date}</td>
                     <td className="px-5 py-3.5"><StatusBadge status={tx.type} /></td>
-                    <td className="px-5 py-3.5 text-right font-mono text-xs font-medium">{formatCurrency(tx.amount)}</td>
-                    <td className="px-5 py-3.5 text-xs text-muted-foreground">{tx.source}</td>
-                    <td className="px-5 py-3.5 text-xs text-muted-foreground">{tx.destination}</td>
-                    <td className="px-5 py-3.5 text-xs text-muted-foreground">{tx.mode}</td>
-                    <td className="px-5 py-3.5 text-xs font-mono text-muted-foreground/70">{tx.referenceId || "—"}</td>
+                    <td className="px-5 py-3.5 text-right font-mono text-sm font-medium">{formatCurrency(tx.amount)}</td>
+                    <td className="px-5 py-3.5 text-sm text-muted-foreground">{tx.source}</td>
+                    <td className="px-5 py-3.5 text-sm text-muted-foreground">{tx.destination}</td>
+                    <td className="px-5 py-3.5 text-sm text-muted-foreground">{tx.mode}</td>
+                    <td className="px-5 py-3.5 text-sm font-mono text-muted-foreground/70">{tx.referenceId || "—"}</td>
                   </tr>
                 ))}
               </tbody>

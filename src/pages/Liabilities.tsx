@@ -4,7 +4,9 @@ import PageHeader from "@/components/PageHeader";
 import StatCard from "@/components/StatCard";
 import { ChartCard } from "@/components/charts/ChartCard";
 import { formatCurrency } from "@/lib/mock-data";
-import { useMockStore } from "@/context/MockStore";
+import { useVendors } from "@/hooks/useVendors";
+import { useEmployees } from "@/hooks/useEmployees";
+import { useMachines } from "@/hooks/useMachines";
 import {
   Select,
   SelectContent,
@@ -31,14 +33,15 @@ import {
 const LIABILITY_PIE_COLORS = ["hsl(var(--destructive))", "hsl(var(--warning))", "hsl(var(--chart-3))"];
 
 export default function Liabilities() {
-  const { state } = useMockStore();
-  const { vendors, employees, machines } = state;
+  const { vendors } = useVendors();
+  const { employees } = useEmployees();
+  const { machines } = useMachines(null, 1, 500);
   const [entityFilter, setEntityFilter] = useState<string>("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
 
   const vendorDues = useMemo(() => vendors.reduce((s, v) => s + v.remaining, 0), [vendors]);
-  const salaryDues = useMemo(() => employees.reduce((s, e) => s + e.totalDue, 0), [employees]);
+  const salaryDues = useMemo(() => employees.reduce((s, e) => s + (e.totalDue ?? 0), 0), [employees]);
   const machineryDues = useMemo(() => machines.reduce((s, m) => s + m.totalPending, 0), [machines]);
   const totalLiabilities = vendorDues + salaryDues + machineryDues;
 
@@ -57,8 +60,8 @@ export default function Liabilities() {
       .filter((v) => v.remaining > 0)
       .forEach((v) => items.push({ name: v.name.length > 18 ? v.name.slice(0, 16) + "…" : v.name, pending: v.remaining, type: "Vendor" }));
     employees
-      .filter((e) => e.totalDue > 0)
-      .forEach((e) => items.push({ name: e.name.length > 18 ? e.name.slice(0, 16) + "…" : e.name, pending: e.totalDue, type: "Employee" }));
+      .filter((e) => (e.totalDue ?? 0) > 0)
+      .forEach((e) => items.push({ name: e.name.length > 18 ? e.name.slice(0, 16) + "…" : e.name, pending: e.totalDue ?? 0, type: "Employee" }));
     machines
       .filter((m) => m.totalPending > 0)
       .forEach((m) => items.push({ name: m.name.length > 18 ? m.name.slice(0, 16) + "…" : m.name, pending: m.totalPending, type: "Machinery" }));
@@ -66,7 +69,7 @@ export default function Liabilities() {
   }, [vendors, employees, machines]);
 
   const filteredVendors = entityFilter === "all" || entityFilter === "vendor" ? vendors.filter((v) => v.remaining > 0) : [];
-  const filteredEmployees = entityFilter === "all" || entityFilter === "employee" ? employees.filter((e) => e.totalDue > 0) : [];
+  const filteredEmployees = entityFilter === "all" || entityFilter === "employee" ? employees.filter((e) => (e.totalDue ?? 0) > 0) : [];
   const filteredMachines = entityFilter === "all" || entityFilter === "machinery" ? machines.filter((m) => m.totalPending > 0) : [];
 
   return (
@@ -162,22 +165,22 @@ export default function Liabilities() {
             <h2 className="text-sm font-bold uppercase tracking-wider">Vendor Pending Payments</h2>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-base">
               <thead>
                 <tr className="border-b-2 border-border bg-primary text-primary-foreground">
-                  <th className="px-4 py-2.5 text-left text-xs font-bold uppercase tracking-wider">Vendor</th>
-                  <th className="px-4 py-2.5 text-right text-xs font-bold uppercase tracking-wider">Billed</th>
-                  <th className="px-4 py-2.5 text-right text-xs font-bold uppercase tracking-wider">Paid</th>
-                  <th className="px-4 py-2.5 text-right text-xs font-bold uppercase tracking-wider">Pending</th>
+                  <th className="px-4 py-2.5 text-left text-sm font-bold uppercase tracking-wider">Vendor</th>
+                  <th className="px-4 py-2.5 text-right text-sm font-bold uppercase tracking-wider">Billed</th>
+                  <th className="px-4 py-2.5 text-right text-sm font-bold uppercase tracking-wider">Paid</th>
+                  <th className="px-4 py-2.5 text-right text-sm font-bold uppercase tracking-wider">Pending</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredVendors.map((v) => (
                   <tr key={v.id} className="border-b border-border hover:bg-accent/50">
                     <td className="px-4 py-3 font-bold">{v.name}</td>
-                    <td className="px-4 py-3 text-right font-mono text-xs">{formatCurrency(v.totalBilled)}</td>
-                    <td className="px-4 py-3 text-right font-mono text-xs text-success">{formatCurrency(v.totalPaid)}</td>
-                    <td className="px-4 py-3 text-right font-mono text-xs text-destructive font-bold">{formatCurrency(v.remaining)}</td>
+                    <td className="px-4 py-3 text-right font-mono text-sm">{formatCurrency(v.totalBilled)}</td>
+                    <td className="px-4 py-3 text-right font-mono text-sm text-success">{formatCurrency(v.totalPaid)}</td>
+                    <td className="px-4 py-3 text-right font-mono text-sm text-destructive font-bold">{formatCurrency(v.remaining)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -191,22 +194,22 @@ export default function Liabilities() {
             <h2 className="text-sm font-bold uppercase tracking-wider">Salary Dues</h2>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-base">
               <thead>
                 <tr className="border-b-2 border-border bg-primary text-primary-foreground">
-                  <th className="px-4 py-2.5 text-left text-xs font-bold uppercase tracking-wider">Employee</th>
-                  <th className="px-4 py-2.5 text-left text-xs font-bold uppercase tracking-wider">Project</th>
-                  <th className="px-4 py-2.5 text-right text-xs font-bold uppercase tracking-wider">Total Paid</th>
-                  <th className="px-4 py-2.5 text-right text-xs font-bold uppercase tracking-wider">Due</th>
+                  <th className="px-4 py-2.5 text-left text-sm font-bold uppercase tracking-wider">Employee</th>
+                  <th className="px-4 py-2.5 text-left text-sm font-bold uppercase tracking-wider">Project</th>
+                  <th className="px-4 py-2.5 text-right text-sm font-bold uppercase tracking-wider">Total Paid</th>
+                  <th className="px-4 py-2.5 text-right text-sm font-bold uppercase tracking-wider">Due</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredEmployees.map((e) => (
                   <tr key={e.id} className="border-b border-border hover:bg-accent/50">
                     <td className="px-4 py-3 font-bold">{e.name}</td>
-                    <td className="px-4 py-3 text-xs">{e.project}</td>
-                    <td className="px-4 py-3 text-right font-mono text-xs">{formatCurrency(e.totalPaid)}</td>
-                    <td className="px-4 py-3 text-right font-mono text-xs text-destructive font-bold">{formatCurrency(e.totalDue)}</td>
+                    <td className="px-4 py-3 text-sm">{e.project}</td>
+                    <td className="px-4 py-3 text-right font-mono text-sm">{formatCurrency(e.totalPaid ?? 0)}</td>
+                    <td className="px-4 py-3 text-right font-mono text-sm text-destructive font-bold">{formatCurrency(e.totalDue ?? 0)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -220,22 +223,22 @@ export default function Liabilities() {
             <h2 className="text-sm font-bold uppercase tracking-wider">Machinery Pending Payments</h2>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-base">
               <thead>
                 <tr className="border-b-2 border-border bg-primary text-primary-foreground">
-                  <th className="px-4 py-2.5 text-left text-xs font-bold uppercase tracking-wider">Machine</th>
-                  <th className="px-4 py-2.5 text-right text-xs font-bold uppercase tracking-wider">Total Cost</th>
-                  <th className="px-4 py-2.5 text-right text-xs font-bold uppercase tracking-wider">Paid</th>
-                  <th className="px-4 py-2.5 text-right text-xs font-bold uppercase tracking-wider">Pending</th>
+                  <th className="px-4 py-2.5 text-left text-sm font-bold uppercase tracking-wider">Machine</th>
+                  <th className="px-4 py-2.5 text-right text-sm font-bold uppercase tracking-wider">Total Cost</th>
+                  <th className="px-4 py-2.5 text-right text-sm font-bold uppercase tracking-wider">Paid</th>
+                  <th className="px-4 py-2.5 text-right text-sm font-bold uppercase tracking-wider">Pending</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredMachines.map((m) => (
                   <tr key={m.id} className="border-b border-border hover:bg-accent/50">
                     <td className="px-4 py-3 font-bold">{m.name}</td>
-                    <td className="px-4 py-3 text-right font-mono text-xs">{formatCurrency(m.totalCost)}</td>
-                    <td className="px-4 py-3 text-right font-mono text-xs text-success">{formatCurrency(m.totalPaid)}</td>
-                    <td className="px-4 py-3 text-right font-mono text-xs text-destructive font-bold">{formatCurrency(m.totalPending)}</td>
+                    <td className="px-4 py-3 text-right font-mono text-sm">{formatCurrency(m.totalCost)}</td>
+                    <td className="px-4 py-3 text-right font-mono text-sm text-success">{formatCurrency(m.totalPaid)}</td>
+                    <td className="px-4 py-3 text-right font-mono text-sm text-destructive font-bold">{formatCurrency(m.totalPending)}</td>
                   </tr>
                 ))}
               </tbody>

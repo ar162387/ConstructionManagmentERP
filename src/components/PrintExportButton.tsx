@@ -28,6 +28,7 @@ export default function PrintExportButton({ title, printTargetId }: PrintExportB
           tr:nth-child(even) { background-color: #f5f5f5; }
           .print-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
           .print-date { font-size: 12px; color: #666; }
+          .print-hidden { display: none !important; }
           @media print { body { padding: 0; } }
         </style>
       </head>

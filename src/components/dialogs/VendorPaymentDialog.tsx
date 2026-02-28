@@ -16,50 +16,53 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useMockStore } from "@/context/MockStore";
 import { toast } from "sonner";
-import type { Vendor } from "@/lib/mock-data";
+import { createVendorPayment } from "@/services/vendorPaymentService";
+import type { ApiVendor } from "@/services/vendorsService";
 
 interface VendorPaymentDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  vendor: Vendor;
+  vendor: ApiVendor;
+  onSuccess: () => void;
 }
 
-export function VendorPaymentDialog({ open, onOpenChange, vendor }: VendorPaymentDialogProps) {
-  const { actions } = useMockStore();
+export function VendorPaymentDialog({ open, onOpenChange, vendor, onSuccess }: VendorPaymentDialogProps) {
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [amount, setAmount] = useState("");
   const [paymentMode, setPaymentMode] = useState<"Cash" | "Bank" | "Online">("Bank");
   const [referenceId, setReferenceId] = useState("");
   const [remarks, setRemarks] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const amt = parseFloat(amount);
-    if (!date || isNaN(amt) || amt <= 0) {
-      toast.error("Date and amount are required");
-      return;
-    }
+    if (!date) { toast.error("Date is required"); return; }
+    if (isNaN(amt) || amt <= 0) { toast.error("Amount must be positive"); return; }
     if (amt > vendor.remaining) {
-      toast.error("Amount cannot exceed pending dues");
+      toast.error(`Amount ${amt.toLocaleString()} exceeds pending dues of ${vendor.remaining.toLocaleString()} PKR`);
       return;
     }
-    actions.addAuditLog({
-      timestamp: new Date().toISOString().slice(0, 19).replace("T", " "),
-      user: "admin@erp.com",
-      role: "Admin",
-      action: "Edit",
-      module: "Vendor",
-      description: `Vendor payment: ${vendor.name} — ${amt}`,
-      oldValue: `Pending: ${vendor.remaining}`,
-      newValue: `Paid: ${amt}`,
-    });
-    toast.success("Payment recorded (prototype: ledger not updated)");
-    onOpenChange(false);
-    setAmount("");
-    setReferenceId("");
-    setRemarks("");
+    setLoading(true);
+    try {
+      await createVendorPayment(vendor.id, {
+        date,
+        amount: amt,
+        paymentMethod: paymentMode,
+        referenceId: paymentMode !== "Cash" ? referenceId || undefined : undefined,
+        remarks: remarks || undefined,
+      });
+      toast.success("Payment recorded");
+      onSuccess();
+      setAmount("");
+      setReferenceId("");
+      setRemarks("");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to record payment");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -68,7 +71,9 @@ export function VendorPaymentDialog({ open, onOpenChange, vendor }: VendorPaymen
         <DialogHeader>
           <DialogTitle>Record Payment — {vendor.name}</DialogTitle>
         </DialogHeader>
-        <p className="text-sm text-muted-foreground">Pending: {vendor.remaining.toLocaleString()} (PKR)</p>
+        <p className="text-sm text-muted-foreground">
+          Pending dues: <span className="font-bold text-destructive">{formatAmount(vendor.remaining)} PKR</span>
+        </p>
         <form onSubmit={handleSubmit} className="space-y-4 mt-4">
           <div>
             <Label>Date *</Label>
@@ -76,7 +81,15 @@ export function VendorPaymentDialog({ open, onOpenChange, vendor }: VendorPaymen
           </div>
           <div>
             <Label>Amount *</Label>
-            <Input type="number" min={0.01} value={amount} onChange={(e) => setAmount(e.target.value)} className="mt-1" />
+            <Input
+              type="number"
+              min={0.01}
+              max={vendor.remaining}
+              step="0.01"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              className="mt-1"
+            />
           </div>
           <div>
             <Label>Payment Mode</Label>
@@ -103,10 +116,16 @@ export function VendorPaymentDialog({ open, onOpenChange, vendor }: VendorPaymen
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button type="submit" variant="warning">Record Payment</Button>
+            <Button type="submit" variant="warning" disabled={loading || vendor.remaining <= 0}>
+              {loading ? "Recording…" : "Record Payment"}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
   );
+}
+
+function formatAmount(n: number): string {
+  return n.toLocaleString();
 }

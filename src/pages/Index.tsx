@@ -5,6 +5,12 @@ import StatusBadge from "@/components/StatusBadge";
 import { ChartCard } from "@/components/charts/ChartCard";
 import { formatCurrency, formatCurrencyCompact } from "@/lib/mock-data";
 import { useMockStore } from "@/context/MockStore";
+import { useAuth } from "@/context/AuthContext";
+import { useProjects } from "@/hooks/useProjects";
+import { useVendors } from "@/hooks/useVendors";
+import { useEmployees } from "@/hooks/useEmployees";
+import { useExpenses } from "@/hooks/useExpenses";
+import { useMachines } from "@/hooks/useMachines";
 import { FolderKanban, Package, Users, Building2, AlertTriangle, TrendingUp } from "lucide-react";
 import { Link } from "react-router-dom";
 import {
@@ -25,15 +31,27 @@ const CHART_COLORS = ["hsl(var(--chart-1))", "hsl(var(--chart-2))", "hsl(var(--c
 const LIABILITY_COLORS = ["hsl(var(--destructive))", "hsl(var(--warning))", "hsl(var(--chart-3))"];
 
 export default function Index() {
+  const { user } = useAuth();
   const { state } = useMockStore();
-  const { projects, vendors, employees, bankAccounts, expenses } = state;
+  const { projects } = useProjects();
+  const { vendors } = useVendors();
+  const { employees } = useEmployees();
+  const isSiteManager = user?.role === "Site Manager";
+  const assignedProjectId = user?.assignedProjectId ?? null;
+  const { expenses } = useExpenses({
+    projectId: isSiteManager ? assignedProjectId : undefined,
+    page: 1,
+    pageSize: 1000,
+  });
+  const { machines } = useMachines(isSiteManager ? assignedProjectId : null, 1, 500);
+  const { bankAccounts } = state;
   const activeProjects = projects.filter((p) => p.status === "Active").length;
   const totalBudget = projects.reduce((s, p) => s + p.allocatedBudget, 0);
   const totalSpent = projects.reduce((s, p) => s + p.spent, 0);
   const totalVendorDues = vendors.reduce((s, v) => s + v.remaining, 0);
-  const totalEmpDues = employees.reduce((s, e) => s + e.totalDue, 0);
+  const totalEmpDues = employees.reduce((s, e) => s + (e.totalDue ?? 0), 0);
   const totalBankBalance = bankAccounts.reduce((s, b) => s + b.currentBalance, 0);
-  const machineryDues = state.machines.reduce((s, m) => s + m.totalPending, 0);
+  const machineryDues = machines.reduce((s, m) => s + m.totalPending, 0);
 
   const budgetVsSpentData = useMemo(
     () =>
@@ -152,14 +170,14 @@ export default function Index() {
             </Link>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-base">
               <thead className="bg-muted/50">
                 <tr className="border-b">
-                  <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Project</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">Budget</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">Spent</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">Remaining</th>
+                  <th className="px-6 py-3 text-left text-sm font-medium text-muted-foreground uppercase tracking-wider">Project</th>
+                  <th className="px-6 py-3 text-left text-sm font-medium text-muted-foreground uppercase tracking-wider">Status</th>
+                  <th className="px-6 py-3 text-right text-sm font-medium text-muted-foreground uppercase tracking-wider">Budget</th>
+                  <th className="px-6 py-3 text-right text-sm font-medium text-muted-foreground uppercase tracking-wider">Spent</th>
+                  <th className="px-6 py-3 text-right text-sm font-medium text-muted-foreground uppercase tracking-wider">Remaining</th>
                 </tr>
               </thead>
               <tbody>

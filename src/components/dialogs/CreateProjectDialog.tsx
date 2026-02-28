@@ -17,8 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import type { Project } from "@/lib/mock-data";
-import { useMockStore } from "@/context/MockStore";
+import { createProject } from "@/services/projectsService";
 import { toast } from "sonner";
 
 type Status = "Active" | "On Hold" | "Completed";
@@ -26,18 +25,19 @@ type Status = "Active" | "On Hold" | "Completed";
 interface CreateProjectDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onCreated?: () => void;
 }
 
-export function CreateProjectDialog({ open, onOpenChange }: CreateProjectDialogProps) {
-  const { actions } = useMockStore();
+export function CreateProjectDialog({ open, onOpenChange, onCreated }: CreateProjectDialogProps) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [allocatedBudget, setAllocatedBudget] = useState("");
   const [status, setStatus] = useState<Status>("Active");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const budget = parseFloat(allocatedBudget);
     if (!name.trim()) {
@@ -48,32 +48,31 @@ export function CreateProjectDialog({ open, onOpenChange }: CreateProjectDialogP
       toast.error("Valid allocated budget is required");
       return;
     }
-    const project: Omit<Project, "id"> = {
-      name: name.trim(),
-      description: description.trim(),
-      allocatedBudget: budget,
-      status,
-      startDate: startDate || new Date().toISOString().slice(0, 10),
-      endDate: endDate || "",
-      spent: 0,
-    };
-    actions.addProject(project);
-    actions.addAuditLog({
-      timestamp: new Date().toISOString().slice(0, 19).replace("T", " "),
-      user: "admin@erp.com",
-      role: "Admin",
-      action: "Create",
-      module: "Project",
-      description: `Created project: ${name}`,
-    });
-    toast.success("Project created");
-    onOpenChange(false);
-    setName("");
-    setDescription("");
-    setAllocatedBudget("");
-    setStatus("Active");
-    setStartDate("");
-    setEndDate("");
+
+    setLoading(true);
+    try {
+      await createProject({
+        name: name.trim(),
+        description: description.trim(),
+        allocatedBudget: budget,
+        status,
+        startDate: startDate || new Date().toISOString().slice(0, 10),
+        endDate: endDate || "",
+      });
+      toast.success("Project created");
+      onOpenChange(false);
+      onCreated?.();
+      setName("");
+      setDescription("");
+      setAllocatedBudget("");
+      setStatus("Active");
+      setStartDate("");
+      setEndDate("");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to create project");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -150,8 +149,8 @@ export function CreateProjectDialog({ open, onOpenChange }: CreateProjectDialogP
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" variant="warning">
-              Create Project
+            <Button type="submit" variant="warning" disabled={loading}>
+              {loading ? "Creating..." : "Create Project"}
             </Button>
           </DialogFooter>
         </form>

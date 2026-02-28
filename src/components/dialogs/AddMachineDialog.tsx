@@ -16,7 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useMockStore } from "@/context/MockStore";
+import { createMachine } from "@/services/machinesService";
 import { toast } from "sonner";
 
 interface AddMachineDialogProps {
@@ -25,23 +25,29 @@ interface AddMachineDialogProps {
   /** When set (e.g. Site Manager), project is fixed to this and selector is hidden */
   restrictedProjectId?: string;
   restrictedProjectName?: string;
+  projects: { id: string; name: string }[];
+  onSuccess?: () => void;
 }
 
-export function AddMachineDialog({ open, onOpenChange, restrictedProjectId, restrictedProjectName }: AddMachineDialogProps) {
-  const { state, actions } = useMockStore();
+export function AddMachineDialog({
+  open,
+  onOpenChange,
+  restrictedProjectId,
+  restrictedProjectName,
+  projects,
+  onSuccess,
+}: AddMachineDialogProps) {
   const [name, setName] = useState("");
   const [ownership, setOwnership] = useState<"Company Owned" | "Rented">("Rented");
   const [hourlyRate, setHourlyRate] = useState("");
+  const [submitting, setSubmitting] = useState(false);
   const NONE_PROJECT = "__none__";
-  const [projectId, setProjectId] = useState(state.projects[0]?.id || NONE_PROJECT);
+  const [projectId, setProjectId] = useState(projects[0]?.id || NONE_PROJECT);
 
-  const projects = state.projects;
-  const effectiveProject = restrictedProjectId && restrictedProjectName
-    ? { name: restrictedProjectName }
-    : projectId === NONE_PROJECT ? null : projects.find((p) => p.id === projectId);
-  const projectName = effectiveProject?.name ?? (projectId && projectId !== NONE_PROJECT ? projects.find((p) => p.id === projectId)?.name : undefined);
+  const effectiveProjectId =
+    restrictedProjectId ?? (projectId && projectId !== NONE_PROJECT ? projectId : undefined);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
       toast.error("Machine name is required");
@@ -52,28 +58,28 @@ export function AddMachineDialog({ open, onOpenChange, restrictedProjectId, rest
       toast.error("Valid hourly rate required");
       return;
     }
-    actions.addMachine({
-      name: name.trim(),
-      ownership,
-      hourlyRate: rate,
-      totalHours: 0,
-      totalCost: 0,
-      totalPaid: 0,
-      totalPending: 0,
-      ...(projectName ? { project: projectName } : {}),
-    });
-    actions.addAuditLog({
-      timestamp: new Date().toISOString().slice(0, 19).replace("T", " "),
-      user: "admin@erp.com",
-      role: "Admin",
-      action: "Create",
-      module: "Machinery",
-      description: `Added machine: ${name.trim()}`,
-    });
-    toast.success("Machine added");
-    onOpenChange(false);
-    setName("");
-    setHourlyRate("");
+    if (!effectiveProjectId) {
+      toast.error("Project is required");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await createMachine({
+        name: name.trim(),
+        ownership,
+        hourlyRate: rate,
+        projectId: effectiveProjectId,
+      });
+      toast.success("Machine added");
+      onOpenChange(false);
+      setName("");
+      setHourlyRate("");
+      onSuccess?.();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to add machine");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -104,16 +110,16 @@ export function AddMachineDialog({ open, onOpenChange, restrictedProjectId, rest
             <Input type="number" min={0} value={hourlyRate} onChange={(e) => setHourlyRate(e.target.value)} className="mt-1" />
           </div>
           <div>
-            <Label>Project</Label>
+            <Label>Project *</Label>
             {restrictedProjectId && restrictedProjectName ? (
               <p className="mt-1.5 text-sm font-medium">{restrictedProjectName}</p>
             ) : (
               <Select value={projectId} onValueChange={setProjectId}>
                 <SelectTrigger className="mt-1">
-                  <SelectValue placeholder="Select project (optional)" />
+                  <SelectValue placeholder="Select project" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={NONE_PROJECT}>None</SelectItem>
+                  <SelectItem value={NONE_PROJECT}>Select project</SelectItem>
                   {projects.map((p) => (
                     <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
                   ))}
@@ -123,7 +129,7 @@ export function AddMachineDialog({ open, onOpenChange, restrictedProjectId, rest
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button type="submit" variant="warning">Add Machine</Button>
+            <Button type="submit" variant="warning" disabled={submitting}>{submitting ? "Adding…" : "Add Machine"}</Button>
           </DialogFooter>
         </form>
       </DialogContent>
