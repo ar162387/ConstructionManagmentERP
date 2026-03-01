@@ -92,6 +92,13 @@ export default function CashAndExpenses() {
       0
     );
 
+  const totalInflows =
+    (report?.openingBalances?.projectLedgerInflows ?? 0) +
+    (report?.openingBalances?.bankAccounts ?? []).reduce(
+      (s, a) => s + (a.inflows ?? 0),
+      0
+    );
+
   const closingBalance = report?.closingBalance ?? totalClosing;
 
   return (
@@ -203,6 +210,9 @@ export default function CashAndExpenses() {
                           Opening balance
                         </th>
                         <th className="px-5 py-3 text-right text-sm font-medium">
+                          Inflows
+                        </th>
+                        <th className="px-5 py-3 text-right text-sm font-medium">
                           Closing balance
                         </th>
                       </tr>
@@ -215,6 +225,11 @@ export default function CashAndExpenses() {
                         <td className="px-5 py-3.5 text-right font-mono text-sm font-medium">
                           {formatCurrency(
                             report.openingBalances.projectLedger ?? 0
+                          )}
+                        </td>
+                        <td className="px-5 py-3.5 text-right font-mono text-sm font-medium">
+                          {formatCurrency(
+                            report.openingBalances.projectLedgerInflows ?? 0
                           )}
                         </td>
                         <td className="px-5 py-3.5 text-right font-mono text-sm font-medium">
@@ -235,6 +250,9 @@ export default function CashAndExpenses() {
                             {formatCurrency(acc.openingBalance ?? 0)}
                           </td>
                           <td className="px-5 py-3.5 text-right font-mono text-sm font-medium">
+                            {formatCurrency(acc.inflows ?? 0)}
+                          </td>
+                          <td className="px-5 py-3.5 text-right font-mono text-sm font-medium">
                             {formatCurrency(acc.closingBalance ?? 0)}
                           </td>
                         </tr>
@@ -243,6 +261,9 @@ export default function CashAndExpenses() {
                         <td className="px-5 py-3.5 text-sm">Total</td>
                         <td className="px-5 py-3.5 text-right font-mono text-sm">
                           {formatCurrency(totalOpening)}
+                        </td>
+                        <td className="px-5 py-3.5 text-right font-mono text-sm">
+                          {formatCurrency(totalInflows)}
                         </td>
                         <td className="px-5 py-3.5 text-right font-mono text-sm">
                           {formatCurrency(totalClosing)}

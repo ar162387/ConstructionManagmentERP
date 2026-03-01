@@ -26,11 +26,13 @@ export interface CashExpensesReportBankAccount {
   name: string;
   openingBalance: number;
   closingBalance: number;
+  inflows: number;
 }
 
 export interface CashExpensesReportOpeningBalances {
   projectLedger: number;
   projectLedgerClosing: number;
+  projectLedgerInflows: number;
   bankAccounts: CashExpensesReportBankAccount[];
 }
 

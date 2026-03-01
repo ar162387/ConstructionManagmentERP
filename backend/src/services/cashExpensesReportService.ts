@@ -10,6 +10,7 @@ import { MachinePayment } from "../models/MachinePayment.js";
 import { NonConsumableLedgerEntry } from "../models/NonConsumableLedgerEntry.js";
 import { User } from "../models/User.js";
 import { BankTransaction } from "../models/BankTransaction.js";
+import { ProjectBalanceAdjustment } from "../models/ProjectBalanceAdjustment.js";
 
 export type CashExpensesEntityType =
   | "Consumable"
@@ -33,11 +34,13 @@ export interface CashExpensesReportBankAccount {
   name: string;
   openingBalance: number;
   closingBalance: number;
+  inflows: number;
 }
 
 export interface CashExpensesReportOpeningBalances {
   projectLedger: number;
   projectLedgerClosing: number;
+  projectLedgerInflows: number;
   bankAccounts: CashExpensesReportBankAccount[];
 }
 
@@ -84,7 +87,7 @@ export async function getCashExpensesReport(
     throw new Error("Project not found or access denied");
   }
 
-  const [bankAccounts, bankTxByAccount, projectInflowsToday, consumablePayments, vendorPayments, contractorPayments, employeePayments, expenses, machinePayments, nonConsumablePayments] = await Promise.all([
+  const [bankAccounts, bankTxByAccount, bankOutflowsToProjectToday, projectAdjustmentsInflowsToday, consumablePayments, vendorPayments, contractorPayments, employeePayments, expenses, machinePayments, nonConsumablePayments] = await Promise.all([
     BankAccount.find({}).select("_id name currentBalance").lean(),
     BankTransaction.find({ date }).lean().then((txs) => {
       const byAccount: Record<string, { inflow: number; outflow: number }> = {};
@@ -96,9 +99,12 @@ export async function getCashExpensesReport(
       }
       return byAccount;
     }),
-    BankTransaction.find({ projectId: projectObj, type: "inflow", date })
+    BankTransaction.find({ projectId: projectObj, type: "outflow", date })
       .lean()
       .then((txs) => txs.reduce((s, t) => s + t.amount, 0)),
+    ProjectBalanceAdjustment.find({ projectId: projectObj, date })
+      .lean()
+      .then((rows) => rows.filter((r) => r.amount > 0).reduce((s, r) => s + r.amount, 0)),
     ItemLedgerEntry.find({ projectId: projectObj, date, paidAmount: { $gt: 0 } })
       .populate<{ itemId: { name: string } }>("itemId", "name")
       .lean(),
@@ -213,9 +219,11 @@ export async function getCashExpensesReport(
 
   const totalPayments = payments.reduce((s, p) => s + p.amount, 0);
   const projectLedgerClosing = project.balance ?? 0;
-  // Project: opening + total inflows to project from all accounts - total payments = closing (project.balance)
+  const projectLedgerInflows = bankOutflowsToProjectToday + projectAdjustmentsInflowsToday;
+  // Project: opening + total inflows to project - total payments = closing (project.balance)
+  const projectInflowsToday = projectLedgerInflows;
   const projectLedgerOpening = projectLedgerClosing - projectInflowsToday + totalPayments;
-  // Bank: opening = start-of-day balance (current - inflows + outflows); closing = end-of-day balance (current), with outflows from that account reducing the balance during the day
+  // Bank: opening = start-of-day balance; closing = current; inflows = sum of inflows to that bank on the day
   const bankAccountsWithClosing = bankAccounts.map((acc) => {
     const id = acc._id.toString();
     const current = acc.currentBalance ?? 0;
@@ -226,6 +234,7 @@ export async function getCashExpensesReport(
       name: acc.name,
       openingBalance: opening,
       closingBalance: current,
+      inflows: day.inflow,
     };
   });
   const bankOpeningTotal = bankAccountsWithClosing.reduce((s, a) => s + a.openingBalance, 0);
@@ -236,6 +245,7 @@ export async function getCashExpensesReport(
   const openingBalances: CashExpensesReportOpeningBalances = {
     projectLedger: projectLedgerOpening,
     projectLedgerClosing,
+    projectLedgerInflows,
     bankAccounts: bankAccountsWithClosing,
   };
 
