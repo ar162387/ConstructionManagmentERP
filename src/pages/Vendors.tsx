@@ -4,6 +4,7 @@ import PageHeader from "@/components/PageHeader";
 import { formatCurrency } from "@/lib/mock-data";
 import { useVendors } from "@/hooks/useVendors";
 import { useAuth } from "@/context/AuthContext";
+import { useSelectedProject } from "@/context/SelectedProjectContext";
 import { useProjects } from "@/hooks/useProjects";
 import { AddVendorDialog } from "@/components/dialogs/AddVendorDialog";
 import { EditVendorDialog } from "@/components/dialogs/EditVendorDialog";
@@ -41,8 +42,8 @@ export default function Vendors() {
   const isSiteManager = user?.role === "Site Manager";
   const assignedProjectId = user?.assignedProjectId ?? null;
 
-  const [selectedProjectId, setSelectedProjectId] = useState<string>("");
-   const [searchQuery, setSearchQuery] = useState("");
+  const { selectedProjectId, setSelectedProjectId } = useSelectedProject();
+  const [searchQuery, setSearchQuery] = useState("");
   const effectiveProjectId = isSiteManager ? assignedProjectId : (selectedProjectId || null);
 
   const { vendors, loading, error, refetch } = useVendors(effectiveProjectId);
@@ -74,14 +75,6 @@ export default function Vendors() {
 
   const canEditDelete = user?.role !== "Site Manager";
   const vendorsPagination = useTablePagination(filteredVendors, { defaultPageSize: 12 });
-
-  useEffect(() => {
-    if (isSiteManager && assignedProjectId) {
-      setSelectedProjectId(assignedProjectId);
-    } else if (!isSiteManager && projects.length > 0 && !selectedProjectId) {
-      setSelectedProjectId(projects[0].id);
-    }
-  }, [isSiteManager, assignedProjectId, projects, selectedProjectId]);
 
   const handleDeleteClick = (v: ApiVendor) => {
     if (v.remaining > 0) {

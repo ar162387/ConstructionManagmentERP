@@ -19,6 +19,9 @@ import { nonConsumableCategoryRoutes } from "./routes/nonConsumableCategories.js
 import { nonConsumableItemRoutes } from "./routes/nonConsumableItems.js";
 import { expenseRoutes } from "./routes/expenses.js";
 import { machineRoutes } from "./routes/machines.js";
+import { bankAccountRoutes } from "./routes/bankAccounts.js";
+import { bankTransactionRoutes } from "./routes/bankTransactions.js";
+import { projectLedgerRoutes } from "./routes/projectLedger.js";
 
 const PORT = process.env.PORT ?? 3001;
 const MONGODB_URI = process.env.MONGODB_URI ?? "mongodb://localhost:27017/builderp";
@@ -29,6 +32,7 @@ const DEFAULT_CORS_ORIGINS = [
   "http://127.0.0.1:5173",
   "http://localhost:4173",
   "http://127.0.0.1:4173",
+  "http://localhost:8080",
   "https://construction-managment-erp.vercel.app",
 ];
 
@@ -59,6 +63,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/audit-logs", auditLogRoutes);
 app.use("/api/projects", projectRoutes);
+app.use("/api/projects/:projectId/ledger", projectLedgerRoutes);
 app.use("/api/vendors", vendorRoutes);
 app.use("/api/consumable-items", consumableItemRoutes);
 app.use("/api/consumable-items/:itemId/ledger", itemLedgerRoutes);
@@ -72,6 +77,8 @@ app.use("/api/non-consumable-categories", nonConsumableCategoryRoutes);
 app.use("/api/non-consumable-items", nonConsumableItemRoutes);
 app.use("/api/expenses", expenseRoutes);
 app.use("/api/machines", machineRoutes);
+app.use("/api/bank-accounts", bankAccountRoutes);
+app.use("/api/bank-transactions", bankTransactionRoutes);
 
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true });

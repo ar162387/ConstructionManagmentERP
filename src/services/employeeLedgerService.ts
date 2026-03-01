@@ -70,6 +70,19 @@ export async function getEmployeeLedger(
   return api<ApiEmployeeLedger>(`/api/employees/${employeeId}/ledger${q ? `?${q}` : ""}`);
 }
 
+export interface ApiLedgerSnapshotResponse {
+  snapshot: ApiMonthlySnapshot | null;
+}
+
+/** Fetch only the monthly snapshot (payable, paid, remaining). Use when month changes so the payments list is not refetched. */
+export async function getEmployeeLedgerSnapshot(
+  employeeId: string,
+  month: string
+): Promise<ApiLedgerSnapshotResponse> {
+  const params = new URLSearchParams({ month });
+  return api<ApiLedgerSnapshotResponse>(`/api/employees/${employeeId}/ledger/snapshot?${params}`);
+}
+
 export async function createEmployeePayment(
   employeeId: string,
   input: CreateEmployeePaymentInput

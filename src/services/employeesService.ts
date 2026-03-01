@@ -72,7 +72,7 @@ export async function listEmployees(
   month?: string | null
 ): Promise<ApiEmployeeWithSnapshot[]> {
   const params = new URLSearchParams();
-  if (projectId && projectId !== "__all__") params.set("projectId", projectId);
+  if (projectId) params.set("projectId", projectId);
   if (month) params.set("month", month);
   const q = params.toString();
   return api<ApiEmployeeWithSnapshot[]>(`/api/employees${q ? `?${q}` : ""}`);

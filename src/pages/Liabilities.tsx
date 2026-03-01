@@ -1,12 +1,20 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import Layout from "@/components/Layout";
 import PageHeader from "@/components/PageHeader";
 import StatCard from "@/components/StatCard";
 import { ChartCard } from "@/components/charts/ChartCard";
 import { formatCurrency } from "@/lib/mock-data";
+import { useAuth } from "@/context/AuthContext";
+import { useSelectedProject } from "@/context/SelectedProjectContext";
+import { useProjects } from "@/hooks/useProjects";
 import { useVendors } from "@/hooks/useVendors";
 import { useEmployees } from "@/hooks/useEmployees";
 import { useMachines } from "@/hooks/useMachines";
+import { useContractors } from "@/hooks/useContractors";
+import { VendorPaymentDialog } from "@/components/dialogs/VendorPaymentDialog";
+import { ContractorPaymentDialog } from "@/components/dialogs/ContractorPaymentDialog";
+import { MachinePaymentDialog } from "@/components/dialogs/MachinePaymentDialog";
+import { EmployeeLiabilityPaymentDialog } from "@/components/dialogs/EmployeeLiabilityPaymentDialog";
 import {
   Select,
   SelectContent,
@@ -16,6 +24,7 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import {
   BarChart,
   Bar,
@@ -29,36 +38,69 @@ import {
   Cell,
   Legend,
 } from "recharts";
+import { Link } from "react-router-dom";
+import { Banknote, Loader2 } from "lucide-react";
+import type { ApiVendor } from "@/services/vendorsService";
+import type { ApiContractorWithTotals } from "@/services/contractorsService";
+import type { ApiMachineWithTotals } from "@/services/machinesService";
+import type { ApiEmployeeWithSnapshot } from "@/services/employeesService";
 
-const LIABILITY_PIE_COLORS = ["hsl(var(--destructive))", "hsl(var(--warning))", "hsl(var(--chart-3))"];
+const LIABILITY_PIE_COLORS = ["hsl(var(--destructive))", "hsl(var(--warning))", "hsl(var(--chart-3))", "hsl(var(--chart-4))"];
 
 export default function Liabilities() {
-  const { vendors } = useVendors();
-  const { employees } = useEmployees();
-  const { machines } = useMachines(null, 1, 500);
+  const { user } = useAuth();
+  const { projects } = useProjects();
+  const { selectedProjectId, setSelectedProjectId } = useSelectedProject();
+  const isSiteManager = user?.role === "Site Manager";
+  const assignedProjectId = user?.assignedProjectId ?? null;
+
+  const effectiveProjectId = isSiteManager ? assignedProjectId : (selectedProjectId || null);
+  const projectIdForApi = effectiveProjectId ?? undefined;
+
+  const { vendors, loading: vendorsLoading, refetch: refetchVendors } = useVendors(projectIdForApi);
+  const { employees, loading: employeesLoading, refetch: refetchEmployees } = useEmployees(projectIdForApi);
+  const { machines, loading: machinesLoading, refetch: refetchMachines } = useMachines(projectIdForApi, 1, 500);
+  const { contractors, loading: contractorsLoading, refetch: refetchContractors } = useContractors(projectIdForApi);
+
+  const projectsForSelector = useMemo(
+    () => projects.filter((p) => p.status === "Active" || p.status === "On Hold" || p.status === "Completed"),
+    [projects]
+  );
+
   const [entityFilter, setEntityFilter] = useState<string>("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
 
+  // Payment dialog state
+  const [vendorPaymentVendor, setVendorPaymentVendor] = useState<ApiVendor | null>(null);
+  const [contractorPaymentContractor, setContractorPaymentContractor] = useState<ApiContractorWithTotals | null>(null);
+  const [machinePaymentMachine, setMachinePaymentMachine] = useState<ApiMachineWithTotals | null>(null);
+  const [employeePaymentEmployee, setEmployeePaymentEmployee] = useState<ApiEmployeeWithSnapshot | null>(null);
+
   const vendorDues = useMemo(() => vendors.reduce((s, v) => s + v.remaining, 0), [vendors]);
+  const contractorDues = useMemo(() => contractors.reduce((s, c) => s + c.remaining, 0), [contractors]);
   const salaryDues = useMemo(() => employees.reduce((s, e) => s + (e.totalDue ?? 0), 0), [employees]);
   const machineryDues = useMemo(() => machines.reduce((s, m) => s + m.totalPending, 0), [machines]);
-  const totalLiabilities = vendorDues + salaryDues + machineryDues;
+  const totalLiabilities = vendorDues + contractorDues + salaryDues + machineryDues;
 
   const liabilityBreakdownData = useMemo(() => {
     if (totalLiabilities === 0) return [];
     return [
       { name: "Vendor Dues", value: vendorDues, amount: vendorDues },
+      { name: "Contractor Dues", value: contractorDues, amount: contractorDues },
       { name: "Salary Dues", value: salaryDues, amount: salaryDues },
       { name: "Machinery Dues", value: machineryDues, amount: machineryDues },
     ].filter((d) => d.value > 0);
-  }, [totalLiabilities, vendorDues, salaryDues, machineryDues]);
+  }, [totalLiabilities, vendorDues, contractorDues, salaryDues, machineryDues]);
 
   const topEntitiesData = useMemo(() => {
     const items: { name: string; pending: number; type: string }[] = [];
     vendors
       .filter((v) => v.remaining > 0)
       .forEach((v) => items.push({ name: v.name.length > 18 ? v.name.slice(0, 16) + "…" : v.name, pending: v.remaining, type: "Vendor" }));
+    contractors
+      .filter((c) => c.remaining > 0)
+      .forEach((c) => items.push({ name: c.name.length > 18 ? c.name.slice(0, 16) + "…" : c.name, pending: c.remaining, type: "Contractor" }));
     employees
       .filter((e) => (e.totalDue ?? 0) > 0)
       .forEach((e) => items.push({ name: e.name.length > 18 ? e.name.slice(0, 16) + "…" : e.name, pending: e.totalDue ?? 0, type: "Employee" }));
@@ -66,21 +108,57 @@ export default function Liabilities() {
       .filter((m) => m.totalPending > 0)
       .forEach((m) => items.push({ name: m.name.length > 18 ? m.name.slice(0, 16) + "…" : m.name, pending: m.totalPending, type: "Machinery" }));
     return items.sort((a, b) => b.pending - a.pending).slice(0, 10);
-  }, [vendors, employees, machines]);
+  }, [vendors, contractors, employees, machines]);
 
   const filteredVendors = entityFilter === "all" || entityFilter === "vendor" ? vendors.filter((v) => v.remaining > 0) : [];
+  const filteredContractors = entityFilter === "all" || entityFilter === "contractor" ? contractors.filter((c) => c.remaining > 0) : [];
   const filteredEmployees = entityFilter === "all" || entityFilter === "employee" ? employees.filter((e) => (e.totalDue ?? 0) > 0) : [];
   const filteredMachines = entityFilter === "all" || entityFilter === "machinery" ? machines.filter((m) => m.totalPending > 0) : [];
+
+  const selectedProjectName = projects.find((p) => p.id === effectiveProjectId)?.name ?? "Project";
+
+  const refetchAll = () => {
+    refetchVendors();
+    refetchContractors();
+    refetchMachines();
+    refetchEmployees();
+  };
+
+  const refetchAllAfterEmployeePayment = () => {
+    refetchVendors();
+    refetchContractors();
+    refetchMachines();
+    refetchEmployees({ silent: true });
+  };
+
+  const showProjectSelector = !isSiteManager && projectsForSelector.length > 0;
+  const hasProjectSelected = !!effectiveProjectId;
+  const showNoProjectMessage = !isSiteManager && projectsForSelector.length > 0 && !effectiveProjectId;
 
   return (
     <Layout>
       <PageHeader
         title="Liabilities"
-        subtitle="Outstanding payments & dues across all entities"
+        subtitle={hasProjectSelected ? `Outstanding payments & dues — ${selectedProjectName}` : "Outstanding payments & dues across entities"}
         printTargetId="liabilities-content"
       />
 
       <div className="flex flex-wrap items-end gap-4 mb-6 p-4 border-2 border-border">
+        {showProjectSelector && (
+          <div>
+            <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Project</Label>
+            <Select value={selectedProjectId || ""} onValueChange={setSelectedProjectId}>
+              <SelectTrigger className="mt-1 w-[200px]">
+                <SelectValue placeholder="Select project…" />
+              </SelectTrigger>
+              <SelectContent>
+                {projectsForSelector.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
         <div>
           <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Entity</Label>
           <Select value={entityFilter} onValueChange={setEntityFilter}>
@@ -90,6 +168,7 @@ export default function Liabilities() {
             <SelectContent>
               <SelectItem value="all">All entities</SelectItem>
               <SelectItem value="vendor">Vendors only</SelectItem>
+              <SelectItem value="contractor">Contractors only</SelectItem>
               <SelectItem value="employee">Employees only</SelectItem>
               <SelectItem value="machinery">Machinery only</SelectItem>
             </SelectContent>
@@ -106,9 +185,16 @@ export default function Liabilities() {
       </div>
 
       <div id="liabilities-content" className="space-y-6">
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        {showNoProjectMessage ? (
+          <p className="text-sm text-muted-foreground bg-muted/50 border border-border rounded-lg px-4 py-3">
+            Select a project above to view liabilities.
+          </p>
+        ) : (
+        <>
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
           <StatCard label="Total Liabilities" value={formatCurrency(totalLiabilities)} variant="destructive" />
           <StatCard label="Vendor Dues" value={formatCurrency(vendorDues)} variant="warning" />
+          <StatCard label="Contractor Dues" value={formatCurrency(contractorDues)} variant="warning" />
           <StatCard label="Salary Dues" value={formatCurrency(salaryDues)} variant="warning" />
           <StatCard label="Machinery Dues" value={formatCurrency(machineryDues)} variant="warning" />
         </div>
@@ -119,27 +205,38 @@ export default function Liabilities() {
             {liabilityBreakdownData.length === 0 ? (
               <p className="text-sm text-muted-foreground">No outstanding liabilities</p>
             ) : (
-              <ResponsiveContainer width="100%" height={300}>
-                <PieChart>
-                  <Pie
-                    data={liabilityBreakdownData}
-                    dataKey="value"
-                    nameKey="name"
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={70}
-                    outerRadius={110}
-                    paddingAngle={3}
-                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                  >
-                    {liabilityBreakdownData.map((_, i) => (
-                      <Cell key={i} fill={LIABILITY_PIE_COLORS[i % LIABILITY_PIE_COLORS.length]} stroke="hsl(var(--border))" strokeWidth={1} />
-                    ))}
-                  </Pie>
-                  <Tooltip formatter={(v: number) => formatCurrency(v)} />
-                  <Legend />
-                </PieChart>
-              </ResponsiveContainer>
+              <div className="w-full min-h-[300px] overflow-visible pr-2">
+                <ResponsiveContainer width="100%" height={300}>
+                  <PieChart margin={{ top: 12, right: 24, left: 24, bottom: 56 }}>
+                    <Pie
+                      data={liabilityBreakdownData}
+                      dataKey="value"
+                      nameKey="name"
+                      cx="50%"
+                      cy="42%"
+                      innerRadius={55}
+                      outerRadius={95}
+                      paddingAngle={3}
+                    >
+                      {liabilityBreakdownData.map((_, i) => (
+                        <Cell key={i} fill={LIABILITY_PIE_COLORS[i % LIABILITY_PIE_COLORS.length]} stroke="hsl(var(--border))" strokeWidth={1} />
+                      ))}
+                    </Pie>
+                    <Tooltip formatter={(v: number) => formatCurrency(v)} contentStyle={{ fontSize: 12 }} />
+                    <Legend
+                      layout="horizontal"
+                      align="center"
+                      verticalAlign="bottom"
+                      wrapperStyle={{ paddingTop: 12 }}
+                      formatter={(value, entry: { payload?: { value?: number } }) => {
+                        const val = entry?.payload?.value ?? 0;
+                        const pct = totalLiabilities > 0 ? (100 * val / totalLiabilities).toFixed(0) : "0";
+                        return <span className="text-xs">{value} ({pct}%)</span>;
+                      }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
             )}
           </ChartCard>
           <ChartCard title="Top 10 by Pending Amount" subtitle="Entities with highest dues">
@@ -172,23 +269,102 @@ export default function Liabilities() {
                   <th className="px-4 py-2.5 text-right text-sm font-bold uppercase tracking-wider">Billed</th>
                   <th className="px-4 py-2.5 text-right text-sm font-bold uppercase tracking-wider">Paid</th>
                   <th className="px-4 py-2.5 text-right text-sm font-bold uppercase tracking-wider">Pending</th>
+                  <th className="px-4 py-2.5 text-center text-sm font-bold uppercase tracking-wider">Action</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredVendors.map((v) => (
+                {vendorsLoading ? (
+                  <tr>
+                    <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
+                      <span className="inline-flex items-center gap-2">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Loading vendors…
+                      </span>
+                    </td>
+                  </tr>
+                ) : (
+                filteredVendors.map((v) => (
                   <tr key={v.id} className="border-b border-border hover:bg-accent/50">
-                    <td className="px-4 py-3 font-bold">{v.name}</td>
+                    <td className="px-4 py-3">
+                      <Link to={`/vendors/${v.id}?returnTo=liabilities`} className="font-bold hover:underline">{v.name}</Link>
+                    </td>
                     <td className="px-4 py-3 text-right font-mono text-sm">{formatCurrency(v.totalBilled)}</td>
                     <td className="px-4 py-3 text-right font-mono text-sm text-success">{formatCurrency(v.totalPaid)}</td>
                     <td className="px-4 py-3 text-right font-mono text-sm text-destructive font-bold">{formatCurrency(v.remaining)}</td>
+                    <td className="px-4 py-3 text-center">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="gap-1.5"
+                        disabled={v.remaining <= 0}
+                        onClick={() => setVendorPaymentVendor(v)}
+                      >
+                        <Banknote className="h-3.5 w-3.5" />
+                        Pay
+                      </Button>
+                    </td>
                   </tr>
-                ))}
+                )))}
               </tbody>
             </table>
           </div>
         </div>
 
-        {/* Salary Dues */}
+        {/* Contractor Dues */}
+        <div className="border-2 border-border">
+          <div className="border-b-2 border-border bg-secondary px-4 py-3">
+            <h2 className="text-sm font-bold uppercase tracking-wider">Contractor Pending Payments</h2>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-base">
+              <thead>
+                <tr className="border-b-2 border-border bg-primary text-primary-foreground">
+                  <th className="px-4 py-2.5 text-left text-sm font-bold uppercase tracking-wider">Contractor</th>
+                  <th className="px-4 py-2.5 text-right text-sm font-bold uppercase tracking-wider">Total</th>
+                  <th className="px-4 py-2.5 text-right text-sm font-bold uppercase tracking-wider">Paid</th>
+                  <th className="px-4 py-2.5 text-right text-sm font-bold uppercase tracking-wider">Pending</th>
+                  <th className="px-4 py-2.5 text-center text-sm font-bold uppercase tracking-wider">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {contractorsLoading ? (
+                  <tr>
+                    <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
+                      <span className="inline-flex items-center gap-2">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Loading contractors…
+                      </span>
+                    </td>
+                  </tr>
+                ) : (
+                filteredContractors.map((c) => (
+                  <tr key={c.id} className="border-b border-border hover:bg-accent/50">
+                    <td className="px-4 py-3">
+                      <Link to={`/contractors?contractorId=${c.id}&returnTo=liabilities`} className="font-bold hover:underline">{c.name}</Link>
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono text-sm">{formatCurrency(c.totalAmount)}</td>
+                    <td className="px-4 py-3 text-right font-mono text-sm text-success">{formatCurrency(c.totalPaid)}</td>
+                    <td className="px-4 py-3 text-right font-mono text-sm text-destructive font-bold">{formatCurrency(c.remaining)}</td>
+                    <td className="px-4 py-3 text-center">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="gap-1.5"
+                        disabled={c.remaining <= 0}
+                        onClick={() => setContractorPaymentContractor(c)}
+                      >
+                        <Banknote className="h-3.5 w-3.5" />
+                        Pay
+                      </Button>
+                    </td>
+                  </tr>
+                )))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Salary Dues — Fixed and Daily in one table */}
         <div className="border-2 border-border">
           <div className="border-b-2 border-border bg-secondary px-4 py-3">
             <h2 className="text-sm font-bold uppercase tracking-wider">Salary Dues</h2>
@@ -198,20 +374,53 @@ export default function Liabilities() {
               <thead>
                 <tr className="border-b-2 border-border bg-primary text-primary-foreground">
                   <th className="px-4 py-2.5 text-left text-sm font-bold uppercase tracking-wider">Employee</th>
+                  <th className="px-4 py-2.5 text-left text-sm font-bold uppercase tracking-wider">Type</th>
                   <th className="px-4 py-2.5 text-left text-sm font-bold uppercase tracking-wider">Project</th>
-                  <th className="px-4 py-2.5 text-right text-sm font-bold uppercase tracking-wider">Total Paid</th>
-                  <th className="px-4 py-2.5 text-right text-sm font-bold uppercase tracking-wider">Due</th>
+                  <th className="px-4 py-2.5 text-right text-sm font-bold uppercase tracking-wider">Total Paid (All Months)</th>
+                  <th className="px-4 py-2.5 text-right text-sm font-bold uppercase tracking-wider">Due (All Months)</th>
+                  <th className="px-4 py-2.5 text-center text-sm font-bold uppercase tracking-wider">Action</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredEmployees.map((e) => (
+                {employeesLoading ? (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
+                      <span className="inline-flex items-center gap-2">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Loading employees…
+                      </span>
+                    </td>
+                  </tr>
+                ) : filteredEmployees.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
+                      No outstanding salary dues.
+                    </td>
+                  </tr>
+                ) : (
+                filteredEmployees.map((e) => (
                   <tr key={e.id} className="border-b border-border hover:bg-accent/50">
-                    <td className="px-4 py-3 font-bold">{e.name}</td>
+                    <td className="px-4 py-3">
+                      <Link to={`/employees/${e.id}?returnTo=liabilities`} className="font-bold hover:underline">{e.name}</Link>
+                    </td>
+                    <td className="px-4 py-3 text-sm">{e.type}</td>
                     <td className="px-4 py-3 text-sm">{e.project}</td>
                     <td className="px-4 py-3 text-right font-mono text-sm">{formatCurrency(e.totalPaid ?? 0)}</td>
                     <td className="px-4 py-3 text-right font-mono text-sm text-destructive font-bold">{formatCurrency(e.totalDue ?? 0)}</td>
+                    <td className="px-4 py-3 text-center">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="gap-1.5"
+                        disabled={(e.totalDue ?? 0) <= 0}
+                        onClick={() => setEmployeePaymentEmployee(e)}
+                      >
+                        <Banknote className="h-3.5 w-3.5" />
+                        Pay
+                      </Button>
+                    </td>
                   </tr>
-                ))}
+                )))}
               </tbody>
             </table>
           </div>
@@ -230,21 +439,78 @@ export default function Liabilities() {
                   <th className="px-4 py-2.5 text-right text-sm font-bold uppercase tracking-wider">Total Cost</th>
                   <th className="px-4 py-2.5 text-right text-sm font-bold uppercase tracking-wider">Paid</th>
                   <th className="px-4 py-2.5 text-right text-sm font-bold uppercase tracking-wider">Pending</th>
+                  <th className="px-4 py-2.5 text-center text-sm font-bold uppercase tracking-wider">Action</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredMachines.map((m) => (
+                {machinesLoading ? (
+                  <tr>
+                    <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
+                      <span className="inline-flex items-center gap-2">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Loading machinery…
+                      </span>
+                    </td>
+                  </tr>
+                ) : (
+                filteredMachines.map((m) => (
                   <tr key={m.id} className="border-b border-border hover:bg-accent/50">
-                    <td className="px-4 py-3 font-bold">{m.name}</td>
+                    <td className="px-4 py-3">
+                      <Link to={`/machinery/${m.id}?returnTo=liabilities`} className="font-bold hover:underline">{m.name}</Link>
+                    </td>
                     <td className="px-4 py-3 text-right font-mono text-sm">{formatCurrency(m.totalCost)}</td>
                     <td className="px-4 py-3 text-right font-mono text-sm text-success">{formatCurrency(m.totalPaid)}</td>
                     <td className="px-4 py-3 text-right font-mono text-sm text-destructive font-bold">{formatCurrency(m.totalPending)}</td>
+                    <td className="px-4 py-3 text-center">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="gap-1.5"
+                        disabled={m.totalPending <= 0}
+                        onClick={() => setMachinePaymentMachine(m)}
+                      >
+                        <Banknote className="h-3.5 w-3.5" />
+                        Pay
+                      </Button>
+                    </td>
                   </tr>
-                ))}
+                )))}
               </tbody>
             </table>
           </div>
         </div>
+
+        {/* Payment dialogs — reuse existing dialogs */}
+      {vendorPaymentVendor && (
+        <VendorPaymentDialog
+          open
+          onOpenChange={(open) => !open && setVendorPaymentVendor(null)}
+          vendor={vendorPaymentVendor}
+          onSuccess={refetchAll}
+        />
+      )}
+      <ContractorPaymentDialog
+        open={!!contractorPaymentContractor}
+        onOpenChange={(open) => !open && setContractorPaymentContractor(null)}
+        contractor={contractorPaymentContractor}
+        remainingBalance={contractorPaymentContractor?.remaining ?? 0}
+        onSuccess={refetchAll}
+      />
+      <MachinePaymentDialog
+        open={!!machinePaymentMachine}
+        onOpenChange={(open) => !open && setMachinePaymentMachine(null)}
+        machine={machinePaymentMachine}
+        remainingBalance={machinePaymentMachine?.totalPending ?? 0}
+        onSuccess={refetchAll}
+      />
+      <EmployeeLiabilityPaymentDialog
+        open={!!employeePaymentEmployee}
+        onOpenChange={(open) => !open && setEmployeePaymentEmployee(null)}
+        employee={employeePaymentEmployee}
+        onSuccess={refetchAllAfterEmployeePayment}
+      />
+        </>
+        )}
       </div>
     </Layout>
   );

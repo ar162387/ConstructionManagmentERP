@@ -77,42 +77,6 @@ export const employees: Employee[] = [
   { id: "E005", name: "Priya Sharma", role: "Admin Staff", type: "Fixed", project: "Skyline Tower", monthlySalary: 55000, phone: "+92 99887 76659", totalPaid: 330000, totalDue: 55000 },
 ];
 
-export interface BankAccount {
-  id: string;
-  bankName: string;
-  accountNumber: string;
-  openingBalance: number;
-  currentBalance: number;
-  totalInflow: number;
-  totalOutflow: number;
-}
-
-export const bankAccounts: BankAccount[] = [
-  { id: "B001", bankName: "State Bank of India", accountNumber: "XXXX-XXXX-1234", openingBalance: 5000000, currentBalance: 8750000, totalInflow: 12000000, totalOutflow: 8250000 },
-  { id: "B002", bankName: "HDFC Bank", accountNumber: "XXXX-XXXX-5678", openingBalance: 2000000, currentBalance: 3200000, totalInflow: 5000000, totalOutflow: 3800000 },
-  { id: "B003", bankName: "ICICI Bank", accountNumber: "XXXX-XXXX-9012", openingBalance: 1000000, currentBalance: 850000, totalInflow: 2000000, totalOutflow: 2150000 },
-];
-
-export interface BankTransaction {
-  id: string;
-  date: string;
-  type: "Inflow" | "Outflow";
-  amount: number;
-  source: string;
-  destination: string;
-  mode: "Cash" | "Bank" | "Online";
-  referenceId?: string;
-  remarks?: string;
-}
-
-export const bankTransactions: BankTransaction[] = [
-  { id: "BT001", date: "2026-01-15", type: "Inflow", amount: 2000000, source: "Client Payment - Skyline", destination: "SBI Account", mode: "Bank", referenceId: "NEFT-123456", remarks: "Phase 2 payment" },
-  { id: "BT002", date: "2026-01-18", type: "Outflow", amount: 500000, source: "SBI Account", destination: "ABC Traders", mode: "Bank", referenceId: "CHQ-7890" },
-  { id: "BT003", date: "2026-01-20", type: "Outflow", amount: 180000, source: "HDFC Account", destination: "Salary Payment", mode: "Online", referenceId: "BATCH-SAL-01" },
-  { id: "BT004", date: "2026-02-01", type: "Inflow", amount: 1500000, source: "Client Payment - Green Valley", destination: "HDFC Account", mode: "Bank", referenceId: "NEFT-234567" },
-  { id: "BT005", date: "2026-02-05", type: "Outflow", amount: 75000, source: "Cash", destination: "Site Expenses", mode: "Cash", remarks: "Misc site expenses" },
-];
-
 export interface AuditLog {
   id: string;
   timestamp: string;

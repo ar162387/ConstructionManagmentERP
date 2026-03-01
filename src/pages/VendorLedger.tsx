@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, useSearchParams, Link } from "react-router-dom";
 import Layout from "@/components/Layout";
 import PageHeader from "@/components/PageHeader";
 import StatCard from "@/components/StatCard";
@@ -28,6 +28,8 @@ const PAGE_SIZE_OPTIONS = [12, 24, 50, 100];
 
 export default function VendorLedger() {
   const { vendorId } = useParams<{ vendorId: string }>();
+  const [searchParams] = useSearchParams();
+  const fromLiabilities = searchParams.get("returnTo") === "liabilities";
   const { user } = useAuth();
   const canEditDelete = user?.role !== "Site Manager";
 
@@ -75,8 +77,11 @@ export default function VendorLedger() {
 
   return (
     <Layout>
-      <Link to="/vendors" className="inline-flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground mb-4">
-        <ArrowLeft className="h-3 w-3" /> Back to Vendors
+      <Link
+        to={fromLiabilities ? "/liabilities" : "/vendors"}
+        className="inline-flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground mb-4"
+      >
+        <ArrowLeft className="h-3 w-3" /> {fromLiabilities ? "Back to Liabilities" : "Back to Vendors"}
       </Link>
 
       <PageHeader

@@ -1,6 +1,9 @@
 import mongoose from "mongoose";
 import { Project } from "../models/Project.js";
 import { User } from "../models/User.js";
+import { ItemLedgerEntry } from "../models/ItemLedgerEntry.js";
+import { NonConsumableLedgerEntry } from "../models/NonConsumableLedgerEntry.js";
+import { ContractorEntry } from "../models/ContractorEntry.js";
 import { logAudit } from "./auditService.js";
 import { roleDisplay } from "./authService.js";
 import type { AuthRequest } from "../middleware/auth.js";
@@ -26,6 +29,7 @@ export interface ProjectPayload {
   startDate: string;
   endDate: string;
   spent: number;
+  balance: number;
 }
 
 export interface CreateProjectInput {
@@ -46,7 +50,7 @@ export interface UpdateProjectInput {
   endDate?: string;
 }
 
-function toPayload(doc: { _id: mongoose.Types.ObjectId; name: string; description?: string; allocatedBudget: number; status: string; startDate?: string; endDate?: string; spent?: number }): ProjectPayload {
+function toPayload(doc: { _id: mongoose.Types.ObjectId; name: string; description?: string; allocatedBudget: number; status: string; startDate?: string; endDate?: string; spent?: number; balance?: number }): ProjectPayload {
   return {
     id: doc._id.toString(),
     name: doc.name,
@@ -56,6 +60,7 @@ function toPayload(doc: { _id: mongoose.Types.ObjectId; name: string; descriptio
     startDate: doc.startDate ?? "",
     endDate: doc.endDate ?? "",
     spent: doc.spent ?? 0,
+    balance: doc.balance ?? 0,
   };
 }
 
@@ -181,6 +186,31 @@ export async function deleteProject(actor: { userId: string; email: string; role
     const names = usersAssigned.map((u) => u.name).join(", ");
     throw new Error(
       `Cannot delete this project because it is assigned to Site Manager${usersAssigned.length > 1 ? "s" : ""}: ${names}. Reassign the manager first.`
+    );
+  }
+
+  const projectObjId = new mongoose.Types.ObjectId(id);
+
+  const consumableCount = await ItemLedgerEntry.countDocuments({ projectId: projectObjId });
+  if (consumableCount > 0) {
+    throw new Error(
+      `Cannot delete: project has consumable ledger entries (${consumableCount} entries). Remove ledger entries first.`
+    );
+  }
+
+  const nonConsumableCount = await NonConsumableLedgerEntry.countDocuments({
+    $or: [{ projectTo: projectObjId }, { projectFrom: projectObjId }],
+  });
+  if (nonConsumableCount > 0) {
+    throw new Error(
+      `Cannot delete: project has non-consumable ledger entries (${nonConsumableCount} entries). Remove ledger entries first.`
+    );
+  }
+
+  const contractorEntryCount = await ContractorEntry.countDocuments({ projectId: projectObjId });
+  if (contractorEntryCount > 0) {
+    throw new Error(
+      `Cannot delete: project has contractor ledger entries (${contractorEntryCount} entries). Remove ledger entries first.`
     );
   }
 

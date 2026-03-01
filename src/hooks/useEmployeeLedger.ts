@@ -5,6 +5,7 @@ import {
 } from "@/services/employeesService";
 import {
   getEmployeeLedger,
+  getEmployeeLedgerSnapshot,
   getAttendance,
   putAttendance,
   type ApiEmployeeLedger,
@@ -32,17 +33,16 @@ export function useEmployeeLedger(
     setLedgerLoading(true);
     try {
       const data = await getEmployeeLedger(employeeId, {
-        month,
         page: ledgerPage,
         pageSize: ledgerPageSize,
       });
-      setLedger(data);
+      setLedger((prev) => ({ ...data, snapshot: prev?.snapshot }));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load ledger");
     } finally {
       setLedgerLoading(false);
     }
-  }, [employeeId, month, ledgerPage, ledgerPageSize]);
+  }, [employeeId, ledgerPage, ledgerPageSize]);
 
   const refetchAttendance = useCallback(async () => {
     if (!employeeId) return;
@@ -98,6 +98,20 @@ export function useEmployeeLedger(
     if (!employeeId) return;
     refetchLedger();
   }, [employeeId, refetchLedger]);
+
+  useEffect(() => {
+    if (!employeeId || !month) return;
+    let cancelled = false;
+    getEmployeeLedgerSnapshot(employeeId, month)
+      .then((data) => {
+        if (cancelled) return;
+        setLedger((prev) => (prev ? { ...prev, snapshot: data.snapshot ?? undefined } : { payments: [], total: 0, snapshot: data.snapshot ?? undefined }));
+      })
+      .catch(() => {
+        if (!cancelled) setLedger((prev) => (prev ? { ...prev, snapshot: undefined } : prev));
+      });
+    return () => { cancelled = true; };
+  }, [employeeId, month]);
 
   useEffect(() => {
     if (!employeeId) return;

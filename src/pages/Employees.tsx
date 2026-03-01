@@ -5,6 +5,7 @@ import PageHeader from "@/components/PageHeader";
 import StatusBadge from "@/components/StatusBadge";
 import { formatCurrency } from "@/lib/mock-data";
 import { useAuth } from "@/context/AuthContext";
+import { useSelectedProject } from "@/context/SelectedProjectContext";
 import { useProjects } from "@/hooks/useProjects";
 import { useEmployees } from "@/hooks/useEmployees";
 import { AddEmployeeDialog } from "@/components/dialogs/AddEmployeeDialog";
@@ -20,10 +21,9 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ChevronLeft, ChevronRight, Loader2, Plus } from "lucide-react";
-import { buildMonthOptionsUpToCurrent, getFirstMonth, monthLabel, shiftMonth } from "@/lib/employee-ledger";
+import { buildMonthOptionsUpToCurrent, getFirstMonth, getLocalMonthKey, monthLabel, shiftMonth } from "@/lib/employee-ledger";
 import type { ApiEmployeeWithSnapshot } from "@/services/employeesService";
 
-const ALL_PROJECTS = "__all__";
 type PaymentStatusFilter = "All" | "Paid" | "Partial" | "Due" | "Late";
 type EmployeeTab = "Fixed" | "Daily";
 
@@ -133,21 +133,21 @@ export default function Employees() {
   const isSiteManager = currentUser?.role === "Site Manager";
   const projectFilterName = isSiteManager ? currentUser?.assignedProjectName ?? null : null;
 
-  const [selectedProjectId, setSelectedProjectId] = useState<string>(ALL_PROJECTS);
-  const [selectedMonth, setSelectedMonth] = useState<string>(new Date().toISOString().slice(0, 7));
+  const { selectedProjectId, setSelectedProjectId } = useSelectedProject();
+  const [selectedMonth, setSelectedMonth] = useState<string>(getLocalMonthKey());
   const [searchQuery, setSearchQuery] = useState("");
   const [paymentFilter, setPaymentFilter] = useState<PaymentStatusFilter>("All");
   const [addOpen, setAddOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<EmployeeTab>("Fixed");
 
-  const projectIdForApi = isSiteManager ? undefined : selectedProjectId;
+  const projectIdForApi = isSiteManager ? undefined : (selectedProjectId || undefined);
   const { employees: allEmployees, loading, error, refetch } = useEmployees(
     projectIdForApi,
     selectedMonth
   );
 
   const monthOptions = useMemo(() => buildMonthOptionsUpToCurrent(12), []);
-  const currentMonth = useMemo(() => new Date().toISOString().slice(0, 7), []);
+  const currentMonth = useMemo(() => getLocalMonthKey(), []);
   const canGoNext = selectedMonth < currentMonth;
 
   const projectsForSelector = useMemo(
@@ -182,9 +182,9 @@ export default function Employees() {
   const subtitle =
     isSiteManager && projectFilterName
       ? `Month-scoped employee payroll - ${projectFilterName}`
-      : selectedProjectId === ALL_PROJECTS
-        ? "Month-scoped employee payroll - All Projects"
-        : `Month-scoped employee payroll - ${projects.find((p) => p.id === selectedProjectId)?.name ?? "Project"}`;
+      : selectedProjectId
+        ? `Month-scoped employee payroll - ${projects.find((p) => p.id === selectedProjectId)?.name ?? "Project"}`
+        : "Month-scoped employee payroll - Select project";
 
   return (
     <Layout>
@@ -216,12 +216,11 @@ export default function Employees() {
           {!isSiteManager && (
             <div>
               <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Project</Label>
-              <Select value={selectedProjectId} onValueChange={setSelectedProjectId}>
+              <Select value={selectedProjectId || ""} onValueChange={setSelectedProjectId}>
                 <SelectTrigger className="mt-1">
-                  <SelectValue placeholder="All Projects" />
+                  <SelectValue placeholder="Select project" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={ALL_PROJECTS}>All Projects</SelectItem>
                   {projectsForSelector.map((project) => (
                     <SelectItem key={project.id} value={project.id}>
                       {project.name}

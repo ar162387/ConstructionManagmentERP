@@ -5,10 +5,12 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { MockStoreProvider } from "@/context/MockStore";
 import { AuthProvider } from "@/context/AuthContext";
+import { SelectedProjectProvider } from "@/context/SelectedProjectContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Login from "./pages/Login";
 import Index from "./pages/Index";
 import Projects from "./pages/Projects";
+import ProjectLedger from "./pages/ProjectLedger";
 import ConsumableInventory from "./pages/ConsumableInventory";
 import ItemLedger from "./pages/ItemLedger";
 import NonConsumableInventory from "./pages/NonConsumableInventory";
@@ -37,10 +39,12 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
           <AuthProvider>
+          <SelectedProjectProvider>
           <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
           <Route path="/projects" element={<ProtectedRoute><Projects /></ProtectedRoute>} />
+          <Route path="/projects/:projectId/ledger" element={<ProtectedRoute><ProjectLedger /></ProtectedRoute>} />
           <Route path="/inventory/consumable" element={<ProtectedRoute><ConsumableInventory /></ProtectedRoute>} />
           <Route path="/inventory/consumable/:itemId" element={<ProtectedRoute><ItemLedger /></ProtectedRoute>} />
           <Route path="/inventory/non-consumable" element={<ProtectedRoute><NonConsumableInventory /></ProtectedRoute>} />
@@ -50,7 +54,7 @@ const App = () => (
           <Route path="/contractors" element={<ProtectedRoute><Contractors /></ProtectedRoute>} />
           <Route path="/employees" element={<ProtectedRoute><Employees /></ProtectedRoute>} />
           <Route path="/employees/:employeeId" element={<ProtectedRoute><EmployeeLedger /></ProtectedRoute>} />
-          <Route path="/bank-accounts" element={<ProtectedRoute><BankAccounts /></ProtectedRoute>} />
+          <Route path="/bank-accounts" element={<ProtectedRoute requiredRole="Admin"><BankAccounts /></ProtectedRoute>} />
           <Route path="/expenses" element={<ProtectedRoute><Expenses /></ProtectedRoute>} />
           <Route path="/machinery" element={<ProtectedRoute><Machinery /></ProtectedRoute>} />
           <Route path="/machinery/:machineId" element={<ProtectedRoute><MachineLedger /></ProtectedRoute>} />
@@ -59,6 +63,7 @@ const App = () => (
           <Route path="/users" element={<ProtectedRoute requiredRole="Admin"><UserManagement /></ProtectedRoute>} />
           <Route path="*" element={<ProtectedRoute><NotFound /></ProtectedRoute>} />
         </Routes>
+          </SelectedProjectProvider>
           </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>

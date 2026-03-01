@@ -11,6 +11,7 @@ export interface IProject {
   startDate: string;
   endDate: string;
   spent: number;
+  balance: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -29,6 +30,7 @@ const projectSchema = new mongoose.Schema<IProject>(
     startDate: { type: String, default: "" },
     endDate: { type: String, default: "" },
     spent: { type: Number, default: 0 },
+    balance: { type: Number, default: 0, min: 0 },
   },
   { timestamps: true }
 );

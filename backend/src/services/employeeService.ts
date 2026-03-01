@@ -5,7 +5,7 @@ import { Project } from "../models/Project.js";
 import { User } from "../models/User.js";
 import { logAudit } from "./auditService.js";
 import { roleDisplay } from "./authService.js";
-import { getEmployeeTotals, getEmployeeTotalPaidOnly, getEmployeeSnapshotForMonth } from "./employeeLedgerService.js";
+import { getEmployeeTotals, getEmployeeSnapshotForMonth } from "./employeeLedgerService.js";
 import type { MonthlySnapshot } from "./employeeLedgerService.js";
 import type { EmployeeType } from "../models/Employee.js";
 
@@ -100,16 +100,22 @@ export async function listEmployees(
   const projects = await Project.find({ _id: { $in: projectIds } }).select("_id name").lean();
   const projectMap = new Map(projects.map((p) => [p._id.toString(), p.name]));
 
-  const totalsList = await Promise.all(docs.map((d) => getEmployeeTotalPaidOnly(d._id.toString())));
+  const totalsResults = await Promise.allSettled(
+    docs.map((d) => getEmployeeTotals(d._id.toString()))
+  );
+  const totalsList = totalsResults.map((r) =>
+    r.status === "fulfilled" ? r.value : { totalPaid: 0, totalDue: 0 }
+  );
   const month = options?.month?.trim();
   let snapshots: (MonthlySnapshot | undefined)[] = [];
   if (month) {
-    snapshots = await Promise.all(
+    const snapshotResults = await Promise.allSettled(
       docs.map((d) => getEmployeeSnapshotForMonth(d._id.toString(), month, d.createdAt))
     );
+    snapshots = snapshotResults.map((r) => (r.status === "fulfilled" ? r.value : undefined));
   }
   return docs.map((doc, i) => ({
-    ...toPayload(doc, projectMap.get(doc.projectId.toString()), { totalPaid: totalsList[i], totalDue: 0 }),
+    ...toPayload(doc, projectMap.get(doc.projectId.toString()), { totalPaid: totalsList[i].totalPaid, totalDue: totalsList[i].totalDue }),
     ...(snapshots[i] && { snapshot: snapshots[i] }),
   }));
 }

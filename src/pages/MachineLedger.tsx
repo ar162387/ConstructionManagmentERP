@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, useSearchParams, Link } from "react-router-dom";
 import Layout from "@/components/Layout";
 import PageHeader from "@/components/PageHeader";
 import StatCard from "@/components/StatCard";
@@ -31,6 +31,10 @@ const PAGE_SIZE_OPTIONS = [12, 24, 50, 100];
 
 export default function MachineLedger() {
   const { machineId } = useParams();
+  const [searchParams] = useSearchParams();
+  const fromLiabilities = searchParams.get("returnTo") === "liabilities";
+  const backToPath = fromLiabilities ? "/liabilities" : "/machinery";
+  const backLabel = fromLiabilities ? "Back to Liabilities" : "Back to Machinery";
   const { user: currentUser } = useAuth();
   const canDeleteEntry = currentUser?.role !== "Site Manager";
 
@@ -122,7 +126,7 @@ export default function MachineLedger() {
       <Layout>
         <div className="flex items-center justify-center py-12">
           <p className="text-muted-foreground">Invalid machine.</p>
-          <Link to="/machinery" className="ml-2 text-primary hover:underline">Back to list</Link>
+          <Link to={backToPath} className="ml-2 text-primary hover:underline">{backLabel}</Link>
         </div>
       </Layout>
     );
@@ -143,7 +147,7 @@ export default function MachineLedger() {
       <Layout>
         <div className="flex items-center justify-center py-12">
           <p className="text-muted-foreground">Machine not found.</p>
-          <Link to="/machinery" className="ml-2 text-primary hover:underline">Back to list</Link>
+          <Link to={backToPath} className="ml-2 text-primary hover:underline">{backLabel}</Link>
         </div>
       </Layout>
     );
@@ -151,8 +155,8 @@ export default function MachineLedger() {
 
   return (
     <Layout>
-      <Link to="/machinery" className="inline-flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground mb-4">
-        <ArrowLeft className="h-3 w-3" /> Back to Machinery
+      <Link to={backToPath} className="inline-flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground mb-4">
+        <ArrowLeft className="h-3 w-3" /> {backLabel}
       </Link>
 
       <PageHeader

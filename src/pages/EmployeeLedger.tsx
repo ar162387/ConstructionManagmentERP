@@ -43,6 +43,7 @@ import {
   buildMonthOptionsUpToCurrent,
   getDaysInMonth,
   getFirstMonth,
+  getLocalMonthKey,
   getMonthKey,
   monthLabel,
   type DailyAttendanceDay,
@@ -414,7 +415,11 @@ export default function EmployeeLedger() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { user: currentUser } = useAuth();
 
-  const currentMonth = new Date().toISOString().slice(0, 7);
+  const fromLiabilities = searchParams.get("returnTo") === "liabilities";
+  const backPath = fromLiabilities ? "/liabilities" : "/employees";
+  const backLabel = fromLiabilities ? "Back to Liabilities" : "Back to Employees";
+
+  const currentMonth = getLocalMonthKey();
   const urlMonth = searchParams.get("month") ?? currentMonth;
   const clampedUrlMonth = urlMonth > currentMonth ? currentMonth : urlMonth;
   const [selectedMonth, setSelectedMonth] = useState(clampedUrlMonth);
@@ -682,9 +687,9 @@ export default function EmployeeLedger() {
           title="Employee Ledger"
           subtitle="Invalid employee"
           actions={
-            <Button variant="outline" onClick={() => navigate("/employees")}>
+            <Button variant="outline" onClick={() => navigate(backPath)}>
               <ArrowLeft className="h-4 w-4 mr-1" />
-              Back to Employees
+              {backLabel}
             </Button>
           }
         />
@@ -706,9 +711,9 @@ export default function EmployeeLedger() {
       <Layout>
         <PageHeader title="Employee Ledger" subtitle="Error" />
         <p className="text-destructive">{ledgerError}</p>
-        <Button variant="outline" onClick={() => navigate("/employees")}>
+        <Button variant="outline" onClick={() => navigate(backPath)}>
           <ArrowLeft className="h-4 w-4 mr-1" />
-          Back to Employees
+          {backLabel}
         </Button>
       </Layout>
     );
@@ -721,9 +726,9 @@ export default function EmployeeLedger() {
           title="Employee Ledger"
           subtitle="Employee not found or not in your scope"
           actions={
-            <Button variant="outline" onClick={() => navigate("/employees")}>
+            <Button variant="outline" onClick={() => navigate(backPath)}>
               <ArrowLeft className="h-4 w-4 mr-1" />
-              Back to Employees
+              {backLabel}
             </Button>
           }
         />
@@ -821,7 +826,7 @@ export default function EmployeeLedger() {
       await deleteEmployee(employeeId);
       setDeleteConfirmEmployee(null);
       toast.success("Employee deleted");
-      navigate("/employees");
+      navigate(backPath);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to delete employee");
     }
@@ -863,6 +868,7 @@ export default function EmployeeLedger() {
   const subtitle = `${employee.project ?? ""} - ${employee.role}`;
   const firstMonth = getFirstMonth(employee.createdAt);
   const isBeforeEmployeeCreated = firstMonth ? selectedMonth < firstMonth : false;
+  const noRemainingDue = isBeforeEmployeeCreated || !snapshot || snapshot.remaining <= 0;
 
   return (
     <Layout>
@@ -929,9 +935,9 @@ export default function EmployeeLedger() {
                 </Button>
               </>
             )}
-            <Button variant="outline" onClick={() => navigate("/employees")}>
+            <Button variant="outline" onClick={() => navigate(backPath)}>
               <ArrowLeft className="h-4 w-4 mr-1" />
-              Back
+              {backLabel}
             </Button>
           </div>
         }
@@ -999,15 +1005,18 @@ export default function EmployeeLedger() {
       <div className="border-2 border-border p-4 mb-4">
         <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
           <h2 className="text-sm font-bold uppercase tracking-wide">Payments Ledger</h2>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <PrintExportButton title={`Payments Ledger - ${employee.name}`} printTargetId="employee-payment-ledger" />
-            <Button type="button" variant="outline" onClick={() => openPaymentDialog("partial")} disabled={isBeforeEmployeeCreated}>
+            {noRemainingDue && !isBeforeEmployeeCreated && (
+              <span className="text-sm text-muted-foreground">No remaining due for this month.</span>
+            )}
+            <Button type="button" variant="outline" onClick={() => openPaymentDialog("partial")} disabled={noRemainingDue}>
               Record Payment
             </Button>
             <Button type="button" variant="outline" onClick={() => openPaymentDialog("advance")}>
               Advance Salary
             </Button>
-            <Button type="button" variant="warning" onClick={() => openPaymentDialog("full")} disabled={isBeforeEmployeeCreated}>
+            <Button type="button" variant="warning" onClick={() => openPaymentDialog("full")} disabled={noRemainingDue}>
               Pay Full Remaining
             </Button>
           </div>
@@ -1235,7 +1244,7 @@ export default function EmployeeLedger() {
                 <Button
                   type="button"
                   variant={paymentQuickMode === "full" ? "default" : "outline"}
-                  disabled={!snapshot}
+                  disabled={!snapshot || snapshot.remaining <= 0}
                   onClick={() => {
                     setPaymentQuickMode("full");
                     if (snapshot) setPaymentAmount(String(Math.round(snapshot.remaining)));

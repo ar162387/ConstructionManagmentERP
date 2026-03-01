@@ -1,0 +1,42 @@
+import mongoose from "mongoose";
+
+export type BankTransactionType = "inflow" | "outflow";
+export type BankTransactionMode = "Cash" | "Bank" | "Online";
+
+export interface IBankTransaction {
+  _id: mongoose.Types.ObjectId;
+  accountId: mongoose.Types.ObjectId;
+  date: string;
+  type: BankTransactionType;
+  amount: number;
+  source: string;
+  destination: string;
+  projectId?: mongoose.Types.ObjectId;
+  mode: BankTransactionMode;
+  referenceId?: string;
+  remarks?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const bankTransactionSchema = new mongoose.Schema<IBankTransaction>(
+  {
+    accountId: { type: mongoose.Schema.Types.ObjectId, ref: "BankAccount", required: true },
+    date: { type: String, required: true },
+    type: { type: String, required: true, enum: ["inflow", "outflow"] },
+    amount: { type: Number, required: true, min: 0.01 },
+    source: { type: String, required: true, trim: true },
+    destination: { type: String, required: true, trim: true },
+    projectId: { type: mongoose.Schema.Types.ObjectId, ref: "Project" },
+    mode: { type: String, required: true, enum: ["Cash", "Bank", "Online"], default: "Bank" },
+    referenceId: { type: String, trim: true },
+    remarks: { type: String, trim: true },
+  },
+  { timestamps: true }
+);
+
+bankTransactionSchema.index({ accountId: 1, date: -1 });
+bankTransactionSchema.index({ projectId: 1, date: -1 });
+bankTransactionSchema.index({ date: 1 });
+
+export const BankTransaction = mongoose.model<IBankTransaction>("BankTransaction", bankTransactionSchema);

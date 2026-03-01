@@ -1,9 +1,11 @@
 import { useState, useMemo, useEffect } from "react";
+import { useSearchParams, Link } from "react-router-dom";
 import Layout from "@/components/Layout";
 import PageHeader from "@/components/PageHeader";
 import StatCard from "@/components/StatCard";
 import { formatCurrency } from "@/lib/mock-data";
 import { useAuth } from "@/context/AuthContext";
+import { useSelectedProject } from "@/context/SelectedProjectContext";
 import { useProjects } from "@/hooks/useProjects";
 import { useContractors } from "@/hooks/useContractors";
 import { useContractorLedger } from "@/hooks/useContractorLedger";
@@ -31,7 +33,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Plus, ChevronLeft, ChevronRight, Banknote, Pencil, Trash2 } from "lucide-react";
+import { getLocalMonthKey } from "@/lib/employee-ledger";
+import { Plus, ChevronLeft, ChevronRight, Banknote, Pencil, Trash2, ArrowLeft } from "lucide-react";
 import PrintExportButton from "@/components/PrintExportButton";
 import { deleteContractor } from "@/services/contractorsService";
 import { deleteContractorEntry, deleteContractorPayment } from "@/services/contractorLedgerService";
@@ -47,6 +50,11 @@ function getMonthLabel(ym: string) {
   const [y, m] = ym.split("-");
   const date = new Date(parseInt(y, 10), parseInt(m, 10) - 1, 1);
   return date.toLocaleDateString("en-IN", { month: "long", year: "numeric" });
+}
+
+function getMonthLabelFromDate(dateStr: string) {
+  const [y, m] = dateStr.split("-").map(Number);
+  return new Date(y, m - 1, 1).toLocaleDateString("en-IN", { month: "long", year: "numeric" });
 }
 
 function prevMonth(ym: string): string {
@@ -68,21 +76,37 @@ function getContractorStatusLabel(c: ApiContractorWithTotals): string {
 }
 
 export default function Contractors() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user: currentUser } = useAuth();
   const { projects } = useProjects();
   const isSiteManager = currentUser?.role === "Site Manager";
   const canEditDelete = currentUser?.role !== "Site Manager";
 
-  const [selectedProjectId, setSelectedProjectId] = useState<string>("");
+  const urlContractorId = searchParams.get("contractorId") ?? null;
+  const fromLiabilities = searchParams.get("returnTo") === "liabilities";
+
+  const { selectedProjectId, setSelectedProjectId } = useSelectedProject();
   const effectiveProjectId = isSiteManager ? (currentUser?.assignedProjectId ?? null) : (selectedProjectId || null);
 
   const { contractors, loading: contractorsLoading, error: contractorsError, refetch: refetchContractors } = useContractors(effectiveProjectId);
-  const [currentMonth, setCurrentMonth] = useState(() => new Date().toISOString().slice(0, 7));
-  const [selectedContractorId, setSelectedContractorId] = useState<string>(ALL_CONTRACTORS);
+  const [currentMonth, setCurrentMonth] = useState(() => getLocalMonthKey());
+  const [selectedContractorId, setSelectedContractorIdState] = useState<string>(ALL_CONTRACTORS);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(12);
 
-  const { ledger, loading: ledgerLoading, error: ledgerError, refetch: refetchLedger } = useContractorLedger(
+  const setSelectedContractorId = (id: string) => {
+    setSelectedContractorIdState(id);
+    setPage(1);
+    if (id === ALL_CONTRACTORS) {
+      const next = new URLSearchParams(searchParams);
+      next.delete("contractorId");
+      setSearchParams(next, { replace: true });
+    } else {
+      setSearchParams({ ...Object.fromEntries(searchParams), contractorId: id }, { replace: true });
+    }
+  };
+
+  const { ledger, loading: ledgerLoading, error: ledgerError, refetch: refetchLedger, isAllTimeMode } = useContractorLedger(
     effectiveProjectId,
     currentMonth,
     selectedContractorId === ALL_CONTRACTORS ? null : selectedContractorId,
@@ -108,12 +132,10 @@ export default function Contractors() {
     : null;
 
   useEffect(() => {
-    if (!isSiteManager && projectsForSelector.length > 0 && !selectedProjectId) {
-      setSelectedProjectId(projectsForSelector[0].id);
-    } else if (isSiteManager && currentUser?.assignedProjectId) {
-      setSelectedProjectId(currentUser.assignedProjectId);
+    if (urlContractorId && contractors.length > 0 && contractors.some((c) => c.id === urlContractorId)) {
+      setSelectedContractorIdState(urlContractorId);
     }
-  }, [isSiteManager, currentUser?.assignedProjectId, projectsForSelector, selectedProjectId]);
+  }, [urlContractorId, contractors]);
 
   useEffect(() => {
     if (selectedContractorId !== ALL_CONTRACTORS && !contractors.some((c) => c.id === selectedContractorId)) {
@@ -133,7 +155,21 @@ export default function Contractors() {
   }, [contractors]);
 
   const totalPages = ledger ? Math.max(1, Math.ceil(ledger.total / pageSize)) : 1;
-  const canGoNext = currentMonth < new Date().toISOString().slice(0, 7);
+  const canGoNext = currentMonth < getLocalMonthKey();
+
+  const kpiTotal = isAllTimeMode && selectedContractor
+    ? formatCurrency(selectedContractor.totalAmount)
+    : ledger ? formatCurrency(ledger.totalAmount) : "—";
+  const kpiPaid = isAllTimeMode && selectedContractor
+    ? formatCurrency(selectedContractor.totalPaid)
+    : ledger ? formatCurrency(ledger.totalPaid) : "—";
+  const kpiRemaining = isAllTimeMode && selectedContractor
+    ? formatCurrency(selectedContractor.remaining)
+    : ledger ? formatCurrency(ledger.remaining) : "—";
+  const kpiRemainingVariant =
+    isAllTimeMode && selectedContractor
+      ? (selectedContractor.remaining > 0 ? "destructive" : "success")
+      : (ledger && ledger.remaining > 0 ? "destructive" : "success");
 
   const handlePageSizeChange = (size: number) => {
     setPageSize(size);
@@ -191,12 +227,16 @@ export default function Contractors() {
   const handleRowClick = (row: ApiContractorLedgerRow) => {
     if (row.contractorId && selectedContractorId === ALL_CONTRACTORS) {
       setSelectedContractorId(row.contractorId);
-      setPage(1);
     }
   };
 
   return (
     <Layout>
+      {fromLiabilities && (
+        <Link to="/liabilities" className="inline-flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground mb-4">
+          <ArrowLeft className="h-3 w-3" /> Back to Liabilities
+        </Link>
+      )}
       <PageHeader
         title="Contractors"
         subtitle="Project-scoped contractors — entries and payments by month"
@@ -328,10 +368,7 @@ export default function Contractors() {
                   className="w-full min-w-[260px] h-10"
                   options={comboboxOptions}
                   value={selectedContractorId}
-                  onValueChange={(v) => {
-                    setSelectedContractorId(v ?? ALL_CONTRACTORS);
-                    setPage(1);
-                  }}
+                  onValueChange={(v) => setSelectedContractorId(v ?? ALL_CONTRACTORS)}
                   placeholder="All Contractors"
                   searchPlaceholder="Search contractors…"
                   emptyText="No contractors found."
@@ -364,33 +401,35 @@ export default function Contractors() {
               </div>
             )}
           </div>
-          <div className="flex items-center gap-2 print-hidden">
-            <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Month</Label>
-            <div className="flex items-center border-2 border-border">
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-10 w-10 rounded-none"
-                onClick={() => setCurrentMonth(prevMonth(currentMonth))}
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <span className="min-w-[140px] px-3 py-2 text-sm font-medium text-center">
-                {getMonthLabel(currentMonth)}
-              </span>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-10 w-10 rounded-none"
-                onClick={() => setCurrentMonth(nextMonth(currentMonth))}
-                disabled={!canGoNext}
-              >
-                <ChevronRight className="h-4 w-4" />
-              </Button>
+          {selectedContractorId === ALL_CONTRACTORS && (
+            <div className="flex items-center gap-2 print-hidden">
+              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Month</Label>
+              <div className="flex items-center border-2 border-border">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-10 w-10 rounded-none"
+                  onClick={() => setCurrentMonth(prevMonth(currentMonth))}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <span className="min-w-[140px] px-3 py-2 text-sm font-medium text-center">
+                  {getMonthLabel(currentMonth)}
+                </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-10 w-10 rounded-none"
+                  onClick={() => setCurrentMonth(nextMonth(currentMonth))}
+                  disabled={!canGoNext}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         {!effectiveProjectId && (
@@ -404,27 +443,18 @@ export default function Contractors() {
         {effectiveProjectId && !contractorsError && !ledgerError && (
           <>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 print-hidden">
-              <StatCard
-                label="Total Amount"
-                value={ledger ? formatCurrency(ledger.totalAmount) : "—"}
-              />
-              <StatCard
-                label="Paid Amount"
-                value={ledger ? formatCurrency(ledger.totalPaid) : "—"}
-                variant="success"
-              />
-              <StatCard
-                label="Remaining Balance"
-                value={ledger ? formatCurrency(ledger.remaining) : "—"}
-                variant={ledger && ledger.remaining > 0 ? "destructive" : "success"}
-              />
+              <StatCard label="Total Amount" value={kpiTotal} />
+              <StatCard label="Paid Amount" value={kpiPaid} variant="success" />
+              <StatCard label="Remaining Balance" value={kpiRemaining} variant={kpiRemainingVariant} />
             </div>
 
             <div className="border-2 border-border">
               <div className="border-b-2 border-border bg-secondary px-4 py-3">
                 <h2 className="text-sm font-bold uppercase tracking-wider">
-                  Ledger — {getMonthLabel(currentMonth)}
-                  {selectedContractor ? ` (${selectedContractor.name})` : ""}
+                  Ledger
+                  {selectedContractor
+                    ? ` — Full History (${selectedContractor.name})`
+                    : ` — ${getMonthLabel(currentMonth)}`}
                 </h2>
               </div>
               <div className="overflow-x-auto">
@@ -436,6 +466,9 @@ export default function Contractors() {
                       <tr className="border-b-2 border-border bg-primary text-primary-foreground">
                         {selectedContractorId === ALL_CONTRACTORS && (
                           <th className="px-4 py-2.5 text-left text-sm font-bold uppercase tracking-wider">Contractor</th>
+                        )}
+                        {selectedContractorId !== ALL_CONTRACTORS && (
+                          <th className="px-4 py-2.5 text-left text-sm font-bold uppercase tracking-wider">Month</th>
                         )}
                         <th className="px-4 py-2.5 text-left text-sm font-bold uppercase tracking-wider">Date</th>
                         <th className="px-4 py-2.5 text-left text-sm font-bold uppercase tracking-wider">Type</th>
@@ -450,10 +483,12 @@ export default function Contractors() {
                       {!ledger || ledger.rows.length === 0 ? (
                         <tr>
                           <td
-                            colSpan={selectedContractorId === ALL_CONTRACTORS ? (canEditDelete ? 6 : 5) : (canEditDelete ? 5 : 4)}
+                            colSpan={canEditDelete ? 6 : 5}
                             className="px-4 py-8 text-center text-muted-foreground"
                           >
-                            No entries or payments for this month{selectedContractor ? ` for ${selectedContractor.name}` : ""}. Add an entry above.
+                            {selectedContractor
+                              ? `No entries or payments for ${selectedContractor.name}. Add an entry above.`
+                              : `No entries or payments for this month. Add an entry above.`}
                           </td>
                         </tr>
                       ) : (
@@ -468,6 +503,9 @@ export default function Contractors() {
                               <td className="px-4 py-3">
                                 <span className="font-bold">{row.contractorName ?? "—"}</span>
                               </td>
+                            )}
+                            {selectedContractorId !== ALL_CONTRACTORS && (
+                              <td className="px-4 py-3 text-sm">{getMonthLabelFromDate(row.date)}</td>
                             )}
                             <td className="px-4 py-3 text-sm">{row.date}</td>
                             <td className="px-4 py-3">

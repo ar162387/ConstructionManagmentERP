@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
 import Layout from "@/components/Layout";
 import PageHeader from "@/components/PageHeader";
@@ -7,6 +7,7 @@ import { useConsumableItems } from "@/hooks/useConsumableItems";
 import { useStockConsumption } from "@/hooks/useStockConsumption";
 import { useProjects } from "@/hooks/useProjects";
 import { useAuth } from "@/context/AuthContext";
+import { useSelectedProject } from "@/context/SelectedProjectContext";
 import { AddConsumableItemDialog } from "@/components/dialogs/AddConsumableItemDialog";
 import { EditConsumableItemDialog } from "@/components/dialogs/EditConsumableItemDialog";
 import { StockConsumptionDialog } from "@/components/dialogs/StockConsumptionDialog";
@@ -44,7 +45,7 @@ export default function ConsumableInventory() {
   const isSiteManager = user?.role === "Site Manager";
   const assignedProjectId = user?.assignedProjectId ?? null;
 
-  const [selectedProjectId, setSelectedProjectId] = useState<string>("");
+  const { selectedProjectId, setSelectedProjectId } = useSelectedProject();
   const [searchQuery, setSearchQuery] = useState("");
   const effectiveProjectId = isSiteManager ? assignedProjectId : (selectedProjectId || null);
 
@@ -60,14 +61,6 @@ export default function ConsumableInventory() {
     }
     return projects;
   }, [isSiteManager, assignedProjectId, projects]);
-
-  useEffect(() => {
-    if (isSiteManager && assignedProjectId) {
-      setSelectedProjectId(assignedProjectId);
-    } else if (!isSiteManager && projects.length > 0 && !selectedProjectId) {
-      setSelectedProjectId(projects[0].id);
-    }
-  }, [isSiteManager, assignedProjectId, projects, selectedProjectId]);
 
   const [addItemOpen, setAddItemOpen] = useState(false);
   const [editItem, setEditItem] = useState<ApiConsumableItem | null>(null);

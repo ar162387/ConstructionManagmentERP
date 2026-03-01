@@ -19,13 +19,14 @@ interface NavItem {
 
 const companyNavItems: NavItem[] = [
   { label: "Dashboard", path: "/", icon: <LayoutDashboard className="h-4 w-4" /> },
-  { label: "Bank & Accounts", path: "/bank-accounts", icon: <Building2 className="h-4 w-4" /> },
+  { label: "Bank & Accounts", path: "/bank-accounts", icon: <Building2 className="h-4 w-4" />, minRole: "Admin" },
   { label: "User Management", path: "/users", icon: <UserCog className="h-4 w-4" />, minRole: "Admin" },
   { label: "Audit Logs", path: "/audit-logs", icon: <ClipboardList className="h-4 w-4" />, minRole: "Super Admin" },
 ];
 
 const projectNavItems: NavItem[] = [
   { label: "Projects", path: "/projects", icon: <FolderKanban className="h-4 w-4" /> },
+  { label: "Liabilities", path: "/liabilities", icon: <BarChart3 className="h-4 w-4" /> },
   {
     label: "Inventory", path: "/inventory", icon: <Package className="h-4 w-4" />,
     children: [
@@ -38,7 +39,6 @@ const projectNavItems: NavItem[] = [
   { label: "Employees", path: "/employees", icon: <Users className="h-4 w-4" /> },
   { label: "Expenses", path: "/expenses", icon: <Receipt className="h-4 w-4" /> },
   { label: "Machinery", path: "/machinery", icon: <Wrench className="h-4 w-4" /> },
-  { label: "Liabilities", path: "/liabilities", icon: <BarChart3 className="h-4 w-4" /> },
 ];
 
 export default function Layout({ children }: { children: React.ReactNode }) {

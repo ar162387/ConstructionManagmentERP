@@ -9,52 +9,50 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useMockStore } from "@/context/MockStore";
+import { createBankAccount } from "@/services/bankAccountService";
 import { toast } from "sonner";
 
 interface AddBankAccountDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onSuccess?: () => void;
 }
 
-export function AddBankAccountDialog({ open, onOpenChange }: AddBankAccountDialogProps) {
-  const { actions } = useMockStore();
-  const [bankName, setBankName] = useState("");
+export function AddBankAccountDialog({ open, onOpenChange, onSuccess }: AddBankAccountDialogProps) {
+  const [accountName, setAccountName] = useState("");
   const [accountNumber, setAccountNumber] = useState("");
   const [openingBalance, setOpeningBalance] = useState("0");
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!bankName.trim()) {
-      toast.error("Bank name is required");
+    if (!accountName.trim()) {
+      toast.error("Account name is required");
       return;
     }
     const ob = parseFloat(openingBalance);
-    if (isNaN(ob)) {
+    if (isNaN(ob) || ob < 0) {
       toast.error("Enter valid opening balance");
       return;
     }
-    actions.addBankAccount({
-      bankName: bankName.trim(),
-      accountNumber: accountNumber.trim() || "—",
-      openingBalance: ob,
-      currentBalance: ob,
-      totalInflow: 0,
-      totalOutflow: 0,
-    });
-    actions.addAuditLog({
-      timestamp: new Date().toISOString().slice(0, 19).replace("T", " "),
-      user: "admin@erp.com",
-      role: "Admin",
-      action: "Create",
-      module: "Bank & Accounts",
-      description: `Added account: ${bankName.trim()}`,
-    });
-    toast.success("Account added");
-    onOpenChange(false);
-    setBankName("");
-    setAccountNumber("");
-    setOpeningBalance("0");
+    setLoading(true);
+    try {
+      await createBankAccount({
+        name: accountName.trim(),
+        accountNumber: accountNumber.trim() || undefined,
+        openingBalance: ob,
+      });
+      toast.success("Account added");
+      onOpenChange(false);
+      setAccountName("");
+      setAccountNumber("");
+      setOpeningBalance("0");
+      onSuccess?.();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to add account");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -65,8 +63,8 @@ export function AddBankAccountDialog({ open, onOpenChange }: AddBankAccountDialo
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <Label>Bank Name *</Label>
-            <Input value={bankName} onChange={(e) => setBankName(e.target.value)} placeholder="e.g. State Bank" className="mt-1" />
+            <Label>Account Name *</Label>
+            <Input value={accountName} onChange={(e) => setAccountName(e.target.value)} placeholder="e.g. State Bank" className="mt-1" />
           </div>
           <div>
             <Label>Account Number</Label>
@@ -74,11 +72,11 @@ export function AddBankAccountDialog({ open, onOpenChange }: AddBankAccountDialo
           </div>
           <div>
             <Label>Opening Balance</Label>
-            <Input type="number" value={openingBalance} onChange={(e) => setOpeningBalance(e.target.value)} className="mt-1" />
+            <Input type="number" min={0} step="0.01" value={openingBalance} onChange={(e) => setOpeningBalance(e.target.value)} className="mt-1" />
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button type="submit" variant="warning">Add Account</Button>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>Cancel</Button>
+            <Button type="submit" variant="warning" disabled={loading}>{loading ? "Adding..." : "Add Account"}</Button>
           </DialogFooter>
         </form>
       </DialogContent>

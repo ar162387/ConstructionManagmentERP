@@ -1,10 +1,11 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
 import Layout from "@/components/Layout";
 import PageHeader from "@/components/PageHeader";
 import StatusBadge from "@/components/StatusBadge";
 import { formatCurrency } from "@/lib/mock-data";
 import { useAuth } from "@/context/AuthContext";
+import { useSelectedProject } from "@/context/SelectedProjectContext";
 import { useProjects } from "@/hooks/useProjects";
 import { useMachines } from "@/hooks/useMachines";
 import { AddMachineDialog } from "@/components/dialogs/AddMachineDialog";
@@ -34,26 +35,21 @@ import { toast } from "sonner";
 import { deleteMachine } from "@/services/machinesService";
 import type { ApiMachineWithTotals } from "@/services/machinesService";
 
-const ALL_PROJECTS = "__all__";
 const DEFAULT_PAGE_SIZE = 12;
 const PAGE_SIZE_OPTIONS = [12, 24, 50, 100];
 
 export default function Machinery() {
   const { user: currentUser } = useAuth();
   const { projects } = useProjects();
+  const { selectedProjectId, setSelectedProjectId } = useSelectedProject();
   const [addOpen, setAddOpen] = useState(false);
-  const [selectedProjectId, setSelectedProjectId] = useState<string>(ALL_PROJECTS);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
 
   const isSiteManager = currentUser?.role === "Site Manager";
   const canEditDelete = !isSiteManager;
 
-  const effectiveProjectId = useMemo(() => {
-    if (isSiteManager) return currentUser?.assignedProjectId ?? null;
-    if (selectedProjectId === ALL_PROJECTS) return null;
-    return selectedProjectId;
-  }, [isSiteManager, currentUser?.assignedProjectId, selectedProjectId]);
+  const effectiveProjectId = isSiteManager ? (currentUser?.assignedProjectId ?? null) : (selectedProjectId || null);
 
   const { machines, total, loading, error, refetch } = useMachines(
     effectiveProjectId,
@@ -73,23 +69,15 @@ export default function Machinery() {
   const subtitle =
     isSiteManager && currentUser?.assignedProjectName
       ? `Company owned & rented machinery — ${currentUser.assignedProjectName}`
-      : selectedProjectId === ALL_PROJECTS
-        ? "Company owned & rented machinery — All Projects"
-        : `Company owned & rented machinery — ${projects.find((p) => p.id === selectedProjectId)?.name ?? "Project"}`;
+      : effectiveProjectId
+        ? `Company owned & rented machinery — ${projects.find((p) => p.id === effectiveProjectId)?.name ?? "Project"}`
+        : "Company owned & rented machinery — Select project";
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const startIndexOneBased = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const endIndex = Math.min(page * pageSize, total);
 
-  const canAdd = isSiteManager ? !!currentUser?.assignedProjectId : true;
-
-  useEffect(() => {
-    if (isSiteManager && currentUser?.assignedProjectId) {
-      setSelectedProjectId(currentUser.assignedProjectId);
-    } else if (!isSiteManager && projectsForSelector.length > 0 && !projectsForSelector.some((p) => p.id === selectedProjectId) && selectedProjectId !== ALL_PROJECTS) {
-      setSelectedProjectId(ALL_PROJECTS);
-    }
-  }, [isSiteManager, currentUser?.assignedProjectId, projectsForSelector, selectedProjectId]);
+  const canAdd = !!effectiveProjectId;
 
   const handlePageSizeChange = (size: number) => {
     setPageSize(size);
@@ -162,12 +150,11 @@ export default function Machinery() {
         {!isSiteManager && (
           <div className="min-w-[200px]">
             <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Project</Label>
-            <Select value={selectedProjectId} onValueChange={(v) => { setSelectedProjectId(v); setPage(1); }}>
+            <Select value={selectedProjectId || ""} onValueChange={(v) => { setSelectedProjectId(v); setPage(1); }}>
               <SelectTrigger className="mt-1">
-                <SelectValue placeholder="All Projects" />
+                <SelectValue placeholder="Select project" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={ALL_PROJECTS}>All Projects</SelectItem>
                 {projectsForSelector.map((p) => (
                   <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
                 ))}

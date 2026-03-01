@@ -7,7 +7,26 @@ import {
   type CreateProjectInput,
   type UpdateProjectInput,
 } from "../services/projectService.js";
+import { computeProjectSpentAndLiabilities } from "../services/projectSummaryService.js";
 import type { AuthRequest } from "../middleware/auth.js";
+
+export async function getSummary(req: AuthRequest, res: Response) {
+  try {
+    const actor = req.user;
+    const projectId = req.params.projectId;
+    if (!projectId) {
+      res.status(400).json({ error: "Project ID is required" });
+      return;
+    }
+    const summary = await computeProjectSpentAndLiabilities(projectId, {
+      actor: actor ? { userId: actor.userId, role: actor.role } : undefined,
+    });
+    res.json(summary);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to get project summary";
+    res.status(500).json({ error: message });
+  }
+}
 
 export async function list(req: AuthRequest, res: Response) {
   try {

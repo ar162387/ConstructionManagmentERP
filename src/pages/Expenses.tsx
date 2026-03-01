@@ -4,6 +4,7 @@ import PageHeader from "@/components/PageHeader";
 import StatCard from "@/components/StatCard";
 import { formatCurrency } from "@/lib/mock-data";
 import { useAuth } from "@/context/AuthContext";
+import { useSelectedProject } from "@/context/SelectedProjectContext";
 import { useProjects } from "@/hooks/useProjects";
 import { useExpenses, useExpenseCategories } from "@/hooks/useExpenses";
 import { AddExpenseDialog } from "@/components/dialogs/AddExpenseDialog";
@@ -36,7 +37,6 @@ import { toast } from "sonner";
 import { deleteExpense } from "@/services/expensesService";
 import type { ApiExpense } from "@/services/expensesService";
 
-const ALL_PROJECTS = "__all__";
 const DEFAULT_PAGE_SIZE = 12;
 const PAGE_SIZE_OPTIONS = [12, 24, 50, 100];
 
@@ -47,19 +47,14 @@ export default function Expenses() {
   const assignedProjectId = currentUser?.assignedProjectId ?? null;
   const assignedProjectName = currentUser?.assignedProjectName ?? null;
 
+  const { selectedProjectId, setSelectedProjectId } = useSelectedProject();
   const [addOpen, setAddOpen] = useState(false);
-  const [selectedProjectId, setSelectedProjectId] = useState<string>(ALL_PROJECTS);
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
 
-  const effectiveProjectId =
-    isSiteManager
-      ? assignedProjectId
-      : selectedProjectId === ALL_PROJECTS
-        ? null
-        : selectedProjectId;
+  const effectiveProjectId = isSiteManager ? assignedProjectId : (selectedProjectId || null);
 
   const { expenses, total, totalAmount, loading, error, refetch } = useExpenses({
     projectId: effectiveProjectId,
@@ -115,9 +110,9 @@ export default function Expenses() {
   const subtitle =
     isSiteManager && assignedProjectName
       ? `Project-level expense tracking — ${assignedProjectName}`
-      : selectedProjectId === ALL_PROJECTS
-        ? "Project-level expense tracking — All Projects"
-        : `Project-level expense tracking — ${projects.find((p) => p.id === selectedProjectId)?.name ?? "Project"}`;
+      : effectiveProjectId
+        ? `Project-level expense tracking — ${projects.find((p) => p.id === effectiveProjectId)?.name ?? "Project"}`
+        : "Project-level expense tracking — Select project";
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const startIndexOneBased = total === 0 ? 0 : (page - 1) * pageSize + 1;
@@ -128,16 +123,6 @@ export default function Expenses() {
   useEffect(() => {
     setPage(1);
   }, [searchQuery, categoryFilter]);
-
-  useEffect(() => {
-    if (isSiteManager && assignedProjectId) {
-      setSelectedProjectId(assignedProjectId);
-    } else if (!isSiteManager && projectsForSelector.length > 0 && selectedProjectId === ALL_PROJECTS) {
-      // Keep ALL_PROJECTS as default for Admin
-    } else if (!isSiteManager && projectsForSelector.length > 0 && !projectsForSelector.some((p) => p.id === selectedProjectId)) {
-      setSelectedProjectId(projectsForSelector[0].id);
-    }
-  }, [isSiteManager, assignedProjectId, projectsForSelector, selectedProjectId]);
 
   const handlePageSizeChange = (size: number) => {
     setPageSize(size);
@@ -196,12 +181,11 @@ export default function Expenses() {
         {!isSiteManager && (
           <div className="min-w-[200px]">
             <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Project</Label>
-            <Select value={selectedProjectId} onValueChange={(v) => { setSelectedProjectId(v); setPage(1); }}>
+            <Select value={selectedProjectId || ""} onValueChange={(v) => { setSelectedProjectId(v); setPage(1); }}>
               <SelectTrigger className="mt-1">
-                <SelectValue placeholder="All Projects" />
+                <SelectValue placeholder="Select project" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={ALL_PROJECTS}>All Projects</SelectItem>
                 {projectsForSelector.map((p) => (
                   <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
                 ))}
@@ -237,7 +221,7 @@ export default function Expenses() {
         </div>
       </div>
 
-      {!isSiteManager && selectedProjectId !== ALL_PROJECTS && !effectiveProjectId && (
+      {!isSiteManager && !effectiveProjectId && (
         <p className="text-muted-foreground mb-4">Select a project to view expenses.</p>
       )}
 
@@ -247,14 +231,14 @@ export default function Expenses() {
 
       {error && <p className="text-destructive text-sm mb-4">{error}</p>}
 
-      {(effectiveProjectId !== null || selectedProjectId === ALL_PROJECTS) && !(isSiteManager && !assignedProjectId) && (
+      {effectiveProjectId && !(isSiteManager && !assignedProjectId) && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 mb-4">
           <StatCard label="Total Expense" value={formatCurrency(totalAmount)} icon={<Receipt className="h-4 w-4" />} variant="warning" title={formatCurrency(totalAmount)} />
           <StatCard label="Total Records" value={String(total)} variant="default" />
         </div>
       )}
 
-      {(effectiveProjectId !== null || selectedProjectId === ALL_PROJECTS) && !(isSiteManager && !assignedProjectId) ? (
+      {effectiveProjectId && !(isSiteManager && !assignedProjectId) ? (
         <div id="expenses-table" className="border-2 border-border">
           <div className="overflow-x-auto">
             <table className="w-full text-base">

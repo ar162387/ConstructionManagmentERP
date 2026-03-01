@@ -112,6 +112,11 @@ export async function computePayableForMonth(
   const employee = await Employee.findById(employeeId).lean();
   if (!employee) return 0;
 
+  const firstMonth = employee.createdAt
+    ? new Date(employee.createdAt).toISOString().slice(0, 7)
+    : null;
+  if (firstMonth && month < firstMonth) return 0;
+
   const attendance = await EmployeeAttendance.findOne({ employeeId: new mongoose.Types.ObjectId(employeeId), month }).lean();
 
   if (employee.type === "Fixed") {
@@ -254,19 +259,53 @@ export async function getEmployeeSnapshotForMonth(
   };
 }
 
-/** Aggregate totalPaid (sum of all payments) and totalDue (sum of remaining per month) for an employee. */
+/** Current month in YYYY-MM format. */
+function getCurrentMonth(): string {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  return `${y}-${m}`;
+}
+
+/** List months from firstMonth (inclusive) through currentMonth (inclusive). */
+function monthsFromTo(firstMonth: string, currentMonth: string): string[] {
+  if (firstMonth > currentMonth) return [];
+  const [fy, fm] = firstMonth.split("-").map(Number);
+  const [cy, cm] = currentMonth.split("-").map(Number);
+  const out: string[] = [];
+  let y = fy;
+  let m = fm;
+  while (y < cy || (y === cy && m <= cm)) {
+    out.push(`${y}-${String(m).padStart(2, "0")}`);
+    m += 1;
+    if (m > 12) {
+      m = 1;
+      y += 1;
+    }
+  }
+  return out;
+}
+
+/** Aggregate totalPaid (sum of all payments) and totalDue (sum of remaining per month) for an employee.
+ * Includes the current month in totalDue so pending salary for the current month is reflected. */
 export async function getEmployeeTotals(employeeId: string): Promise<{ totalPaid: number; totalDue: number }> {
   if (!mongoose.Types.ObjectId.isValid(employeeId)) {
     return { totalPaid: 0, totalDue: 0 };
   }
   const oid = new mongoose.Types.ObjectId(employeeId);
-  const [paidAgg, paymentMonths, attendanceMonths] = await Promise.all([
+  const currentMonth = getCurrentMonth();
+  const [employee, paidAgg, paymentMonths, attendanceMonths] = await Promise.all([
+    Employee.findById(employeeId).select("createdAt").lean(),
     EmployeePayment.aggregate([{ $match: { employeeId: oid } }, { $group: { _id: null, total: { $sum: "$amount" } } }]),
     EmployeePayment.distinct("month", { employeeId: oid }),
     EmployeeAttendance.distinct("month", { employeeId: oid }),
   ]);
   const totalPaid = paidAgg[0]?.total ?? 0;
-  const months = [...new Set([...paymentMonths, ...attendanceMonths])];
+  const firstMonth = employee?.createdAt ? new Date(employee.createdAt).toISOString().slice(0, 7) : "1970-01";
+  const monthsUpToCurrent = monthsFromTo(firstMonth, currentMonth);
+  const months = [...new Set([...paymentMonths, ...attendanceMonths, ...monthsUpToCurrent])].filter(
+    (m) => m >= firstMonth && m <= currentMonth
+  );
   let totalDue = 0;
   for (const month of months) {
     const payable = await computePayableForMonth(employeeId, month);
@@ -296,6 +335,11 @@ async function validateAddPayment(
     throw new Error("Amount must be greater than zero.");
   }
   const payable = await computePayableForMonth(employeeId, month, globalAllowedLeaves);
+  if (payable <= 0) {
+    throw new Error(
+      "No dues for this month. The employee did not exist or has no payable amount for the selected month."
+    );
+  }
   const currentPaid = await getMonthPaid(employeeId, month);
   if (currentPaid + amount > payable) {
     const maxAllowed = Math.max(0, Math.round(payable - currentPaid));
@@ -606,6 +650,36 @@ export async function getEmployeeLedger(
   }
 
   return { payments, total, snapshot };
+}
+
+/** Get only the monthly snapshot (payable, paid, remaining, paymentStatus) for an employee. Used when month changes so payments list is not refetched. */
+export async function getEmployeeLedgerSnapshot(
+  actor: { userId: string; role: string },
+  employeeId: string,
+  month: string
+): Promise<{ snapshot: MonthlySnapshot } | { snapshot: null }> {
+  if (!mongoose.Types.ObjectId.isValid(employeeId) || !month?.trim()) {
+    return { snapshot: null };
+  }
+  await ensureEmployeeAccess(actor, employeeId);
+  const payable = await computePayableForMonth(employeeId, month.trim());
+  const paid = await getMonthPaid(employeeId, month.trim());
+  const remaining = Math.max(0, payable - paid);
+  const monthEnd = monthEndDate(month.trim());
+  const lastNonAdvance = await EmployeePayment.findOne(
+    { employeeId: new mongoose.Types.ObjectId(employeeId), month: month.trim(), type: { $ne: "Advance" } }
+  )
+    .sort({ date: -1 })
+    .select("date")
+    .lean();
+  const settlementDate = lastNonAdvance?.date ?? null;
+  const snapshot: MonthlySnapshot = {
+    payable,
+    paid,
+    remaining,
+    paymentStatus: paymentStatus(payable, paid, remaining, settlementDate, monthEnd),
+  };
+  return { snapshot };
 }
 
 export interface AttendancePayload {

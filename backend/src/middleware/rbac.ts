@@ -98,3 +98,23 @@ export function requireMachineryManageAccess(req: AuthRequest, res: Response, ne
   }
   next();
 }
+
+/** Require actor to be Admin or Super Admin (for bank accounts and transactions) */
+export function requireBankAccountAccess(req: AuthRequest, res: Response, next: NextFunction) {
+  const role = req.user?.role;
+  if (role !== "super_admin" && role !== "admin") {
+    res.status(403).json({ error: "Forbidden: Bank & Accounts access requires Admin or Super Admin" });
+    return;
+  }
+  next();
+}
+
+/** Require actor to be Super Admin only (for bank account edit/delete and transaction mutations) */
+export function requireBankAccountManageAccess(req: AuthRequest, res: Response, next: NextFunction) {
+  const role = req.user?.role;
+  if (role !== "super_admin") {
+    res.status(403).json({ error: "Forbidden: edit/delete requires Super Admin" });
+    return;
+  }
+  next();
+}

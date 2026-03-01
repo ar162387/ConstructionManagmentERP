@@ -1,12 +1,8 @@
 import React, { createContext, useContext, useState, useCallback } from "react";
 import type { Employee } from "@/lib/mock-data";
 import {
-  BankAccount,
-  BankTransaction,
   AuditLog,
   User,
-  bankAccounts as initialBankAccounts,
-  bankTransactions as initialBankTransactions,
   auditLogs as initialAuditLogs,
   users as initialUsers,
 } from "@/lib/mock-data";
@@ -14,9 +10,7 @@ import {
 interface MockStoreState {
   /** Employees come from API (useEmployees); mock list is empty. */
   employees: Employee[];
-  bankAccounts: BankAccount[];
-  bankTransactions: BankTransaction[];
-  /** Machinery is now from API (useMachines); no longer in MockStore. */
+  /** Bank accounts/transactions are now from API (useBankAccounts, useBankTransactions). */
   auditLogs: AuditLog[];
   users: User[];
   /** Current logged-in user id (prototype: for role-based UI e.g. Site Manager sees only assigned project) */
@@ -25,16 +19,12 @@ interface MockStoreState {
 
 const initialState: MockStoreState = {
   employees: [],
-  bankAccounts: initialBankAccounts,
-  bankTransactions: initialBankTransactions,
   auditLogs: initialAuditLogs,
   users: initialUsers,
   currentUserId: "U002", // Admin by default; use U003 to test Site Manager (single project)
 };
 
 interface MockStoreActions {
-  addBankAccount: (a: Omit<BankAccount, "id">) => void;
-  addBankTransaction: (t: Omit<BankTransaction, "id">) => void;
   addAuditLog: (log: Omit<AuditLog, "id">) => void;
   setCurrentUserId: (userId: string) => void;
   updateUser: (id: string, data: Partial<User>) => void;
@@ -47,20 +37,6 @@ const MockStoreContext = createContext<{ state: MockStoreState; actions: MockSto
 
 export function MockStoreProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<MockStoreState>(initialState);
-
-  const addBankAccount = useCallback((a: Omit<BankAccount, "id">) => {
-    setState((prev) => ({
-      ...prev,
-      bankAccounts: [...prev.bankAccounts, { ...a, id: genId("B") }],
-    }));
-  }, []);
-
-  const addBankTransaction = useCallback((t: Omit<BankTransaction, "id">) => {
-    setState((prev) => ({
-      ...prev,
-      bankTransactions: [...prev.bankTransactions, { ...t, id: genId("BT") }],
-    }));
-  }, []);
 
   const addAuditLog = useCallback((log: Omit<AuditLog, "id">) => {
     setState((prev) => ({
@@ -88,8 +64,6 @@ export function MockStoreProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const actions: MockStoreActions = {
-    addBankAccount,
-    addBankTransaction,
     addAuditLog,
     setCurrentUserId,
     updateUser,

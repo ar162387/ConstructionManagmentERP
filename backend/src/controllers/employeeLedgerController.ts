@@ -1,6 +1,7 @@
 import { Response } from "express";
 import {
   getEmployeeLedger,
+  getEmployeeLedgerSnapshot,
   createEmployeePayment,
   updateEmployeePayment,
   deleteEmployeePayment,
@@ -27,6 +28,27 @@ export async function getLedger(req: AuthRequest, res: Response) {
     res.json(data);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to get employee ledger";
+    res.status(500).json({ error: message });
+  }
+}
+
+export async function getLedgerSnapshot(req: AuthRequest, res: Response) {
+  try {
+    const actor = req.user!;
+    const { employeeId } = req.params;
+    const month = typeof req.query.month === "string" ? req.query.month : "";
+    if (!month.trim()) {
+      res.status(400).json({ error: "month query is required" });
+      return;
+    }
+    const data = await getEmployeeLedgerSnapshot(
+      { userId: actor.userId, role: actor.role },
+      employeeId,
+      month
+    );
+    res.json(data);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to get ledger snapshot";
     res.status(500).json({ error: message });
   }
 }

@@ -17,6 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useMockStore } from "@/context/MockStore";
+import { getLocalMonthKey } from "@/lib/employee-ledger";
 import { toast } from "sonner";
 import type { Employee } from "@/lib/mock-data";
 
@@ -32,7 +33,7 @@ export function EmployeePaymentDialog({ open, onOpenChange, employee }: Employee
   const [amount, setAmount] = useState("");
   const [paymentMode, setPaymentMode] = useState<"Cash" | "Bank" | "Online">("Bank");
   const [referenceId, setReferenceId] = useState("");
-  const [forMonth, setForMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [forMonth, setForMonth] = useState(getLocalMonthKey());
   const [isLatePayment, setIsLatePayment] = useState(false);
   const [remarks, setRemarks] = useState("");
 

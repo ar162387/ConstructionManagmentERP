@@ -15,6 +15,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { useMockStore } from "@/context/MockStore";
+import { getLocalMonthKey } from "@/lib/employee-ledger";
 import { toast } from "sonner";
 import type { Employee } from "@/lib/mock-data";
 import { cn } from "@/lib/utils";
@@ -48,7 +49,7 @@ const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 export function AttendanceDialog({ open, onOpenChange, employee }: AttendanceDialogProps) {
   const { actions } = useMockStore();
-  const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [month, setMonth] = useState(getLocalMonthKey());
   // day of month -> { status, remarks? }. Absent/leave only; missing = present
   const [dayEntries, setDayEntries] = useState<Record<number, DayEntry>>({});
 

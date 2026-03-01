@@ -7,19 +7,22 @@ export function useEmployees(projectId?: string | null, month?: string | null) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const refetch = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  const refetch = useCallback(async (options?: { silent?: boolean }) => {
+    const effectiveProjectId = projectId && projectId !== "__all__" ? projectId : undefined;
+    if (!options?.silent) {
+      setLoading(true);
+      setError(null);
+    }
     try {
       const list = await listEmployees(
-        projectId && projectId !== "__all__" ? projectId : undefined,
+        effectiveProjectId,
         month ?? undefined
       );
       setEmployees(list);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load employees");
     } finally {
-      setLoading(false);
+      if (!options?.silent) setLoading(false);
     }
   }, [projectId, month]);
 

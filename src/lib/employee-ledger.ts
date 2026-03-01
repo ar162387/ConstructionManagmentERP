@@ -56,6 +56,12 @@ export interface EmployeeMonthlySnapshot {
   overtimePay: number;
 }
 
+/** Returns YYYY-MM using local timezone. Use for "current month" defaults. */
+export function getLocalMonthKey(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+}
+
 export function getMonthKey(employeeId: string, month: string) {
   return `${employeeId}:${month}`;
 }
@@ -270,7 +276,7 @@ export function computeMonthlySnapshot(
 }
 
 function deepCloneDefaultStore(): EmployeeLedgerStore {
-  const month = new Date().toISOString().slice(0, 7);
+  const month = getLocalMonthKey();
   return {
     globalAllowedLeaves: GLOBAL_ALLOWED_LEAVES_DEFAULT,
     fixedAttendanceByMonth: {
