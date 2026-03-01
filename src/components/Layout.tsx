@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, FolderKanban, Package, Wrench, Users, Building2,
-  Receipt, Truck, HardHat, ClipboardList, BarChart3, Menu, X, ChevronDown, ChevronRight, UserCog, LogOut, Zap
+  Receipt, Truck, HardHat, ClipboardList, BarChart3, Menu, X, ChevronDown, ChevronRight, UserCog, LogOut, Zap, Banknote
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -26,6 +26,7 @@ const companyNavItems: NavItem[] = [
 
 const projectNavItems: NavItem[] = [
   { label: "Projects", path: "/projects", icon: <FolderKanban className="h-4 w-4" /> },
+  { label: "Cash & Expenses", path: "/cash-expenses", icon: <Banknote className="h-4 w-4" /> },
   { label: "Liabilities", path: "/liabilities", icon: <BarChart3 className="h-4 w-4" /> },
   {
     label: "Inventory", path: "/inventory", icon: <Package className="h-4 w-4" />,

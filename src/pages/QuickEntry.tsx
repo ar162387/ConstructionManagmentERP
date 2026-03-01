@@ -202,30 +202,31 @@ export default function QuickEntry() {
         </div>
       )}
 
-      {/* Company-level */}
-      <section className="mb-8">
-        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">Company-level</h3>
-        <div className="flex flex-wrap gap-3">
-          {(user?.role === "Admin" || user?.role === "Super Admin") && (
-            <>
-              <Button variant="outline" size="sm" onClick={() => openDialog("add-bank-account")}>
-                <Building2 className="h-4 w-4 mr-2" />
-                Add Bank Account
+      {!isSiteManager && (
+        <section className="mb-8">
+          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">Company-level</h3>
+          <div className="flex flex-wrap gap-3">
+            {(user?.role === "Admin" || user?.role === "Super Admin") && (
+              <>
+                <Button variant="outline" size="sm" onClick={() => openDialog("add-bank-account")}>
+                  <Building2 className="h-4 w-4 mr-2" />
+                  Add Bank Account
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => openDialog("add-bank-transaction")}>
+                  <CreditCard className="h-4 w-4 mr-2" />
+                  Create Transaction
+                </Button>
+              </>
+            )}
+            {(user?.role === "Admin" || user?.role === "Super Admin") && (
+              <Button variant="outline" size="sm" onClick={() => openDialog("create-user")}>
+                <UserPlus className="h-4 w-4 mr-2" />
+                Create User
               </Button>
-              <Button variant="outline" size="sm" onClick={() => openDialog("add-bank-transaction")}>
-                <CreditCard className="h-4 w-4 mr-2" />
-                Create Transaction
-              </Button>
-            </>
-          )}
-          {(user?.role === "Admin" || user?.role === "Super Admin") && (
-            <Button variant="outline" size="sm" onClick={() => openDialog("create-user")}>
-              <UserPlus className="h-4 w-4 mr-2" />
-              Create User
-            </Button>
-          )}
-        </div>
-      </section>
+            )}
+          </div>
+        </section>
+      )}
 
       {/* Project-based */}
       <section>

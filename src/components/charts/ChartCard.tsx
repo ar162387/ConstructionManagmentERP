@@ -5,9 +5,11 @@ interface ChartCardProps {
   subtitle?: string;
   children: React.ReactNode;
   className?: string;
+  /** When true, content area has no padding so chart/text can use full space without overflow. */
+  noContentPadding?: boolean;
 }
 
-export function ChartCard({ title, subtitle, children, className }: ChartCardProps) {
+export function ChartCard({ title, subtitle, children, className, noContentPadding }: ChartCardProps) {
   return (
     <div
       className={cn(
@@ -19,7 +21,14 @@ export function ChartCard({ title, subtitle, children, className }: ChartCardPro
         <h3 className="text-lg font-semibold leading-none tracking-tight">{title}</h3>
         {subtitle && <p className="text-sm text-muted-foreground mt-1.5">{subtitle}</p>}
       </div>
-      <div className="p-6 min-h-[280px] flex items-center justify-center">{children}</div>
+      <div
+        className={cn(
+          "min-h-[280px] flex items-center justify-center overflow-visible",
+          noContentPadding ? "p-0" : "p-6"
+        )}
+      >
+        {children}
+      </div>
     </div>
   );
 }

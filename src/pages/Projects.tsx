@@ -11,6 +11,7 @@ import { deleteProject, getProjectSummary } from "@/services/projectsService";
 import type { ApiProject, ApiProjectSummary } from "@/services/projectsService";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -28,14 +29,16 @@ import { toast } from "sonner";
 interface ProjectCardProps {
   p: ApiProject;
   summary: ApiProjectSummary | null;
+  valuesLoading: boolean;
   canManage: boolean;
   onEdit: (project: ApiProject) => void;
   onDelete: (project: ApiProject) => void;
 }
 
-function ProjectCard({ p, summary, canManage, onEdit, onDelete }: ProjectCardProps) {
+function ProjectCard({ p, summary, valuesLoading, canManage, onEdit, onDelete }: ProjectCardProps) {
   const spent = summary?.spent ?? 0;
   const liabilities = summary?.liabilities ?? 0;
+  const balance = p.balance ?? 0;
 
   return (
     <Card className="flex flex-col border-2 border-border hover:border-primary/30 transition-colors">
@@ -59,21 +62,33 @@ function ProjectCard({ p, summary, canManage, onEdit, onDelete }: ProjectCardPro
                 <Banknote className="h-3.5 w-3.5" />
                 Balance
               </span>
-              <span className="font-mono text-xs font-medium">{formatCurrency(p.balance ?? 0)}</span>
+              {valuesLoading ? (
+                <Skeleton className="h-3.5 w-16 rounded" />
+              ) : (
+                <span className="font-mono text-xs font-medium">{formatCurrency(balance)}</span>
+              )}
             </div>
             <div className="flex items-center justify-between text-sm">
               <span className="text-muted-foreground flex items-center gap-1.5">
                 <Wallet className="h-3.5 w-3.5" />
                 Spent
               </span>
-              <span className="font-mono text-xs">{formatCurrency(spent)}</span>
+              {valuesLoading ? (
+                <Skeleton className="h-3.5 w-16 rounded" />
+              ) : (
+                <span className="font-mono text-xs">{formatCurrency(spent)}</span>
+              )}
             </div>
             <div className="flex items-center justify-between text-sm">
               <span className="text-muted-foreground flex items-center gap-1.5">
                 <AlertCircle className="h-3.5 w-3.5" />
                 Liabilities
               </span>
-              <span className="font-mono text-xs text-destructive font-medium">{formatCurrency(liabilities)}</span>
+              {valuesLoading ? (
+                <Skeleton className="h-3.5 w-16 rounded" />
+              ) : (
+                <span className="font-mono text-xs text-destructive font-medium">{formatCurrency(liabilities)}</span>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -249,6 +264,7 @@ export default function Projects() {
               key={p.id}
               p={p}
               summary={summaries[p.id] ?? null}
+              valuesLoading={summariesLoading}
               canManage={canManageProjects}
               onEdit={openEdit}
               onDelete={openDelete}

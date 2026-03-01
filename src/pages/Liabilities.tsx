@@ -199,23 +199,23 @@ export default function Liabilities() {
           <StatCard label="Machinery Dues" value={formatCurrency(machineryDues)} variant="warning" />
         </div>
 
-        {/* Charts */}
+        {/* Charts — no inner padding, auto-scale to avoid overflow */}
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <ChartCard title="Liability Mix" subtitle="Share of total outstanding by category">
+          <ChartCard title="Liability Breakdown" subtitle="Share of total outstanding by category" noContentPadding>
             {liabilityBreakdownData.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No outstanding liabilities</p>
+              <p className="text-sm text-muted-foreground py-8">No outstanding liabilities</p>
             ) : (
-              <div className="w-full min-h-[300px] overflow-visible pr-2">
-                <ResponsiveContainer width="100%" height={300}>
-                  <PieChart margin={{ top: 12, right: 24, left: 24, bottom: 56 }}>
+              <div className="w-full h-full min-h-[260px] aspect-[4/3] max-h-[380px] overflow-visible">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart margin={{ top: 8, right: 8, left: 8, bottom: 36 }}>
                     <Pie
                       data={liabilityBreakdownData}
                       dataKey="value"
                       nameKey="name"
                       cx="50%"
-                      cy="42%"
-                      innerRadius={55}
-                      outerRadius={95}
+                      cy="45%"
+                      innerRadius="40%"
+                      outerRadius="70%"
                       paddingAngle={3}
                     >
                       {liabilityBreakdownData.map((_, i) => (
@@ -227,7 +227,7 @@ export default function Liabilities() {
                       layout="horizontal"
                       align="center"
                       verticalAlign="bottom"
-                      wrapperStyle={{ paddingTop: 12 }}
+                      wrapperStyle={{ paddingTop: 8 }}
                       formatter={(value, entry: { payload?: { value?: number } }) => {
                         const val = entry?.payload?.value ?? 0;
                         const pct = totalLiabilities > 0 ? (100 * val / totalLiabilities).toFixed(0) : "0";
@@ -239,19 +239,21 @@ export default function Liabilities() {
               </div>
             )}
           </ChartCard>
-          <ChartCard title="Top 10 by Pending Amount" subtitle="Entities with highest dues">
+          <ChartCard title="Top 10 by Pending Amount" subtitle="Entities with highest dues" noContentPadding>
             {topEntitiesData.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No pending dues</p>
+              <p className="text-sm text-muted-foreground py-8">No pending dues</p>
             ) : (
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={topEntitiesData} margin={{ top: 8, right: 8, left: 0, bottom: 60 }} layout="vertical">
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis type="number" tickFormatter={(v) => (v >= 1e7 ? `${(v / 1e7).toFixed(1)}Cr` : v >= 1e5 ? `${(v / 1e5).toFixed(1)}L` : `${(v / 1e3).toFixed(0)}K`)} className="text-xs" />
-                  <YAxis type="category" dataKey="name" width={90} tick={{ fontSize: 10 }} />
-                  <Tooltip formatter={(v: number) => formatCurrency(v)} />
-                  <Bar dataKey="pending" name="Pending" radius={[0, 2, 2, 0]} fill="hsl(var(--destructive) / 0.85)" />
-                </BarChart>
-              </ResponsiveContainer>
+              <div className="w-full h-full min-h-[260px] aspect-[4/3] max-h-[380px] overflow-visible">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={topEntitiesData} margin={{ top: 4, right: 4, left: 0, bottom: 48 }} layout="vertical">
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                    <XAxis type="number" tickFormatter={(v) => (v >= 1e7 ? `${(v / 1e7).toFixed(1)}Cr` : v >= 1e5 ? `${(v / 1e5).toFixed(1)}L` : `${(v / 1e3).toFixed(0)}K`)} className="text-xs" />
+                    <YAxis type="category" dataKey="name" width={88} tick={{ fontSize: 10 }} />
+                    <Tooltip formatter={(v: number) => formatCurrency(v)} />
+                    <Bar dataKey="pending" name="Pending" radius={[0, 2, 2, 0]} fill="hsl(var(--destructive) / 0.85)" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
             )}
           </ChartCard>
         </div>

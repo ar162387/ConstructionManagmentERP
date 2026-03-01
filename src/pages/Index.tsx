@@ -262,30 +262,43 @@ export default function Index() {
               </ResponsiveContainer>
             )}
           </ChartCard>
-          <ChartCard title="Liability Breakdown" subtitle="Aggregated liabilities from all active projects">
+          <ChartCard title="Liability Breakdown" subtitle="Aggregated liabilities from all active projects" noContentPadding>
             {liabilityBreakdownData.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No outstanding liabilities</p>
+              <p className="text-sm text-muted-foreground py-8">No outstanding liabilities</p>
             ) : (
-              <ResponsiveContainer width="100%" height={280}>
-                <PieChart>
-                  <Pie
-                    data={liabilityBreakdownData}
-                    dataKey="value"
-                    nameKey="name"
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={64}
-                    outerRadius={100}
-                    paddingAngle={2}
-                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                  >
-                    {liabilityBreakdownData.map((_, i) => (
-                      <Cell key={i} fill={LIABILITY_COLORS[i % LIABILITY_COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip formatter={(v: number) => formatCurrency(v)} />
-                </PieChart>
-              </ResponsiveContainer>
+              <div className="w-full h-full min-h-[240px] aspect-[4/3] max-h-[340px] overflow-visible">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart margin={{ top: 8, right: 8, left: 8, bottom: 44 }}>
+                    <Pie
+                      data={liabilityBreakdownData}
+                      dataKey="value"
+                      nameKey="name"
+                      cx="50%"
+                      cy="45%"
+                      innerRadius="40%"
+                      outerRadius="65%"
+                      paddingAngle={2}
+                    >
+                      {liabilityBreakdownData.map((_, i) => (
+                        <Cell key={i} fill={LIABILITY_COLORS[i % LIABILITY_COLORS.length]} stroke="hsl(var(--border))" strokeWidth={1} />
+                      ))}
+                    </Pie>
+                    <Tooltip formatter={(v: number) => formatCurrency(v)} contentStyle={{ fontSize: 12 }} />
+                    <Legend
+                      layout="horizontal"
+                      align="center"
+                      verticalAlign="bottom"
+                      wrapperStyle={{ paddingTop: 8 }}
+                      formatter={(value, entry: { payload?: { value?: number } }) => {
+                        const totalL = liabilityBreakdownData.reduce((s, d) => s + d.value, 0);
+                        const val = entry?.payload?.value ?? 0;
+                        const pct = totalL > 0 ? (100 * val / totalL).toFixed(0) : "0";
+                        return <span className="text-xs">{value} ({pct}%)</span>;
+                      }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
             )}
           </ChartCard>
           <ChartCard title="Expenses by Category" subtitle="Total expenses from all active projects">

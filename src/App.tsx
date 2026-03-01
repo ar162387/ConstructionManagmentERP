@@ -28,6 +28,7 @@ import Liabilities from "./pages/Liabilities";
 import AuditLogs from "./pages/AuditLogs";
 import UserManagement from "./pages/UserManagement";
 import QuickEntry from "./pages/QuickEntry";
+import CashAndExpenses from "./pages/CashAndExpenses";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -47,6 +48,7 @@ const App = () => (
           <Route path="/quick-entry" element={<ProtectedRoute><QuickEntry /></ProtectedRoute>} />
           <Route path="/projects" element={<ProtectedRoute><Projects /></ProtectedRoute>} />
           <Route path="/projects/:projectId/ledger" element={<ProtectedRoute><ProjectLedger /></ProtectedRoute>} />
+          <Route path="/cash-expenses" element={<ProtectedRoute><CashAndExpenses /></ProtectedRoute>} />
           <Route path="/inventory/consumable" element={<ProtectedRoute><ConsumableInventory /></ProtectedRoute>} />
           <Route path="/inventory/consumable/:itemId" element={<ProtectedRoute><ItemLedger /></ProtectedRoute>} />
           <Route path="/inventory/non-consumable" element={<ProtectedRoute><NonConsumableInventory /></ProtectedRoute>} />
