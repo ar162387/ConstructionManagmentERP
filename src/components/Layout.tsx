@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, FolderKanban, Package, Wrench, Users, Building2,
-  Receipt, Truck, HardHat, ClipboardList, BarChart3, Menu, X, ChevronDown, ChevronRight, UserCog, LogOut
+  Receipt, Truck, HardHat, ClipboardList, BarChart3, Menu, X, ChevronDown, ChevronRight, UserCog, LogOut, Zap
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -68,7 +68,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const isSiteManager = (user?.role ?? "") === "Site Manager";
   const filteredCompanyItems = companyNavItems.filter(canSeeItem);
   const filteredNavGroups = isSiteManager
-    ? [{ title: "Project", items: projectNavItems }]
+    ? [
+        { title: "Company", items: filteredCompanyItems },
+        { title: "Project", items: projectNavItems },
+      ]
     : [
         { title: "Company", items: filteredCompanyItems },
         { title: "Project", items: projectNavItems },
@@ -108,6 +111,18 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         </div>
 
         <nav className="flex-1 overflow-y-auto p-3 space-y-4">
+          {/* Quick Entry — always visible at top */}
+          <Link
+            to="/quick-entry"
+            onClick={() => setSidebarOpen(false)}
+            className={cn(
+              "flex items-center gap-2.5 px-3 py-2.5 text-sm font-medium transition-colors hover:bg-accent rounded-md",
+              location.pathname === "/quick-entry" && "bg-primary text-primary-foreground font-bold"
+            )}
+          >
+            <Zap className="h-4 w-4" />
+            Quick Entry
+          </Link>
           {filteredNavGroups.map((group) => (
             <div key={group.title} className="space-y-1">
               <p className="px-3 py-1.5 text-xs font-semibold text-muted-foreground/80 tracking-wide uppercase">

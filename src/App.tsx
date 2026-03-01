@@ -27,6 +27,7 @@ import MachineLedger from "./pages/MachineLedger";
 import Liabilities from "./pages/Liabilities";
 import AuditLogs from "./pages/AuditLogs";
 import UserManagement from "./pages/UserManagement";
+import QuickEntry from "./pages/QuickEntry";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -43,6 +44,7 @@ const App = () => (
           <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
+          <Route path="/quick-entry" element={<ProtectedRoute><QuickEntry /></ProtectedRoute>} />
           <Route path="/projects" element={<ProtectedRoute><Projects /></ProtectedRoute>} />
           <Route path="/projects/:projectId/ledger" element={<ProtectedRoute><ProjectLedger /></ProtectedRoute>} />
           <Route path="/inventory/consumable" element={<ProtectedRoute><ConsumableInventory /></ProtectedRoute>} />
