@@ -30,12 +30,13 @@ interface ProjectCardProps {
   p: ApiProject;
   summary: ApiProjectSummary | null;
   valuesLoading: boolean;
-  canManage: boolean;
+  canEdit: boolean;
+  canDelete: boolean;
   onEdit: (project: ApiProject) => void;
   onDelete: (project: ApiProject) => void;
 }
 
-function ProjectCard({ p, summary, valuesLoading, canManage, onEdit, onDelete }: ProjectCardProps) {
+function ProjectCard({ p, summary, valuesLoading, canEdit, canDelete, onEdit, onDelete }: ProjectCardProps) {
   const spent = summary?.spent ?? 0;
   const liabilities = summary?.liabilities ?? 0;
   const balance = p.balance ?? 0;
@@ -98,32 +99,36 @@ function ProjectCard({ p, summary, valuesLoading, canManage, onEdit, onDelete }:
         </CardContent>
       </Link>
       <CardFooter className="pt-0 border-t border-border mt-auto flex items-center justify-end gap-2">
-        {canManage ? (
+        {canEdit || canDelete ? (
           <div className="flex items-center gap-1" onClick={(e) => e.preventDefault()}>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 text-muted-foreground hover:text-foreground"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                onEdit(p);
-              }}
-            >
-              <Pencil className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 text-muted-foreground hover:text-destructive"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                onDelete(p);
-              }}
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
+            {canEdit && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onEdit(p);
+                }}
+              >
+                <Pencil className="h-4 w-4" />
+              </Button>
+            )}
+            {canDelete && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onDelete(p);
+                }}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            )}
           </div>
         ) : null}
       </CardFooter>
@@ -265,7 +270,8 @@ export default function Projects() {
               p={p}
               summary={summaries[p.id] ?? null}
               valuesLoading={summariesLoading}
-              canManage={canManageProjects}
+              canEdit={canCreateProject}
+              canDelete={canManageProjects}
               onEdit={openEdit}
               onDelete={openDelete}
             />

@@ -866,7 +866,7 @@ export default function EmployeeLedger() {
   };
 
   const subtitle = `${employee.project ?? ""} - ${employee.role}`;
-  const firstMonth = getFirstMonth(employee.createdAt);
+  const firstMonth = getFirstMonth(employee.createdAt, employee.joiningDate);
   const isBeforeEmployeeCreated = firstMonth ? selectedMonth < firstMonth : false;
   const noRemainingDue = isBeforeEmployeeCreated || !snapshot || snapshot.remaining <= 0;
 

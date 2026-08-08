@@ -40,10 +40,6 @@ export function VendorPaymentDialog({ open, onOpenChange, vendor, onSuccess }: V
     const amt = parseFloat(amount);
     if (!date) { toast.error("Date is required"); return; }
     if (isNaN(amt) || amt <= 0) { toast.error("Amount must be positive"); return; }
-    if (amt > vendor.remaining) {
-      toast.error(`Amount ${amt.toLocaleString()} exceeds pending dues of ${vendor.remaining.toLocaleString()} PKR`);
-      return;
-    }
     setLoading(true);
     try {
       await createVendorPayment(vendor.id, {
@@ -84,12 +80,20 @@ export function VendorPaymentDialog({ open, onOpenChange, vendor, onSuccess }: V
             <Input
               type="number"
               min={0.01}
-              max={vendor.remaining}
               step="0.01"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               className="mt-1"
             />
+            {(() => {
+              const amt = parseFloat(amount);
+              const excess = !isNaN(amt) ? amt - vendor.remaining : 0;
+              return excess > 0 ? (
+                <p className="text-xs text-warning mt-1">
+                  Exceeds pending dues by {excess.toLocaleString()} PKR — will be recorded as vendor advance.
+                </p>
+              ) : null;
+            })()}
           </div>
           <div>
             <Label>Payment Mode</Label>
@@ -116,7 +120,7 @@ export function VendorPaymentDialog({ open, onOpenChange, vendor, onSuccess }: V
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button type="submit" variant="warning" disabled={loading || vendor.remaining <= 0}>
+            <Button type="submit" variant="warning" disabled={loading}>
               {loading ? "Recording…" : "Record Payment"}
             </Button>
           </DialogFooter>

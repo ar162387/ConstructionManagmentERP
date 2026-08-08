@@ -84,6 +84,10 @@ export default function Vendors() {
       toast.error(`Cannot delete "${v.name}" — they have remaining amount of ${formatCurrency(v.remaining)}. Clear the outstanding balance first.`);
       return;
     }
+    if (v.advanceBalance > 0) {
+      toast.error(`Cannot delete "${v.name}" — they hold an unused advance of ${formatCurrency(v.advanceBalance)}. Resolve it first.`);
+      return;
+    }
     setDeleteVendorState(v);
   };
 
@@ -176,6 +180,7 @@ export default function Vendors() {
                   <th className="px-4 py-2.5 text-right text-sm font-bold uppercase tracking-wider">Total Billed</th>
                   <th className="px-4 py-2.5 text-right text-sm font-bold uppercase tracking-wider">Total Paid</th>
                   <th className="px-4 py-2.5 text-right text-sm font-bold uppercase tracking-wider">Remaining</th>
+                  <th className="px-4 py-2.5 text-right text-sm font-bold uppercase tracking-wider">Advance</th>
                 {canEditDelete && <th className="px-4 py-2.5 text-right text-sm font-bold uppercase tracking-wider print-hidden">Actions</th>}
                 </tr>
               </thead>
@@ -183,7 +188,7 @@ export default function Vendors() {
                 {vendorsPagination.paginatedItems.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={canEditDelete ? 6 : 5}
+                      colSpan={canEditDelete ? 7 : 6}
                       className="px-4 py-8 text-center text-muted-foreground"
                     >
                       {vendors.length === 0
@@ -202,6 +207,7 @@ export default function Vendors() {
                       <td className="px-4 py-3 text-right font-mono text-sm">{formatCurrency(v.totalBilled)}</td>
                       <td className="px-4 py-3 text-right font-mono text-sm text-success">{formatCurrency(v.totalPaid)}</td>
                       <td className="px-4 py-3 text-right font-mono text-sm text-destructive">{v.remaining > 0 ? formatCurrency(v.remaining) : "—"}</td>
+                      <td className="px-4 py-3 text-right font-mono text-sm text-info">{v.advanceBalance > 0 ? formatCurrency(v.advanceBalance) : "—"}</td>
                   {canEditDelete && (
                     <td className="px-4 py-3 text-right print-hidden">
                           <div className="flex justify-end gap-1">
@@ -213,8 +219,8 @@ export default function Vendors() {
                               size="icon"
                               className="h-8 w-8 text-destructive hover:text-destructive"
                               onClick={() => handleDeleteClick(v)}
-                              title={v.remaining > 0 ? "Cannot delete: outstanding balance" : "Delete"}
-                              disabled={v.remaining > 0}
+                              title={v.remaining > 0 ? "Cannot delete: outstanding balance" : v.advanceBalance > 0 ? "Cannot delete: unused advance" : "Delete"}
+                              disabled={v.remaining > 0 || v.advanceBalance > 0}
                             >
                               <Trash2 className="h-3.5 w-3.5" />
                             </Button>

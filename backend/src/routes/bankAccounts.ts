@@ -9,5 +9,5 @@ bankAccountRoutes.use(requireBankAccountAccess);
 
 bankAccountRoutes.get("/", list);
 bankAccountRoutes.post("/", create);
-bankAccountRoutes.patch("/:id", requireBankAccountManageAccess, update);
+bankAccountRoutes.patch("/:id", update);
 bankAccountRoutes.delete("/:id", requireBankAccountManageAccess, remove);

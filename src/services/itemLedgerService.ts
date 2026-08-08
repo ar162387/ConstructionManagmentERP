@@ -12,6 +12,7 @@ export interface ApiItemLedgerEntry {
   totalPrice: number;
   paidAmount: number;
   remaining: number;
+  advanceGenerated: number;
   biltyNumber?: string;
   vehicleNumber?: string;
   paymentMethod: "Cash" | "Bank" | "Online";

@@ -19,6 +19,8 @@ export interface ApiEmployee {
   totalPaid?: number;
   totalDue?: number;
   createdAt?: string;
+  /** User-specified "YYYY-MM-DD" date the employee actually joined; overrides createdAt as the No-Data cutoff. */
+  joiningDate?: string;
 }
 
 export interface CreateEmployeeInput {
@@ -29,6 +31,7 @@ export interface CreateEmployeeInput {
   monthlySalary?: number;
   dailyRate?: number;
   phone?: string;
+  joiningDate?: string;
 }
 
 export interface UpdateEmployeeInput {
@@ -38,6 +41,7 @@ export interface UpdateEmployeeInput {
   monthlySalary?: number;
   dailyRate?: number;
   phone?: string;
+  joiningDate?: string;
 }
 
 export interface AttendanceSnapshotFixed {

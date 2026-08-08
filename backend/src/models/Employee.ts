@@ -11,6 +11,9 @@ export interface IEmployee {
   monthlySalary?: number;
   dailyRate?: number;
   phone: string;
+  /** Optional user-specified "YYYY-MM-DD" date the employee actually joined/started.
+   *  When set, this (not createdAt) is used as the cutoff for which months have payable salary/attendance data. */
+  joiningDate?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -24,6 +27,7 @@ const employeeSchema = new mongoose.Schema<IEmployee>(
     monthlySalary: { type: Number, min: 0 },
     dailyRate: { type: Number, min: 0 },
     phone: { type: String, default: "", trim: true },
+    joiningDate: { type: String, trim: true },
   },
   { timestamps: true }
 );

@@ -14,6 +14,8 @@ export interface VendorPaymentPayload {
   date: string;
   amount: number;
   paymentMethod: "Cash" | "Bank" | "Online";
+  source: "external" | "advance";
+  advancePortion: number;
   referenceId?: string;
   remarks?: string;
 }
@@ -22,6 +24,15 @@ export interface CreateVendorPaymentInput {
   date: string;
   amount: number;
   paymentMethod: "Cash" | "Bank" | "Online";
+  /** "external" (default) = fresh payment; any excess over the vendor's remaining becomes
+   *  advance. "advance" = settle an outstanding due by drawing down the vendor's existing
+   *  advance balance instead of paying fresh money. */
+  source?: "external" | "advance";
+  /** Pins this payment to one specific ItemLedgerEntry so FIFO settles that bill directly
+   *  instead of redirecting the money to whichever bill happens to be oldest. Must belong to
+   *  this vendor. Typically used with source "advance" ("apply this advance to this delivery"),
+   *  but not restricted to it. */
+  targetEntryId?: string;
   referenceId?: string;
   remarks?: string;
 }
@@ -37,11 +48,17 @@ export interface VendorLedgerRow {
   totalPrice?: number;
   paidAmount?: number;
   remaining?: number;
+  /** For purchase rows: how much of paidAmount exceeded totalPrice and became vendor advance */
+  advanceGenerated?: number;
   /** For payment rows */
   amount?: number;
+  /** For payment rows: "external" = fresh payment, "advance" = settled from existing advance balance */
+  source?: "external" | "advance";
   paymentMethod: "Cash" | "Bank" | "Online";
   referenceId?: string;
   remarks?: string;
+  /** Cumulative cash disbursed to the vendor as of this row's date (previousBalance + net cash paid/advance-applied up to and including this row). */
+  runningTotal: number;
 }
 
 function toPayload(doc: {
@@ -50,6 +67,8 @@ function toPayload(doc: {
   date: string;
   amount: number;
   paymentMethod: "Cash" | "Bank" | "Online";
+  source: "external" | "advance";
+  advancePortion: number;
   referenceId?: string;
   remarks?: string;
 }): VendorPaymentPayload {
@@ -59,6 +78,8 @@ function toPayload(doc: {
     date: doc.date,
     amount: doc.amount,
     paymentMethod: doc.paymentMethod,
+    source: doc.source,
+    advancePortion: doc.advancePortion,
     referenceId: doc.referenceId,
     remarks: doc.remarks,
   };
@@ -69,6 +90,8 @@ const DEFAULT_PAGE_SIZE = 12;
 export interface GetVendorLedgerOptions {
   page?: number;
   pageSize?: number;
+  startDate?: string;
+  endDate?: string;
 }
 
 /**
@@ -83,13 +106,25 @@ export async function getVendorLedger(
   totalBilled: number;
   totalPaid: number;
   remaining: number;
+  /** Vendor's current advance balance — stored/incremental (see Vendor.advanceBalance), not
+   *  recomputed from raw rows like the other totals here. */
+  advanceBalance: number;
+  /** Cumulative cash disbursed carried in from before startDate (0 when no startDate filter is applied). */
+  previousBalance: number;
   total: number;
 }> {
   if (!mongoose.Types.ObjectId.isValid(vendorId)) {
-    return { rows: [], totalBilled: 0, totalPaid: 0, remaining: 0, total: 0 };
+    return { rows: [], totalBilled: 0, totalPaid: 0, remaining: 0, advanceBalance: 0, previousBalance: 0, total: 0 };
   }
 
-  const [ledgerEntries, payments] = await Promise.all([
+  const startDate = options?.startDate?.trim() || undefined;
+  const endDate = options?.endDate?.trim() || undefined;
+
+  // Stats (totalBilled/totalPaid/remaining/advanceBalance) always reflect the vendor's full
+  // history — only the displayed rows and the running balance react to the date range, exactly
+  // like the Machinery ledger (getMachineTotals is all-time; only rows are range-filtered).
+  const [vendor, ledgerEntries, payments] = await Promise.all([
+    Vendor.findById(vendorId).select("advanceBalance").lean(),
     ItemLedgerEntry.find({ vendorId }).sort({ date: -1 }).lean(),
     VendorPayment.find({ vendorId }).sort({ date: -1 }).lean(),
   ]);
@@ -113,9 +148,11 @@ export async function getVendorLedger(
       totalPrice: e.totalPrice,
       paidAmount: e.paidAmount,
       remaining: e.remaining,
+      advanceGenerated: e.advanceGenerated,
       paymentMethod: e.paymentMethod,
       referenceId: e.referenceId,
       remarks: e.remarks,
+      runningTotal: 0, // filled in below
     };
   });
 
@@ -130,31 +167,81 @@ export async function getVendorLedger(
     }
   }
 
+  // `totalPaid` (display stat) counts every dollar ever handed to the vendor, including the
+  // portion of an overpayment that became advance instead of settling a due. `remaining`
+  // must NOT be reduced by that advance-generating portion — only by whatever actually applied
+  // against an outstanding due — so the two are tracked separately.
   let totalPaidFromPayments = 0;
+  let totalAppliedToRemainingFromPayments = 0;
   const paymentRows: VendorLedgerRow[] = payments.map((p) => {
-    totalPaidFromPayments += p.amount;
+    const isAdvance = p.source === "advance";
+    if (!isAdvance) totalPaidFromPayments += p.amount;
+    totalAppliedToRemainingFromPayments += isAdvance ? p.amount : p.amount - (p.advancePortion ?? 0);
     return {
       type: "payment",
       id: p._id.toString(),
       date: p.date,
       amount: p.amount,
+      source: p.source ?? "external",
       paymentMethod: p.paymentMethod,
       referenceId: p.referenceId,
       remarks: p.remarks,
+      runningTotal: 0, // filled in below
     };
   });
 
   const totalPaid = totalPaidFromLedger + totalPaidFromPayments;
-  const remaining = Math.max(0, totalBilled - totalPaid);
+  const remaining = Math.max(0, totalBilled - totalPaidFromLedger - totalAppliedToRemainingFromPayments);
 
-  const allRows = [...purchaseRows, ...paymentRows].sort((a, b) => b.date.localeCompare(a.date));
+  // Running "Balance" (cumulative cash disbursed to the vendor): walk every row chronologically
+  // (ascending), from raw stored fields — not the FIFO-redistributed display values above. Each
+  // purchase adds whatever cash actually changed hands for it (its bill-settling portion plus
+  // whatever became advance — i.e. exactly what was typed in as paidAmount, capped/overflowed
+  // into paidAmount+advanceGenerated, which always sums back to the raw amount paid). A fresh
+  // external payment adds more cash out. An advance-applied payment isn't new cash paid, nor is
+  // it a refund — it's an existing credit (already counted as cash out when it was generated)
+  // being spent on a bill instead of sitting unused, so it leaves the running total untouched.
+  const ascendingRaw = [
+    ...ledgerEntries.map((e) => ({
+      key: `purchase:${e._id.toString()}`,
+      id: e._id.toString(),
+      date: e.date,
+      delta: e.paidAmount + (e.advanceGenerated ?? 0),
+    })),
+    ...payments.map((p) => ({
+      key: `payment:${p._id.toString()}`,
+      id: p._id.toString(),
+      date: p.date,
+      delta: p.source === "advance" ? 0 : p.amount,
+    })),
+  ].sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
+
+  const previousBalance = startDate
+    ? ascendingRaw.filter((r) => r.date < startDate).reduce((s, r) => s + r.delta, 0)
+    : 0;
+
+  const runningByKey = new Map<string, number>();
+  let running = previousBalance;
+  for (const r of ascendingRaw) {
+    if (startDate && r.date < startDate) continue;
+    if (endDate && r.date > endDate) continue;
+    running += r.delta;
+    runningByKey.set(r.key, running);
+  }
+
+  const allRows = [...purchaseRows, ...paymentRows]
+    .filter((r) => (!startDate || r.date >= startDate) && (!endDate || r.date <= endDate))
+    .map((r) => ({ ...r, runningTotal: runningByKey.get(`${r.type}:${r.id}`) ?? previousBalance }))
+    // Newest first; same-day rows tie-break on Mongo ObjectId (its hex prefix is a creation
+    // timestamp), so same-date entries still land newest-created-first deterministically.
+    .sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
   const total = allRows.length;
   const pageSize = Math.min(Math.max(1, options?.pageSize ?? DEFAULT_PAGE_SIZE), 100);
   const page = Math.max(1, options?.page ?? 1);
   const start = (page - 1) * pageSize;
   const rows = allRows.slice(start, start + pageSize);
 
-  return { rows, totalBilled, totalPaid, remaining, total };
+  return { rows, totalBilled, totalPaid, remaining, advanceBalance: vendor?.advanceBalance ?? 0, previousBalance, total };
 }
 
 export async function createVendorPayment(
@@ -170,11 +257,35 @@ export async function createVendorPayment(
   const vendor = await Vendor.findById(vendorId).lean();
   if (!vendor) throw new Error("Vendor not found");
 
+  let targetEntryId: string | undefined;
+  if (input.targetEntryId) {
+    if (!mongoose.Types.ObjectId.isValid(input.targetEntryId)) throw new Error("Invalid target entry ID");
+    const targetEntry = await ItemLedgerEntry.findById(input.targetEntryId).select("vendorId").lean();
+    if (!targetEntry || targetEntry.vendorId.toString() !== vendorId) {
+      throw new Error("Target entry does not belong to this vendor");
+    }
+    targetEntryId = input.targetEntryId;
+  }
+
+  const source = input.source ?? "external";
   const { remaining } = await getVendorLedger(vendorId);
-  if (input.amount > remaining) {
-    throw new Error(
-      `Payment amount ${input.amount.toLocaleString()} exceeds vendor remaining balance of ${remaining.toLocaleString()}`
-    );
+
+  let advancePortion = 0;
+  if (source === "advance") {
+    if (input.amount > vendor.advanceBalance) {
+      throw new Error(
+        `Amount ${input.amount.toLocaleString()} exceeds vendor advance balance of ${vendor.advanceBalance.toLocaleString()}`
+      );
+    }
+    if (input.amount > remaining) {
+      throw new Error(
+        `Amount ${input.amount.toLocaleString()} exceeds vendor remaining balance of ${remaining.toLocaleString()} — there's nothing outstanding to apply it to`
+      );
+    }
+  } else {
+    // External payment: whatever exceeds the current remaining becomes a new advance
+    // instead of being blocked.
+    advancePortion = Math.max(0, input.amount - remaining);
   }
 
   const session = await mongoose.startSession();
@@ -188,6 +299,9 @@ export async function createVendorPayment(
             date: input.date,
             amount: input.amount,
             paymentMethod: input.paymentMethod,
+            source,
+            advancePortion,
+            targetEntryId,
             referenceId: input.referenceId?.trim() || undefined,
             remarks: input.remarks?.trim() || undefined,
           },
@@ -195,16 +309,31 @@ export async function createVendorPayment(
         { session }
       );
 
-      await Vendor.findByIdAndUpdate(
-        vendorId,
-        {
-          $inc: {
-            totalPaid: input.amount,
-            remaining: -input.amount,
+      if (source === "advance") {
+        await Vendor.findByIdAndUpdate(
+          vendorId,
+          {
+            $inc: {
+              remaining: -input.amount,
+              advanceBalance: -input.amount,
+            },
           },
-        },
-        { session }
-      );
+          { session }
+        );
+      } else {
+        const appliedToRemaining = input.amount - advancePortion;
+        await Vendor.findByIdAndUpdate(
+          vendorId,
+          {
+            $inc: {
+              totalPaid: input.amount,
+              remaining: -appliedToRemaining,
+              advanceBalance: advancePortion,
+            },
+          },
+          { session }
+        );
+      }
 
       result = toPayload(payment);
     });
@@ -238,19 +367,48 @@ export async function deleteVendorPayment(
   const existing = await VendorPayment.findById(id).lean();
   if (!existing) throw new Error("Payment not found");
 
+  const vendor = await Vendor.findById(existing.vendorId).lean();
+  if (!vendor) throw new Error("Vendor not found");
+
+  const source = existing.source ?? "external";
+  if (source === "advance") {
+    // Reversing an advance-release just gives the balance and the due back.
+  } else if ((existing.advancePortion ?? 0) > vendor.advanceBalance) {
+    // This payment's advance portion has since been spent (via an "Apply Advance" payment) —
+    // reversing it now would push advanceBalance negative.
+    throw new Error(
+      `Cannot delete this payment: ${(existing.advancePortion ?? 0).toLocaleString()} of the advance it generated has already been applied elsewhere. Reverse those first.`
+    );
+  }
+
   const session = await mongoose.startSession();
   try {
     await session.withTransaction(async () => {
-      await Vendor.findByIdAndUpdate(
-        existing.vendorId,
-        {
-          $inc: {
-            totalPaid: -existing.amount,
-            remaining: existing.amount,
+      if (source === "advance") {
+        await Vendor.findByIdAndUpdate(
+          existing.vendorId,
+          {
+            $inc: {
+              remaining: existing.amount,
+              advanceBalance: existing.amount,
+            },
           },
-        },
-        { session }
-      );
+          { session }
+        );
+      } else {
+        const appliedToRemaining = existing.amount - (existing.advancePortion ?? 0);
+        await Vendor.findByIdAndUpdate(
+          existing.vendorId,
+          {
+            $inc: {
+              totalPaid: -existing.amount,
+              remaining: appliedToRemaining,
+              advanceBalance: -(existing.advancePortion ?? 0),
+            },
+          },
+          { session }
+        );
+      }
       await VendorPayment.findByIdAndDelete(id, { session });
     });
   } finally {

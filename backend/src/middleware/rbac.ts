@@ -29,11 +29,21 @@ export function requireProjectCreateAccess(req: AuthRequest, res: Response, next
   next();
 }
 
-/** Require actor to be Super Admin only (for project edit/delete) */
-export function requireProjectManageAccess(req: AuthRequest, res: Response, next: NextFunction) {
+/** Require actor to be Admin or Super Admin (for project edit) */
+export function requireProjectEditAccess(req: AuthRequest, res: Response, next: NextFunction) {
+  const role = req.user?.role;
+  if (role !== "super_admin" && role !== "admin") {
+    res.status(403).json({ error: "Forbidden: project edit access required" });
+    return;
+  }
+  next();
+}
+
+/** Require actor to be Super Admin only (for project delete) */
+export function requireProjectDeleteAccess(req: AuthRequest, res: Response, next: NextFunction) {
   const role = req.user?.role;
   if (role !== "super_admin") {
-    res.status(403).json({ error: "Forbidden: project manage access required" });
+    res.status(403).json({ error: "Forbidden: project delete access required" });
     return;
   }
   next();

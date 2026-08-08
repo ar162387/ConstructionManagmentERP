@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { authMiddleware } from "../middleware/auth.js";
-import { requireProjectCreateAccess, requireProjectManageAccess } from "../middleware/rbac.js";
+import { requireProjectCreateAccess, requireProjectEditAccess, requireProjectDeleteAccess } from "../middleware/rbac.js";
 import { list, create, update, remove, getSummary } from "../controllers/projectsController.js";
 import { getReport as getCashExpensesReport, getEntityLedger as getCashExpensesEntityLedger } from "../controllers/cashExpensesReportController.js";
 
@@ -12,5 +12,5 @@ projectRoutes.get("/:projectId/summary", getSummary);
 projectRoutes.get("/:projectId/cash-expenses-report", getCashExpensesReport);
 projectRoutes.get("/:projectId/cash-expenses-report/ledger", getCashExpensesEntityLedger);
 projectRoutes.post("/", requireProjectCreateAccess, create);
-projectRoutes.patch("/:id", requireProjectManageAccess, update);
-projectRoutes.delete("/:id", requireProjectManageAccess, remove);
+projectRoutes.patch("/:id", requireProjectEditAccess, update);
+projectRoutes.delete("/:id", requireProjectDeleteAccess, remove);

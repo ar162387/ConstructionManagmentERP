@@ -67,6 +67,7 @@ function formatAmount(value: number) {
 export default function BankAccounts() {
   const { user } = useAuth();
   const isSuperAdmin = user?.role === "Super Admin";
+  const isAdminOrAbove = user?.role === "Admin" || user?.role === "Super Admin";
 
   const { accounts, loading: accountsLoading, error: accountsError, refetch: refetchAccounts } = useBankAccounts();
   const { projects } = useProjects();
@@ -312,7 +313,7 @@ export default function BankAccounts() {
               <Printer className="h-4 w-4 mr-1" />
               Print
             </Button>
-            <Button variant="outline" size="sm" onClick={() => setAddTxOpen(true)} disabled={!isSuperAdmin}>
+            <Button variant="outline" size="sm" onClick={() => setAddTxOpen(true)} disabled={!isAdminOrAbove}>
               Add Transaction
             </Button>
             <Button variant="warning" size="sm" onClick={() => setAddAccountOpen(true)}>
@@ -405,7 +406,7 @@ export default function BankAccounts() {
                   <p className="font-semibold">{acc.name}</p>
                   <div className="flex items-center gap-1">
                     <span className="text-xs font-mono text-muted-foreground">{acc.accountNumber}</span>
-                    {isSuperAdmin && (
+                    {isAdminOrAbove && (
                       <>
                         <Button
                           variant="ghost"
@@ -418,14 +419,16 @@ export default function BankAccounts() {
                         >
                           <Pencil className="h-4 w-4" />
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                          onClick={() => setDeleteAccount(acc)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        {isSuperAdmin && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                            onClick={() => setDeleteAccount(acc)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
                       </>
                     )}
                   </div>

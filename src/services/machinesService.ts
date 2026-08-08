@@ -138,6 +138,8 @@ export interface ApiMachineLedgerEntryRow {
   paidAmount: number;
   remaining: number;
   remarks?: string;
+  /** Running balance owed as of this row's date. */
+  runningTotal: number;
 }
 
 /** Separate row for each payment so the record shows "on this date, payment was made" */
@@ -148,6 +150,8 @@ export interface ApiMachineLedgerPaymentRow {
   amount: number;
   paymentMethod?: "Cash" | "Bank" | "Online";
   referenceId?: string;
+  /** Running balance owed as of this row's date. */
+  runningTotal: number;
 }
 
 export type ApiMachineLedgerRow = ApiMachineLedgerEntryRow | ApiMachineLedgerPaymentRow;
@@ -159,6 +163,8 @@ export interface ApiMachineLedgerResult {
   totalCost: number;
   totalPaid: number;
   remaining: number;
+  /** Opening balance owed carried in from before startDate (0 when no date filter is applied). */
+  previousBalance: number;
 }
 
 /** @deprecated Use ApiMachineLedgerEntryRow for entry rows */
@@ -180,11 +186,13 @@ export interface CreateMachinePaymentInput {
 
 export async function getMachineLedger(
   machineId: string,
-  params?: { page?: number; pageSize?: number }
+  params?: { page?: number; pageSize?: number; startDate?: string; endDate?: string }
 ): Promise<ApiMachineLedgerResult> {
   const search = new URLSearchParams();
   if (params?.page != null) search.set("page", String(params.page));
   if (params?.pageSize != null) search.set("pageSize", String(params.pageSize));
+  if (params?.startDate) search.set("startDate", params.startDate);
+  if (params?.endDate) search.set("endDate", params.endDate);
   const q = search.toString();
   return api<ApiMachineLedgerResult>(`/api/machines/${machineId}/ledger${q ? `?${q}` : ""}`);
 }

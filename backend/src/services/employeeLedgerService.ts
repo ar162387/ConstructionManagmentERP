@@ -25,6 +25,13 @@ function monthEndDate(month: string): string {
   return `${month}-${String(days).padStart(2, "0")}`;
 }
 
+/** First month (YYYY-MM) the employee is eligible for salary/attendance data.
+ * Prefers the user-specified joiningDate over the DB-insert createdAt timestamp. */
+function effectiveFirstMonth(employee: { joiningDate?: string; createdAt?: Date }): string | null {
+  if (employee.joiningDate?.trim()) return employee.joiningDate.trim().slice(0, 7);
+  return employee.createdAt ? new Date(employee.createdAt).toISOString().slice(0, 7) : null;
+}
+
 /** Build day -> status map from fixed entries */
 function fixedMap(attendance: IEmployeeAttendance | null): Record<number, string> {
   const out: Record<number, string> = {};
@@ -112,9 +119,7 @@ export async function computePayableForMonth(
   const employee = await Employee.findById(employeeId).lean();
   if (!employee) return 0;
 
-  const firstMonth = employee.createdAt
-    ? new Date(employee.createdAt).toISOString().slice(0, 7)
-    : null;
+  const firstMonth = effectiveFirstMonth(employee);
   if (firstMonth && month < firstMonth) return 0;
 
   const attendance = await EmployeeAttendance.findOne({ employeeId: new mongoose.Types.ObjectId(employeeId), month }).lean();
@@ -166,11 +171,9 @@ export async function getAttendanceSummaryForMonth(
   month: string,
   globalAllowedLeaves: number = GLOBAL_ALLOWED_LEAVES_DEFAULT
 ): Promise<AttendanceSummary> {
-  const employee = await Employee.findById(employeeId).select("type createdAt").lean();
+  const employee = await Employee.findById(employeeId).select("type createdAt joiningDate").lean();
   if (!employee) return undefined;
-  const firstMonth = employee.createdAt
-    ? new Date(employee.createdAt).toISOString().slice(0, 7)
-    : null;
+  const firstMonth = effectiveFirstMonth(employee);
   if (firstMonth && month < firstMonth) return undefined;
 
   const attendance = await EmployeeAttendance.findOne({ employeeId: new mongoose.Types.ObjectId(employeeId), month }).lean();
@@ -219,20 +222,21 @@ export async function getEmployeeTotalPaidOnly(employeeId: string): Promise<numb
 }
 
 /** Get snapshot (payable, paid, remaining, paymentStatus) for one employee for one month.
- * Returns undefined when the month is before the employee's creation (no data for that period).
- * Pass employeeCreatedAt when caller already has it to avoid extra Employee.findById. */
+ * Returns undefined when the month is before the employee's effective first month (no data for that period).
+ * Pass employeeCreatedAt/employeeJoiningDate when caller already has them to avoid extra Employee.findById. */
 export async function getEmployeeSnapshotForMonth(
   employeeId: string,
   month: string,
-  employeeCreatedAt?: Date
+  employeeCreatedAt?: Date,
+  employeeJoiningDate?: string
 ): Promise<MonthlySnapshot | undefined> {
   let firstMonth: string | null = null;
-  if (employeeCreatedAt != null) {
-    firstMonth = new Date(employeeCreatedAt).toISOString().slice(0, 7);
+  if (employeeCreatedAt != null || employeeJoiningDate != null) {
+    firstMonth = effectiveFirstMonth({ createdAt: employeeCreatedAt, joiningDate: employeeJoiningDate });
   } else {
-    const employee = await Employee.findById(employeeId).select("createdAt").lean();
+    const employee = await Employee.findById(employeeId).select("createdAt joiningDate").lean();
     if (!employee) return undefined;
-    firstMonth = employee.createdAt ? new Date(employee.createdAt).toISOString().slice(0, 7) : null;
+    firstMonth = effectiveFirstMonth(employee);
   }
   if (firstMonth && month < firstMonth) return undefined;
 
@@ -297,13 +301,13 @@ export async function getEmployeeTotals(employeeId: string): Promise<{ totalPaid
   const oid = new mongoose.Types.ObjectId(employeeId);
   const currentMonth = getCurrentMonth();
   const [employee, paidAgg, paymentMonths, attendanceMonths] = await Promise.all([
-    Employee.findById(employeeId).select("createdAt").lean(),
+    Employee.findById(employeeId).select("createdAt joiningDate").lean(),
     EmployeePayment.aggregate([{ $match: { employeeId: oid } }, { $group: { _id: null, total: { $sum: "$amount" } } }]),
     EmployeePayment.distinct("month", { employeeId: oid }),
     EmployeeAttendance.distinct("month", { employeeId: oid }),
   ]);
   const totalPaid = paidAgg[0]?.total ?? 0;
-  const firstMonth = employee?.createdAt ? new Date(employee.createdAt).toISOString().slice(0, 7) : "1970-01";
+  const firstMonth = employee ? effectiveFirstMonth(employee) ?? "1970-01" : "1970-01";
   const monthsUpToCurrent = monthsFromTo(firstMonth, currentMonth);
   const months = [...new Set([...paymentMonths, ...attendanceMonths, ...monthsUpToCurrent])].filter(
     (m) => m >= firstMonth && m <= currentMonth

@@ -20,6 +20,10 @@ export interface MachineLedgerEntryRow {
   paidAmount: number;
   remaining: number;
   remarks?: string;
+  /** Cumulative cash paid to the machine as of this row (previousBalance + every payment up to
+   *  and including this row). An entry never changes this by itself — same rule as the vendor
+   *  ledger's Balance column: a row only adds to the running total when real cash moved. */
+  runningTotal: number;
 }
 
 /** Separate row for each payment so the ledger shows "on this date, this payment was made" */
@@ -30,6 +34,9 @@ export interface MachineLedgerPaymentRow {
   amount: number;
   paymentMethod?: "Cash" | "Bank" | "Online";
   referenceId?: string;
+  /** Cumulative cash paid to the machine as of this row (previousBalance + every payment up to
+   *  and including this row). */
+  runningTotal: number;
 }
 
 export type MachineLedgerRow = MachineLedgerEntryRow | MachineLedgerPaymentRow;
@@ -41,6 +48,8 @@ export interface GetMachineLedgerResult {
   totalCost: number;
   totalPaid: number;
   remaining: number;
+  /** Cumulative cash paid before startDate (0 when no startDate filter is applied). */
+  previousBalance: number;
 }
 
 const DEFAULT_PAGE_SIZE = 12;
@@ -61,28 +70,37 @@ export interface CreateMachinePaymentInput {
   referenceId?: string;
 }
 
-/** Get machine ledger: entries (hours) and payments as separate rows. Payments appear as their own record so "on this date, payment was made". Paginated over combined list. */
+/** Get machine ledger: entries (hours) and payments as separate rows. Payments appear as their own record so "on this date, payment was made". Paginated over combined list.
+ * When startDate/endDate are given, rows are filtered to that date range and previousBalance carries the cumulative cash paid before startDate. */
 export async function getMachineLedger(
   machineId: string,
-  options?: { page?: number; pageSize?: number }
+  options?: { page?: number; pageSize?: number; startDate?: string; endDate?: string }
 ): Promise<GetMachineLedgerResult> {
   if (!mongoose.Types.ObjectId.isValid(machineId)) {
-    return { rows: [], total: 0, totalHours: 0, totalCost: 0, totalPaid: 0, remaining: 0 };
+    return { rows: [], total: 0, totalHours: 0, totalCost: 0, totalPaid: 0, remaining: 0, previousBalance: 0 };
   }
 
   const machineObjId = new mongoose.Types.ObjectId(machineId);
   const pageSize = Math.min(Math.max(1, options?.pageSize ?? DEFAULT_PAGE_SIZE), MAX_PAGE_SIZE);
   const page = options?.page !== undefined ? Math.max(1, Number(options.page)) : 1;
   const skip = (page - 1) * pageSize;
+  const startDate = options?.startDate?.trim() || undefined;
+  const endDate = options?.endDate?.trim() || undefined;
 
-  const [entryDocs, paymentDocs, allocationSums, totals] = await Promise.all([
-    MachineLedgerEntry.find({ machineId: machineObjId }).sort({ date: -1, _id: -1 }).lean(),
-    MachinePayment.find({ machineId: machineObjId }).sort({ date: -1, _id: -1 }).lean(),
+  const dateFilter: Record<string, string> = {};
+  if (startDate) dateFilter.$gte = startDate;
+  if (endDate) dateFilter.$lte = endDate;
+  const rangeMatch = Object.keys(dateFilter).length ? { date: dateFilter } : {};
+
+  const [entryDocs, paymentDocs, allocationSums, totals, previousBalance] = await Promise.all([
+    MachineLedgerEntry.find({ machineId: machineObjId, ...rangeMatch }).sort({ date: -1, _id: -1 }).lean(),
+    MachinePayment.find({ machineId: machineObjId, ...rangeMatch }).sort({ date: -1, _id: -1 }).lean(),
     MachinePaymentAllocation.aggregate<{ _id: mongoose.Types.ObjectId; total: number }>([
       { $match: { machineId: machineObjId } },
       { $group: { _id: "$entryId", total: { $sum: "$amount" } } },
     ]),
     getMachineTotals(machineId),
+    getMachinePreviousBalance(machineObjId, startDate),
   ]);
 
   const paidByEntry = new Map<string, number>();
@@ -90,7 +108,7 @@ export async function getMachineLedger(
     paidByEntry.set(row._id.toString(), row.total);
   }
 
-  const entryRows: MachineLedgerEntryRow[] = entryDocs.map((e) => {
+  const entryRows: Omit<MachineLedgerEntryRow, "runningTotal">[] = entryDocs.map((e) => {
     const paidAmount = paidByEntry.get(e._id.toString()) ?? 0;
     const remaining = Math.max(0, e.totalCost - paidAmount);
     return {
@@ -107,7 +125,7 @@ export async function getMachineLedger(
     };
   });
 
-  const paymentRows: MachineLedgerPaymentRow[] = paymentDocs.map((p) => ({
+  const paymentRows: Omit<MachineLedgerPaymentRow, "runningTotal">[] = paymentDocs.map((p) => ({
     type: "payment",
     id: p._id.toString(),
     date: p.date,
@@ -116,13 +134,34 @@ export async function getMachineLedger(
     referenceId: p.referenceId,
   }));
 
-  const allRows: MachineLedgerRow[] = [...entryRows, ...paymentRows].sort((a, b) => {
-    const d = b.date.localeCompare(a.date);
-    if (d !== 0) return d;
-    if (a.type === "payment" && b.type === "entry") return 1;
-    if (a.type === "entry" && b.type === "payment") return -1;
-    return 0;
-  });
+  // Same-row tie-break as the vendor ledger: Mongo ObjectId hex is a creation timestamp, so
+  // ordering by id (not by a hardcoded type rule) makes the ascending computation and the
+  // descending display agree on which of two same-day rows came first — whichever was created
+  // later (e.g. a payment recorded against today's entry) sorts later, so it lands on top in
+  // the newest-first display. A hand-rolled "entries always before payments" rule doesn't have
+  // that property: it can order the display one way while the running total is computed as if
+  // the same-day rows happened in the other order, corrupting the balance shown next to them.
+  const ascendingCmp = (a: { date: string; id: string }, b: { date: string; id: string }) =>
+    a.date.localeCompare(b.date) || a.id.localeCompare(b.id);
+  const descendingCmp = (a: { date: string; id: string }, b: { date: string; id: string }) =>
+    b.date.localeCompare(a.date) || b.id.localeCompare(a.id);
+
+  // Running total = cumulative cash actually paid, walked chronologically (ascending) and
+  // seeded by previousBalance. An entry (bill for hours worked) never has cash attached to it
+  // directly — it only adds to what's owed — so it leaves the running total untouched; only a
+  // payment row adds to it. This mirrors the vendor ledger's Balance column exactly.
+  const ascending = [...entryRows, ...paymentRows].sort(ascendingCmp);
+  const runningTotalByKey = new Map<string, number>();
+  let balance = previousBalance;
+  for (const row of ascending) {
+    if (row.type === "payment") balance += row.amount;
+    runningTotalByKey.set(`${row.type}:${row.id}`, balance);
+  }
+
+  const allRows: MachineLedgerRow[] = [...entryRows, ...paymentRows]
+    .sort(descendingCmp)
+    .map((row) => ({ ...row, runningTotal: runningTotalByKey.get(`${row.type}:${row.id}`) ?? previousBalance } as MachineLedgerRow));
+
   const total = allRows.length;
   const rows = allRows.slice(skip, skip + pageSize);
 
@@ -133,7 +172,19 @@ export async function getMachineLedger(
     totalCost: totals.totalCost,
     totalPaid: totals.totalPaid,
     remaining: totals.remaining,
+    previousBalance,
   };
+}
+
+/** Cumulative cash paid to a machine before startDate (0 when startDate is not given).
+ * Same rule as the running total itself: only payments count, entries never do. */
+async function getMachinePreviousBalance(machineObjId: mongoose.Types.ObjectId, startDate?: string): Promise<number> {
+  if (!startDate) return 0;
+  const [paymentAgg] = await MachinePayment.aggregate<{ sum: number }>([
+    { $match: { machineId: machineObjId, date: { $lt: startDate } } },
+    { $group: { _id: null, sum: { $sum: "$amount" } } },
+  ]);
+  return paymentAgg?.sum ?? 0;
 }
 
 /** Create ledger entry (hours worked). totalCost = hoursWorked * machine.hourlyRate at creation time. */
@@ -194,6 +245,9 @@ export async function createMachineEntry(
     paidAmount: 0,
     remaining: entry.totalCost,
     remarks: entry.remarks,
+    // Caller should refetch the ledger for an accurate running balance; this return value is used
+    // only for immediate optimistic display of the single created row.
+    runningTotal: entry.totalCost,
   };
 }
 

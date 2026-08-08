@@ -28,6 +28,14 @@ interface AddEmployeeDialogProps {
   projects: { id: string; name: string }[];
 }
 
+function todayDateString(): string {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 export function AddEmployeeDialog({ open, onOpenChange, restrictedProjectId, restrictedProjectName, projects }: AddEmployeeDialogProps) {
   const [name, setName] = useState("");
   const [role, setRole] = useState("");
@@ -36,6 +44,7 @@ export function AddEmployeeDialog({ open, onOpenChange, restrictedProjectId, res
   const [monthlySalary, setMonthlySalary] = useState("");
   const [dailyRate, setDailyRate] = useState("");
   const [phone, setPhone] = useState("");
+  const [joiningDate, setJoiningDate] = useState(todayDateString());
   const [submitting, setSubmitting] = useState(false);
   const effectiveProjectId = restrictedProjectId ?? projectId;
   const effectiveProject = projects.find((p) => p.id === effectiveProjectId) ?? (restrictedProjectName ? { id: restrictedProjectId, name: restrictedProjectName } : null);
@@ -70,6 +79,7 @@ export function AddEmployeeDialog({ open, onOpenChange, restrictedProjectId, res
           type: "Fixed",
           monthlySalary: sal,
           phone: phone.trim(),
+          joiningDate: joiningDate.trim() || undefined,
         });
       } else {
         const rate = parseFloat(dailyRate);
@@ -85,6 +95,7 @@ export function AddEmployeeDialog({ open, onOpenChange, restrictedProjectId, res
           type: "Daily",
           dailyRate: rate,
           phone: phone.trim(),
+          joiningDate: joiningDate.trim() || undefined,
         });
       }
       toast.success("Employee added");
@@ -94,6 +105,7 @@ export function AddEmployeeDialog({ open, onOpenChange, restrictedProjectId, res
       setMonthlySalary("");
       setDailyRate("");
       setPhone("");
+      setJoiningDate(todayDateString());
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to add employee");
     } finally {
@@ -160,6 +172,13 @@ export function AddEmployeeDialog({ open, onOpenChange, restrictedProjectId, res
           <div>
             <Label>Phone</Label>
             <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+92 ..." className="mt-1" />
+          </div>
+          <div>
+            <Label>Joining Date</Label>
+            <Input type="date" value={joiningDate} onChange={(e) => setJoiningDate(e.target.value)} className="mt-1" />
+            <p className="mt-1 text-xs text-muted-foreground">
+              The date the employee actually started. Salary/attendance data before this month will show "No Data".
+            </p>
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>Cancel</Button>

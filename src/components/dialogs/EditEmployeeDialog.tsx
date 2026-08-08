@@ -38,6 +38,7 @@ export function EditEmployeeDialog({
   const [monthlySalary, setMonthlySalary] = useState("");
   const [dailyRate, setDailyRate] = useState("");
   const [phone, setPhone] = useState("");
+  const [joiningDate, setJoiningDate] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -48,6 +49,7 @@ export function EditEmployeeDialog({
       setMonthlySalary(employee.type === "Fixed" && employee.monthlySalary != null ? String(employee.monthlySalary) : "");
       setDailyRate(employee.type === "Daily" && employee.dailyRate != null ? String(employee.dailyRate) : "");
       setPhone(employee.phone ?? "");
+      setJoiningDate(employee.joiningDate ?? employee.createdAt?.slice(0, 10) ?? "");
     }
   }, [employee, open]);
 
@@ -69,6 +71,7 @@ export function EditEmployeeDialog({
         role: role.trim(),
         type,
         phone: phone.trim(),
+        joiningDate: joiningDate.trim(),
       };
       if (type === "Fixed") {
         const sal = parseFloat(monthlySalary);
@@ -142,6 +145,13 @@ export function EditEmployeeDialog({
           <div>
             <Label>Phone</Label>
             <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+92 ..." className="mt-1" />
+          </div>
+          <div>
+            <Label>Joining Date</Label>
+            <Input type="date" value={joiningDate} onChange={(e) => setJoiningDate(e.target.value)} className="mt-1" />
+            <p className="mt-1 text-xs text-muted-foreground">
+              The date the employee actually started. Salary/attendance data before this month will show "No Data".
+            </p>
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>

@@ -6,7 +6,9 @@ const DEFAULT_PAGE_SIZE = 12;
 export function useVendorLedger(
   vendorId: string,
   page: number = 1,
-  pageSize: number = DEFAULT_PAGE_SIZE
+  pageSize: number = DEFAULT_PAGE_SIZE,
+  startDate?: string,
+  endDate?: string
 ) {
   const [ledger, setLedger] = useState<ApiVendorLedger | null>(null);
   const [loading, setLoading] = useState(true);
@@ -17,14 +19,14 @@ export function useVendorLedger(
     setLoading(true);
     setError(null);
     try {
-      const data = await getVendorLedger(vendorId, { page, pageSize });
+      const data = await getVendorLedger(vendorId, { page, pageSize, startDate, endDate });
       setLedger(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load vendor ledger");
     } finally {
       setLoading(false);
     }
-  }, [vendorId, page, pageSize]);
+  }, [vendorId, page, pageSize, startDate, endDate]);
 
   useEffect(() => {
     refetch();

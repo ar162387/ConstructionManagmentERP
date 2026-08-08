@@ -111,8 +111,13 @@ export function buildMonthOptions(anchorMonth: string, before = 12, after = 12) 
   return values;
 }
 
-/** Returns YYYY-MM from employee createdAt. For months before this, show NO DATA. */
-export function getFirstMonth(createdAt: string | undefined): string | undefined {
+/** Returns YYYY-MM from employee createdAt (or joiningDate, when set). For months before this, show NO DATA.
+ *  joiningDate — an optional user-specified "YYYY-MM-DD" the employee actually joined — takes priority over createdAt. */
+export function getFirstMonth(createdAt: string | undefined, joiningDate?: string): string | undefined {
+  if (joiningDate?.trim()) {
+    const jd = joiningDate.trim();
+    if (/^\d{4}-\d{2}$/.test(jd.slice(0, 7))) return jd.slice(0, 7);
+  }
   if (!createdAt) return undefined;
   const d = new Date(createdAt);
   if (Number.isNaN(d.getTime())) return undefined;

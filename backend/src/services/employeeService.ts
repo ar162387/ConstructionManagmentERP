@@ -22,6 +22,8 @@ export interface EmployeePayload {
   totalPaid?: number;
   totalDue?: number;
   createdAt?: string;
+  /** User-specified "YYYY-MM-DD" date the employee actually joined; overrides createdAt as the No-Data cutoff. */
+  joiningDate?: string;
 }
 
 export interface CreateEmployeeInput {
@@ -32,6 +34,7 @@ export interface CreateEmployeeInput {
   monthlySalary?: number;
   dailyRate?: number;
   phone?: string;
+  joiningDate?: string;
 }
 
 export interface UpdateEmployeeInput {
@@ -41,6 +44,7 @@ export interface UpdateEmployeeInput {
   monthlySalary?: number;
   dailyRate?: number;
   phone?: string;
+  joiningDate?: string;
 }
 
 function toPayload(
@@ -54,6 +58,7 @@ function toPayload(
     dailyRate?: number;
     phone?: string;
     createdAt?: Date;
+    joiningDate?: string;
   },
   projectName?: string,
   totals?: { totalPaid: number; totalDue: number }
@@ -71,7 +76,16 @@ function toPayload(
     totalPaid: totals?.totalPaid,
     totalDue: totals?.totalDue,
     createdAt: doc.createdAt ? new Date(doc.createdAt).toISOString() : undefined,
+    joiningDate: doc.joiningDate,
   };
+}
+
+/** Validates a "YYYY-MM-DD" joining date string; throws if malformed. */
+function validateJoiningDate(value: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || Number.isNaN(new Date(value).getTime())) {
+    throw new Error("Joining date must be a valid date (YYYY-MM-DD)");
+  }
+  return value;
 }
 
 export interface EmployeeListOptions {
@@ -94,7 +108,7 @@ export async function listEmployees(
   }
   const query = projectId && mongoose.Types.ObjectId.isValid(projectId) ? { projectId: new mongoose.Types.ObjectId(projectId) } : {};
   const docs = await Employee.find(query)
-    .select("_id projectId name role type monthlySalary dailyRate phone createdAt")
+    .select("_id projectId name role type monthlySalary dailyRate phone createdAt joiningDate")
     .lean();
   const projectIds = [...new Set(docs.map((d) => d.projectId.toString()))];
   const projects = await Project.find({ _id: { $in: projectIds } }).select("_id name").lean();
@@ -110,7 +124,7 @@ export async function listEmployees(
   let snapshots: (MonthlySnapshot | undefined)[] = [];
   if (month) {
     const snapshotResults = await Promise.allSettled(
-      docs.map((d) => getEmployeeSnapshotForMonth(d._id.toString(), month, d.createdAt))
+      docs.map((d) => getEmployeeSnapshotForMonth(d._id.toString(), month, d.createdAt, d.joiningDate))
     );
     snapshots = snapshotResults.map((r) => (r.status === "fulfilled" ? r.value : undefined));
   }
@@ -165,6 +179,7 @@ export async function createEmployee(
   };
   if (input.type === "Fixed" && input.monthlySalary != null) payload.monthlySalary = Math.max(0, input.monthlySalary);
   if (input.type === "Daily" && input.dailyRate != null) payload.dailyRate = Math.max(0, input.dailyRate);
+  if (input.joiningDate?.trim()) payload.joiningDate = validateJoiningDate(input.joiningDate);
 
   const employee = await Employee.create(payload);
 
@@ -206,8 +221,20 @@ export async function updateEmployee(
   if (input.monthlySalary != null) updates.monthlySalary = Math.max(0, input.monthlySalary);
   if (input.dailyRate != null) updates.dailyRate = Math.max(0, input.dailyRate);
   if (input.phone != null) updates.phone = input.phone.trim();
+  let unsetJoiningDate = false;
+  if (input.joiningDate != null) {
+    const trimmed = input.joiningDate.trim();
+    if (trimmed) {
+      updates.joiningDate = validateJoiningDate(trimmed);
+    } else {
+      unsetJoiningDate = true;
+    }
+  }
 
-  const updated = await Employee.findByIdAndUpdate(id, updates, { new: true }).lean();
+  const updateDoc: Record<string, unknown> = { $set: updates };
+  if (unsetJoiningDate) updateDoc.$unset = { joiningDate: "" };
+
+  const updated = await Employee.findByIdAndUpdate(id, updateDoc, { new: true }).lean();
   if (!updated) throw new Error("Update failed");
 
   const actorUser = await User.findById(actor.userId).lean();

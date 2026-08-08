@@ -113,7 +113,6 @@ export function AddLedgerEntryDialog({
     const total = qty * up;
     const paid = paidAmount === "" ? 0 : parseFloat(paidAmount);
     if (isNaN(paid) || paid < 0) { toast.error("Paid amount must be >= 0"); return; }
-    if (paid > total) { toast.error("Paid amount cannot exceed total price"); return; }
 
     setLoading(true);
     try {
@@ -176,7 +175,6 @@ export function AddLedgerEntryDialog({
             <Input
               type="number"
               min={0}
-              max={totalPrice ?? undefined}
               step="0.01"
               value={paidAmount}
               onChange={(e) => setPaidAmount(e.target.value)}
@@ -184,9 +182,19 @@ export function AddLedgerEntryDialog({
               className="mt-1"
             />
             {totalPrice !== null && paidAmount !== "" && (
-              <p className="text-xs text-muted-foreground mt-1">
-                Due: {Math.max(0, totalPrice - (parseFloat(paidAmount) || 0)).toLocaleString()} PKR
-              </p>
+              (() => {
+                const paidNum = parseFloat(paidAmount) || 0;
+                const excess = paidNum - totalPrice;
+                return excess > 0 ? (
+                  <p className="text-xs text-warning mt-1">
+                    Exceeds bill total by {excess.toLocaleString()} PKR — will be recorded as vendor advance.
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Due: {Math.max(0, totalPrice - paidNum).toLocaleString()} PKR
+                  </p>
+                );
+              })()
             )}
           </div>
           <div>

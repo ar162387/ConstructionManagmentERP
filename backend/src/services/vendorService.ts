@@ -13,6 +13,7 @@ export interface VendorPayload {
   totalBilled: number;
   totalPaid: number;
   remaining: number;
+  advanceBalance: number;
 }
 
 export interface CreateVendorInput {
@@ -29,7 +30,7 @@ export interface UpdateVendorInput {
 }
 
 function toPayload(
-  doc: { _id: mongoose.Types.ObjectId; projectId: mongoose.Types.ObjectId; name: string; phone?: string; description?: string; totalBilled?: number; totalPaid?: number; remaining?: number }
+  doc: { _id: mongoose.Types.ObjectId; projectId: mongoose.Types.ObjectId; name: string; phone?: string; description?: string; totalBilled?: number; totalPaid?: number; remaining?: number; advanceBalance?: number }
 ): VendorPayload {
   return {
     id: doc._id.toString(),
@@ -40,6 +41,7 @@ function toPayload(
     totalBilled: doc.totalBilled ?? 0,
     totalPaid: doc.totalPaid ?? 0,
     remaining: doc.remaining ?? 0,
+    advanceBalance: doc.advanceBalance ?? 0,
   };
 }
 
@@ -173,6 +175,12 @@ export async function deleteVendor(
   if (target.remaining > 0) {
     throw new Error(
       `Cannot delete vendor "${target.name}" because they have remaining amount of ${target.remaining.toLocaleString()} PKR. Clear the outstanding balance first.`
+    );
+  }
+
+  if (target.advanceBalance > 0) {
+    throw new Error(
+      `Cannot delete vendor "${target.name}" because they hold an unused advance of ${target.advanceBalance.toLocaleString()} PKR. Resolve it first.`
     );
   }
 

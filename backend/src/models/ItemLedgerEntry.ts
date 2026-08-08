@@ -11,6 +11,9 @@ export interface IItemLedgerEntry {
   totalPrice: number;
   paidAmount: number;
   remaining: number;
+  /** How much of the paid amount at creation/last edit exceeded this bill's totalPrice —
+   *  recorded as vendor advance rather than pushed onto this entry's own paid/remaining. */
+  advanceGenerated: number;
   biltyNumber?: string;
   vehicleNumber?: string;
   paymentMethod: "Cash" | "Bank" | "Online";
@@ -31,6 +34,7 @@ const itemLedgerEntrySchema = new mongoose.Schema<IItemLedgerEntry>(
     totalPrice: { type: Number, required: true, min: 0 },
     paidAmount: { type: Number, default: 0, min: 0 },
     remaining: { type: Number, default: 0, min: 0 },
+    advanceGenerated: { type: Number, default: 0, min: 0 },
     biltyNumber: { type: String, trim: true },
     vehicleNumber: { type: String, trim: true },
     paymentMethod: { type: String, enum: ["Cash", "Bank", "Online"], required: true },

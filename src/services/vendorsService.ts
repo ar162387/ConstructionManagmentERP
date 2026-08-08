@@ -13,6 +13,7 @@ export interface ApiVendor {
   totalBilled: number;
   totalPaid: number;
   remaining: number;
+  advanceBalance: number;
 }
 
 export interface CreateVendorInput {

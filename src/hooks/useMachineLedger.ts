@@ -10,7 +10,9 @@ const DEFAULT_PAGE_SIZE = 12;
 export function useMachineLedger(
   machineId: string | undefined,
   page?: number,
-  pageSize?: number
+  pageSize?: number,
+  startDate?: string,
+  endDate?: string
 ) {
   const [rows, setRows] = useState<ApiMachineLedgerRow[]>([]);
   const [total, setTotal] = useState(0);
@@ -18,6 +20,7 @@ export function useMachineLedger(
   const [totalCost, setTotalCost] = useState(0);
   const [totalPaid, setTotalPaid] = useState(0);
   const [remaining, setRemaining] = useState(0);
+  const [previousBalance, setPreviousBalance] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -32,6 +35,7 @@ export function useMachineLedger(
       setTotalCost(0);
       setTotalPaid(0);
       setRemaining(0);
+      setPreviousBalance(0);
       setLoading(false);
       return;
     }
@@ -41,6 +45,8 @@ export function useMachineLedger(
       const data = await getMachineLedger(machineId, {
         page: effectivePage,
         pageSize: effectivePageSize,
+        startDate,
+        endDate,
       });
       setRows(data.rows);
       setTotal(data.total);
@@ -48,12 +54,13 @@ export function useMachineLedger(
       setTotalCost(data.totalCost);
       setTotalPaid(data.totalPaid);
       setRemaining(data.remaining);
+      setPreviousBalance(data.previousBalance);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load machine ledger");
     } finally {
       setLoading(false);
     }
-  }, [machineId, effectivePage, effectivePageSize]);
+  }, [machineId, effectivePage, effectivePageSize, startDate, endDate]);
 
   useEffect(() => {
     refetch();
@@ -66,6 +73,7 @@ export function useMachineLedger(
     totalCost,
     totalPaid,
     remaining,
+    previousBalance,
     loading,
     error,
     refetch,

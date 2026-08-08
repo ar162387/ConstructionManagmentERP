@@ -8,6 +8,6 @@ bankTransactionRoutes.use(authMiddleware);
 bankTransactionRoutes.use(requireBankAccountAccess);
 
 bankTransactionRoutes.get("/", list);
-bankTransactionRoutes.post("/", requireBankAccountManageAccess, create);
-bankTransactionRoutes.patch("/:id", requireBankAccountManageAccess, update);
+bankTransactionRoutes.post("/", create);
+bankTransactionRoutes.patch("/:id", update);
 bankTransactionRoutes.delete("/:id", requireBankAccountManageAccess, remove);

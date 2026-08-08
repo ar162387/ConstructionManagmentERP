@@ -5,7 +5,6 @@ import { Vendor } from "../models/Vendor.js";
 import { User } from "../models/User.js";
 import { logAudit } from "./auditService.js";
 import { roleDisplay } from "./authService.js";
-import { getVendorLedger } from "./vendorPaymentService.js";
 import { getFifoAllocationForVendor } from "./fifoAllocation.js";
 
 export interface ItemLedgerPayload {
@@ -20,6 +19,7 @@ export interface ItemLedgerPayload {
   totalPrice: number;
   paidAmount: number;
   remaining: number;
+  advanceGenerated: number;
   biltyNumber?: string;
   vehicleNumber?: string;
   paymentMethod: "Cash" | "Bank" | "Online";
@@ -66,6 +66,7 @@ async function buildPayload(doc: {
   totalPrice: number;
   paidAmount: number;
   remaining: number;
+  advanceGenerated: number;
   biltyNumber?: string;
   vehicleNumber?: string;
   paymentMethod: "Cash" | "Bank" | "Online";
@@ -85,6 +86,7 @@ async function buildPayload(doc: {
     totalPrice: doc.totalPrice,
     paidAmount: doc.paidAmount,
     remaining: doc.remaining,
+    advanceGenerated: doc.advanceGenerated,
     biltyNumber: doc.biltyNumber,
     vehicleNumber: doc.vehicleNumber,
     paymentMethod: doc.paymentMethod,
@@ -148,9 +150,12 @@ export async function createItemLedgerEntry(
   if (!["Cash", "Bank", "Online"].includes(input.paymentMethod)) throw new Error("Invalid payment method");
 
   const totalPrice = input.quantity * input.unitPrice;
-  const paidAmount = Math.min(input.paidAmount ?? 0, totalPrice);
-  if ((input.paidAmount ?? 0) > totalPrice) throw new Error("Paid amount cannot exceed total price");
+  const rawPaid = input.paidAmount ?? 0;
+  // This entry's own paid/remaining stay capped at its own total, exactly as before — any
+  // amount paid beyond that isn't "for this bill", it's a prepayment recorded as vendor advance.
+  const paidAmount = Math.min(rawPaid, totalPrice);
   const remaining = totalPrice - paidAmount;
+  const advanceGenerated = Math.max(0, rawPaid - totalPrice);
 
   const item = await ConsumableItem.findById(input.itemId).lean();
   if (!item) throw new Error("Item not found");
@@ -174,6 +179,7 @@ export async function createItemLedgerEntry(
             totalPrice,
             paidAmount,
             remaining,
+            advanceGenerated,
             biltyNumber: input.biltyNumber?.trim() || undefined,
             vehicleNumber: input.vehicleNumber?.trim() || undefined,
             paymentMethod: input.paymentMethod,
@@ -203,8 +209,9 @@ export async function createItemLedgerEntry(
         {
           $inc: {
             totalBilled: totalPrice,
-            totalPaid: paidAmount,
+            totalPaid: rawPaid,
             remaining,
+            advanceBalance: advanceGenerated,
           },
         },
         { session }
@@ -254,22 +261,25 @@ export async function updateItemLedgerEntry(
   const newQuantity = input.quantity ?? existing.quantity;
   const newUnitPrice = input.unitPrice ?? existing.unitPrice;
   const newTotalPrice = newQuantity * newUnitPrice;
-  const rawPaid = input.paidAmount ?? existing.paidAmount;
-  if (rawPaid > newTotalPrice) throw new Error("Paid amount cannot exceed total price");
-  const newPaidAmount = rawPaid;
+  // Original raw paid amount typed at entry time, reconstructed: paidAmount is capped at
+  // totalPrice, advanceGenerated holds whatever exceeded it.
+  const existingRawPaid = existing.paidAmount + (existing.advanceGenerated ?? 0);
+  const rawPaid = input.paidAmount ?? existingRawPaid;
+  const newPaidAmount = Math.min(rawPaid, newTotalPrice);
   const newRemaining = newTotalPrice - newPaidAmount;
+  const newAdvanceGenerated = Math.max(0, rawPaid - newTotalPrice);
 
   const newVendorId = input.vendorId ?? existing.vendorId.toString();
   if (!mongoose.Types.ObjectId.isValid(newVendorId)) throw new Error("Invalid vendor ID");
 
-  // Prevent over-credit: increasing paid on this entry must not push vendor remaining below zero.
-  // totalPaid = sum(ledger.paidAmount) + sum(VendorPayment); remaining = totalBilled - totalPaid.
-  if (newPaidAmount > existing.paidAmount) {
-    const { remaining: vendorRemaining } = await getVendorLedger(existing.vendorId.toString());
-    const maxAllowedPaid = existing.paidAmount + vendorRemaining;
-    if (newPaidAmount > maxAllowedPaid) {
+  // If this edit would reduce the advance it previously generated (or move it to a different
+  // vendor), that advance must not have already been spent elsewhere.
+  const advanceDrop = (existing.advanceGenerated ?? 0) - (newVendorId === existing.vendorId.toString() ? newAdvanceGenerated : 0);
+  if (advanceDrop > 0) {
+    const vendor = await Vendor.findById(existing.vendorId).select("advanceBalance").lean();
+    if (!vendor || advanceDrop > vendor.advanceBalance) {
       throw new Error(
-        `Paid amount cannot exceed total price and must not overpay the vendor. Maximum allowed for this entry is ${maxAllowedPaid.toLocaleString()} (current paid ${existing.paidAmount.toLocaleString()} + vendor remaining ${vendorRemaining.toLocaleString()})`
+        `Cannot reduce this entry's advance: some of the ${(existing.advanceGenerated ?? 0).toLocaleString()} advance it generated has already been applied elsewhere. Reverse that first.`
       );
     }
   }
@@ -299,8 +309,9 @@ export async function updateItemLedgerEntry(
         {
           $inc: {
             totalBilled: -existing.totalPrice,
-            totalPaid: -existing.paidAmount,
+            totalPaid: -existingRawPaid,
             remaining: -existing.remaining,
+            advanceBalance: -(existing.advanceGenerated ?? 0),
           },
         },
         { session }
@@ -327,8 +338,9 @@ export async function updateItemLedgerEntry(
         {
           $inc: {
             totalBilled: newTotalPrice,
-            totalPaid: newPaidAmount,
+            totalPaid: rawPaid,
             remaining: newRemaining,
+            advanceBalance: newAdvanceGenerated,
           },
         },
         { session }
@@ -340,6 +352,7 @@ export async function updateItemLedgerEntry(
         totalPrice: newTotalPrice,
         paidAmount: newPaidAmount,
         remaining: newRemaining,
+        advanceGenerated: newAdvanceGenerated,
         vendorId: newVendorId,
       };
       if (input.date) updates.date = input.date;
@@ -400,6 +413,15 @@ export async function deleteItemLedgerEntry(
     );
   }
 
+  if ((existing.advanceGenerated ?? 0) > 0) {
+    const vendor = await Vendor.findById(existing.vendorId).select("advanceBalance").lean();
+    if (!vendor || (existing.advanceGenerated ?? 0) > vendor.advanceBalance) {
+      throw new Error(
+        `Cannot delete this ledger entry: some of the ${(existing.advanceGenerated ?? 0).toLocaleString()} advance it generated has already been applied elsewhere. Reverse that first.`
+      );
+    }
+  }
+
   const session = await mongoose.startSession();
   try {
     await session.withTransaction(async () => {
@@ -422,8 +444,9 @@ export async function deleteItemLedgerEntry(
         {
           $inc: {
             totalBilled: -existing.totalPrice,
-            totalPaid: -existing.paidAmount,
+            totalPaid: -(existing.paidAmount + (existing.advanceGenerated ?? 0)),
             remaining: -existing.remaining,
+            advanceBalance: -(existing.advanceGenerated ?? 0),
           },
         },
         { session }

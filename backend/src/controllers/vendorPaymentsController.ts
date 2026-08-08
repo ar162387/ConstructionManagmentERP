@@ -12,7 +12,9 @@ export async function getVendorLedgerHandler(req: AuthRequest, res: Response) {
     const { vendorId } = req.params;
     const page = req.query.page ? Number(req.query.page) : undefined;
     const pageSize = req.query.pageSize ? Number(req.query.pageSize) : undefined;
-    const data = await getVendorLedger(vendorId, { page, pageSize });
+    const startDate = typeof req.query.startDate === "string" ? req.query.startDate : undefined;
+    const endDate = typeof req.query.endDate === "string" ? req.query.endDate : undefined;
+    const data = await getVendorLedger(vendorId, { page, pageSize, startDate, endDate });
     res.json(data);
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : "Failed to get vendor ledger" });

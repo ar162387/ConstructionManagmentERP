@@ -131,165 +131,137 @@ function populatedIdName(ref: unknown): { id: string; name?: string } {
   return { id: "" };
 }
 
-async function fetchPriorPaymentTotals(
+type PriorEntityTotal = { name: string; amount: number };
+
+/**
+ * Every entity this project has ever paid before `startDate`, with its all-time prior total.
+ *
+ * Deliberately NOT filtered to entities active in the selected range: the sheet's
+ * self-validating identity requires the Previous column to sum to *all* payments made
+ * before the range, so an entity paid last month but not today still needs its row
+ * (Current "-", Previous carried forward). Without those rows,
+ * `inflowsBeforeStart - sum(Previous)` no longer reproduces the opening cash balance.
+ */
+async function fetchAllPriorPaymentTotals(
   projectObj: mongoose.Types.ObjectId,
-  startDate: string,
-  buckets: {
-    consumableItemIds: mongoose.Types.ObjectId[];
-    vendorIds: mongoose.Types.ObjectId[];
-    contractorIds: mongoose.Types.ObjectId[];
-    employeeIds: mongoose.Types.ObjectId[];
-    expenseCategories: string[];
-    machineIds: mongoose.Types.ObjectId[];
-    nonConsumableItemIds: mongoose.Types.ObjectId[];
-  }
-): Promise<Map<string, number>> {
-  const out = new Map<string, number>();
-  const {
-    consumableItemIds,
-    vendorIds,
-    contractorIds,
-    employeeIds,
-    expenseCategories,
-    machineIds,
-    nonConsumableItemIds,
-  } = buckets;
+  startDate: string
+): Promise<Map<string, PriorEntityTotal>> {
+  const out = new Map<string, PriorEntityTotal>();
+  const add = (key: string, amount: number, name?: string | null) => {
+    const cur = out.get(key);
+    if (cur) {
+      cur.amount += amount;
+      if (!cur.name && name) cur.name = name;
+    } else {
+      out.set(key, { name: name ?? "", amount });
+    }
+  };
 
   const vendorsColl = Vendor.collection.name;
   const contractorsColl = Contractor.collection.name;
-  const employeesColl = Employee.collection.name;
   const machinesColl = Machine.collection.name;
+  const consumablesColl = ConsumableItem.collection.name;
+  const nonConsumablesColl = NonConsumableItem.collection.name;
 
-  const jobs: Promise<void>[] = [];
+  type IdSumName = { _id: mongoose.Types.ObjectId; sum: number; name?: string };
 
-  if (consumableItemIds.length) {
-    jobs.push(
-      (async () => {
-        const rows = await ItemLedgerEntry.aggregate<{ _id: mongoose.Types.ObjectId; sum: number }>([
-          {
-            $match: {
-              projectId: projectObj,
-              itemId: { $in: consumableItemIds },
-              date: { $lt: startDate },
-              paidAmount: { $gt: 0 },
-            },
-          },
-          { $group: { _id: "$itemId", sum: { $sum: "$paidAmount" } } },
-        ]);
-        for (const r of rows) {
-          out.set(`Consumable:${r._id.toString()}`, r.sum);
-        }
-      })()
-    );
-  }
+  const beforeStart = { $lt: startDate } as const;
 
-  if (vendorIds.length) {
-    jobs.push(
-      (async () => {
-        const rows = await VendorPayment.aggregate<{ _id: mongoose.Types.ObjectId; sum: number }>([
-          { $match: { vendorId: { $in: vendorIds }, date: { $lt: startDate } } },
-          { $lookup: { from: vendorsColl, localField: "vendorId", foreignField: "_id", as: "v" } },
-          { $unwind: "$v" },
-          { $match: { "v.projectId": projectObj } },
-          { $group: { _id: "$vendorId", sum: { $sum: "$amount" } } },
-        ]);
-        for (const r of rows) {
-          out.set(`Vendor:${r._id.toString()}`, r.sum);
-        }
-      })()
-    );
-  }
-
-  if (contractorIds.length) {
-    jobs.push(
-      (async () => {
-        const rows = await ContractorPayment.aggregate<{ _id: mongoose.Types.ObjectId; sum: number }>([
-          { $match: { contractorId: { $in: contractorIds }, date: { $lt: startDate } } },
-          { $lookup: { from: contractorsColl, localField: "contractorId", foreignField: "_id", as: "c" } },
-          { $unwind: "$c" },
-          { $match: { "c.projectId": projectObj } },
-          { $group: { _id: "$contractorId", sum: { $sum: "$amount" } } },
-        ]);
-        for (const r of rows) {
-          out.set(`Contractor:${r._id.toString()}`, r.sum);
-        }
-      })()
-    );
-  }
-
-  if (employeeIds.length) {
-    jobs.push(
-      (async () => {
-        const allProjectEmployeeIds = await Employee.find({ projectId: projectObj }).distinct("_id");
-        const rows = await EmployeePayment.aggregate<{ sum: number }>([
-          { $match: { employeeId: { $in: allProjectEmployeeIds }, date: { $lt: startDate } } },
+  const [
+    consumableRows,
+    vendorPayRows,
+    vendorAdvanceRows,
+    contractorRows,
+    salaryRows,
+    expenseRows,
+    machineRows,
+    nonConsumableRows,
+  ] = await Promise.all([
+    ItemLedgerEntry.aggregate<IdSumName>([
+      { $match: { projectId: projectObj, date: beforeStart, paidAmount: { $gt: 0 } } },
+      { $group: { _id: "$itemId", sum: { $sum: "$paidAmount" } } },
+      { $lookup: { from: consumablesColl, localField: "_id", foreignField: "_id", as: "e" } },
+      { $unwind: { path: "$e", preserveNullAndEmptyArrays: true } },
+      { $project: { sum: 1, name: "$e.name" } },
+    ]),
+    // Advance-sourced payments are a reallocation of money already counted when the
+    // advance was originally generated, not new cash out — excluded here.
+    VendorPayment.aggregate<IdSumName>([
+      { $match: { date: beforeStart, source: { $ne: "advance" } } },
+      { $lookup: { from: vendorsColl, localField: "vendorId", foreignField: "_id", as: "v" } },
+      { $unwind: "$v" },
+      { $match: { "v.projectId": projectObj } },
+      { $group: { _id: "$vendorId", sum: { $sum: "$amount" }, name: { $first: "$v.name" } } },
+    ]),
+    ItemLedgerEntry.aggregate<IdSumName>([
+      {
+        $match: {
+          projectId: projectObj,
+          date: beforeStart,
+          advanceGenerated: { $gt: 0 },
+          vendorId: { $ne: null },
+        },
+      },
+      { $group: { _id: "$vendorId", sum: { $sum: "$advanceGenerated" } } },
+      { $lookup: { from: vendorsColl, localField: "_id", foreignField: "_id", as: "e" } },
+      { $unwind: { path: "$e", preserveNullAndEmptyArrays: true } },
+      { $project: { sum: 1, name: "$e.name" } },
+    ]),
+    ContractorPayment.aggregate<IdSumName>([
+      { $match: { date: beforeStart } },
+      { $lookup: { from: contractorsColl, localField: "contractorId", foreignField: "_id", as: "c" } },
+      { $unwind: "$c" },
+      { $match: { "c.projectId": projectObj } },
+      { $group: { _id: "$contractorId", sum: { $sum: "$amount" }, name: { $first: "$c.name" } } },
+    ]),
+    Employee.find({ projectId: projectObj })
+      .distinct("_id")
+      .then((employeeIds) =>
+        EmployeePayment.aggregate<{ sum: number }>([
+          { $match: { employeeId: { $in: employeeIds }, date: beforeStart } },
           { $group: { _id: null, sum: { $sum: "$amount" } } },
-        ]);
-        out.set("Salary:ALL", rows[0]?.sum ?? 0);
-      })()
-    );
-  }
+        ])
+      ),
+    Expense.aggregate<{ _id: string; sum: number }>([
+      { $match: { projectId: projectObj, date: beforeStart } },
+      { $group: { _id: { $trim: { input: "$category" } }, sum: { $sum: "$amount" } } },
+    ]),
+    MachinePayment.aggregate<IdSumName>([
+      { $match: { date: beforeStart } },
+      { $lookup: { from: machinesColl, localField: "machineId", foreignField: "_id", as: "m" } },
+      { $unwind: "$m" },
+      { $match: { "m.projectId": projectObj } },
+      { $group: { _id: "$machineId", sum: { $sum: "$amount" }, name: { $first: "$m.name" } } },
+    ]),
+    NonConsumableLedgerEntry.aggregate<IdSumName>([
+      {
+        $match: {
+          date: beforeStart,
+          eventType: "Purchase",
+          totalCost: { $gt: 0 },
+          $or: [{ projectTo: projectObj }, { projectFrom: projectObj }],
+        },
+      },
+      { $group: { _id: "$itemId", sum: { $sum: "$totalCost" } } },
+      { $lookup: { from: nonConsumablesColl, localField: "_id", foreignField: "_id", as: "e" } },
+      { $unwind: { path: "$e", preserveNullAndEmptyArrays: true } },
+      { $project: { sum: 1, name: "$e.name" } },
+    ]),
+  ]);
 
-  if (expenseCategories.length) {
-    jobs.push(
-      (async () => {
-        const rows = await Expense.aggregate<{ _id: string; sum: number }>([
-          {
-            $match: {
-              projectId: projectObj,
-              date: { $lt: startDate },
-              category: { $in: expenseCategories },
-            },
-          },
-          { $group: { _id: "$category", sum: { $sum: "$amount" } } },
-        ]);
-        for (const r of rows) {
-          out.set(`Expense:${r._id}`, r.sum);
-        }
-      })()
-    );
+  for (const r of consumableRows) add(`Consumable:${r._id.toString()}`, r.sum, r.name);
+  for (const r of vendorPayRows) add(`Vendor:${r._id.toString()}`, r.sum, r.name);
+  for (const r of vendorAdvanceRows) add(`Vendor:${r._id.toString()}`, r.sum, r.name);
+  for (const r of contractorRows) add(`Contractor:${r._id.toString()}`, r.sum, r.name);
+  for (const r of machineRows) add(`Machinery:${r._id.toString()}`, r.sum, r.name);
+  for (const r of nonConsumableRows) add(`NonConsumable:${r._id.toString()}`, r.sum, r.name);
+  for (const r of expenseRows) {
+    if (!r._id) continue;
+    add(`Expense:${r._id}`, r.sum, r._id);
   }
+  const salaryPrior = salaryRows[0]?.sum ?? 0;
+  if (salaryPrior > 0) add("Salary:ALL", salaryPrior, "Employees");
 
-  if (machineIds.length) {
-    jobs.push(
-      (async () => {
-        const rows = await MachinePayment.aggregate<{ _id: mongoose.Types.ObjectId; sum: number }>([
-          { $match: { machineId: { $in: machineIds }, date: { $lt: startDate } } },
-          { $lookup: { from: machinesColl, localField: "machineId", foreignField: "_id", as: "m" } },
-          { $unwind: "$m" },
-          { $match: { "m.projectId": projectObj } },
-          { $group: { _id: "$machineId", sum: { $sum: "$amount" } } },
-        ]);
-        for (const r of rows) {
-          out.set(`Machinery:${r._id.toString()}`, r.sum);
-        }
-      })()
-    );
-  }
-
-  if (nonConsumableItemIds.length) {
-    jobs.push(
-      (async () => {
-        const rows = await NonConsumableLedgerEntry.aggregate<{ _id: mongoose.Types.ObjectId; sum: number }>([
-          {
-            $match: {
-              date: { $lt: startDate },
-              eventType: "Purchase",
-              totalCost: { $gt: 0 },
-              itemId: { $in: nonConsumableItemIds },
-              $or: [{ projectTo: projectObj }, { projectFrom: projectObj }],
-            },
-          },
-          { $group: { _id: "$itemId", sum: { $sum: "$totalCost" } } },
-        ]);
-        for (const r of rows) {
-          out.set(`NonConsumable:${r._id.toString()}`, r.sum);
-        }
-      })()
-    );
-  }
-
-  await Promise.all(jobs);
   return out;
 }
 
@@ -350,36 +322,6 @@ function applyRunningPreviousAndTotal(
   return result;
 }
 
-async function fetchProjectAllTimeInflowsToDate(
-  projectObj: mongoose.Types.ObjectId,
-  toDate: string
-): Promise<number> {
-  const [bankInflowsToProject, projectLedgerAdjustments] = await Promise.all([
-    BankTransaction.aggregate<{ sum: number }>([
-      {
-        $match: {
-          projectId: projectObj,
-          type: "outflow",
-          date: { $lte: toDate },
-        },
-      },
-      { $group: { _id: null, sum: { $sum: "$amount" } } },
-    ]),
-    ProjectBalanceAdjustment.aggregate<{ sum: number }>([
-      {
-        $match: {
-          projectId: projectObj,
-          date: { $lte: toDate },
-          amount: { $gt: 0 },
-        },
-      },
-      { $group: { _id: null, sum: { $sum: "$amount" } } },
-    ]),
-  ]);
-
-  return (bankInflowsToProject[0]?.sum ?? 0) + (projectLedgerAdjustments[0]?.sum ?? 0);
-}
-
 async function fetchProjectInflowsBeforeDate(
   projectObj: mongoose.Types.ObjectId,
   startDate: string
@@ -433,20 +375,18 @@ export async function getCashExpensesReport(
 
   const inRange = { $gte: startDate, $lte: endDate } as const;
 
-  const todayIso = new Date().toISOString().slice(0, 10);
-
   const [
     bankAccounts,
     bankOutflowsToProjectTxs,
     projectAdjustmentsInflowsRows,
     consumablePayments,
     vendorPayments,
+    vendorAdvanceFromPurchases,
     contractorPayments,
     employeePayments,
     expenses,
     machinePayments,
     nonConsumablePayments,
-    allTimeProjectInflows,
     inflowsBeforeStartDate,
   ] = await Promise.all([
     BankAccount.find({}).select("_id name").lean(),
@@ -455,10 +395,13 @@ export async function getCashExpensesReport(
     ItemLedgerEntry.find({ projectId: projectObj, date: inRange, paidAmount: { $gt: 0 } })
       .populate<{ itemId: { name: string } }>("itemId", "name")
       .lean(),
-    VendorPayment.find({ date: inRange })
+    VendorPayment.find({ date: inRange, source: { $ne: "advance" } })
       .populate<{ vendorId: { projectId: mongoose.Types.ObjectId; name: string } }>("vendorId", "projectId name")
       .lean()
       .then((rows) => rows.filter((r) => r.vendorId?.projectId?.toString() === projectId)),
+    ItemLedgerEntry.find({ projectId: projectObj, date: inRange, advanceGenerated: { $gt: 0 } })
+      .populate<{ vendorId: { name: string } }>("vendorId", "name")
+      .lean(),
     ContractorPayment.find({ date: inRange })
       .populate<{ contractorId: { projectId: mongoose.Types.ObjectId; name: string } }>("contractorId", "projectId name")
       .lean()
@@ -480,7 +423,6 @@ export async function getCashExpensesReport(
     })
       .populate<{ itemId: { name: string } }>("itemId", "name")
       .lean(),
-    fetchProjectAllTimeInflowsToDate(projectObj, todayIso),
     fetchProjectInflowsBeforeDate(projectObj, startDate),
   ]);
 
@@ -495,7 +437,12 @@ export async function getCashExpensesReport(
 
   pushAggregatedByEntity(
     internal,
-    vendorPayments.map((row) => ({ ...populatedIdName(row.vendorId), amount: row.amount })),
+    [
+      ...vendorPayments.map((row) => ({ ...populatedIdName(row.vendorId), amount: row.amount })),
+      // Overpaying a consumable bill beyond its total is also real cash paid to the vendor
+      // that day (recorded as advance) — folded into the same vendor bucket as payments.
+      ...vendorAdvanceFromPurchases.map((row) => ({ ...populatedIdName(row.vendorId), amount: row.advanceGenerated })),
+    ],
     "Vendor",
     "Vendor"
   );
@@ -553,44 +500,32 @@ export async function getCashExpensesReport(
     "Non-Consumable"
   );
 
-  const uniqStrings = (xs: string[]) => [...new Set(xs)];
-  const uniqObjectIds = (hexIds: string[]) => {
-    const seen = new Set<string>();
-    const out: mongoose.Types.ObjectId[] = [];
-    for (const h of hexIds) {
-      if (!h || seen.has(h)) continue;
-      seen.add(h);
-      out.push(new mongoose.Types.ObjectId(h));
-    }
-    return out;
-  };
+  const priorByEntity = await fetchAllPriorPaymentTotals(projectObj, startDate);
 
-  const priorTotals =
-    internal.length === 0
-      ? new Map<string, number>()
-      : await fetchPriorPaymentTotals(projectObj, startDate, {
-          consumableItemIds: uniqObjectIds(
-            internal.filter((r) => r.entityType === "Consumable").map((r) => r.entityKey.split(":")[1])
-          ),
-          vendorIds: uniqObjectIds(
-            internal.filter((r) => r.entityType === "Vendor").map((r) => r.entityKey.split(":")[1])
-          ),
-          contractorIds: uniqObjectIds(
-            internal.filter((r) => r.entityType === "Contractor").map((r) => r.entityKey.split(":")[1])
-          ),
-          employeeIds: internal.some((r) => r.entityType === "Salary") ? [projectObj] : [],
-          expenseCategories: uniqStrings(
-            internal.filter((r) => r.entityType === "Expense").map((r) => r.entityKey.slice("Expense:".length))
-          ),
-          machineIds: uniqObjectIds(
-            internal.filter((r) => r.entityType === "Machinery").map((r) => r.entityKey.split(":")[1])
-          ),
-          nonConsumableItemIds: uniqObjectIds(
-            internal.filter((r) => r.entityType === "NonConsumable").map((r) => r.entityKey.split(":")[1])
-          ),
-        });
+  // Carry forward every entity paid before the range, even with no activity in it. These
+  // rows show Current "-" and keep the Previous column complete, which is what makes
+  // `receipts − payments` reproduce the opening balance in the Previous column.
+  const keysWithCurrentActivity = new Set(internal.map((r) => r.entityKey));
+  for (const [entityKey, { name, amount }] of priorByEntity) {
+    if (amount <= 0 || keysWithCurrentActivity.has(entityKey)) continue;
+    const entityType = entityKey.slice(0, entityKey.indexOf(":")) as CashExpensesEntityType;
+    internal.push({
+      entityName: name || entityType,
+      entityType,
+      amount: 0,
+      remarks: "",
+      sourceId: `carry-${entityKey}`,
+      entityKey,
+    });
+  }
+
+  const priorTotals = new Map<string, number>(
+    [...priorByEntity].map(([key, { amount }]) => [key, amount])
+  );
 
   const payments = applyRunningPreviousAndTotal(internal, priorTotals);
+  /** All cash paid out by this project before `startDate` — equals the Previous column total. */
+  const priorPaymentsTotal = [...priorByEntity.values()].reduce((s, e) => s + e.amount, 0);
 
   const totalPayments = payments.reduce((s, p) => s + p.amount, 0);
   const projectLedgerClosing = project.balance ?? 0;
@@ -645,12 +580,15 @@ export async function getCashExpensesReport(
   // Project: opening + inflows in selected period - total payments in selected period = closing
   const projectLedgerOpening = projectLedgerClosing - projectLedgerInflows + totalPayments;
 
+  // Cash carried into the range = every rupee received before it, minus every rupee paid
+  // out before it. This is the same number the previous day's report showed as its Day
+  // Closing Balance, so consecutive sheets chain without any stored state.
   const openingRowCurrent = 0;
-  const openingRowPrevious = inflowsBeforeStartDate;
+  const openingRowPrevious = inflowsBeforeStartDate - priorPaymentsTotal;
   const openingRowTotal = openingRowPrevious;
-  const openingRowTPayment = allTimeProjectInflows;
+  const openingRowTPayment = inflowsBeforeStartDate;
 
-  const closingBalance = projectLedgerClosing;
+  const closingBalance = openingRowPrevious + projectLedgerInflows - totalPayments;
 
   const openingBalances: CashExpensesReportOpeningBalances = {
     projectLedger: projectLedgerOpening,
@@ -725,33 +663,48 @@ export async function getCashExpensesEntityLedger(
   if (entityType === "Vendor") {
     if (!mongoose.Types.ObjectId.isValid(entityId)) throw new Error("Invalid entity ID");
     const vendorObj = new mongoose.Types.ObjectId(entityId);
-    const [vendor, docs, prevAgg] = await Promise.all([
+    const [vendor, payDocs, advDocs, payPrevAgg, advPrevAgg] = await Promise.all([
       Vendor.findById(vendorObj).select("name").lean(),
-      VendorPayment.find({ vendorId: vendorObj, date: inRange }).sort({ date: 1, createdAt: 1 }).lean().then((rows) =>
-        rows.filter((r) => {
-          const vid = (r as unknown as { vendorId: { projectId?: mongoose.Types.ObjectId } }).vendorId;
-          return true; // already filtered by vendorId which belongs to a project
-        })
-      ),
+      // Advance-sourced payments reallocate money already counted when generated — excluded.
+      VendorPayment.find({ vendorId: vendorObj, date: inRange, source: { $ne: "advance" } })
+        .sort({ date: 1, createdAt: 1 })
+        .lean(),
+      ItemLedgerEntry.find({ projectId: projectObj, vendorId: vendorObj, date: inRange, advanceGenerated: { $gt: 0 } })
+        .populate<{ itemId: { name: string } }>("itemId", "name")
+        .sort({ date: 1, createdAt: 1 })
+        .lean(),
       VendorPayment.aggregate<{ sum: number }>([
-        { $match: { vendorId: vendorObj, date: { $lt: startDate } } },
+        { $match: { vendorId: vendorObj, date: { $lt: startDate }, source: { $ne: "advance" } } },
         { $lookup: { from: vendorsColl, localField: "vendorId", foreignField: "_id", as: "v" } },
         { $unwind: "$v" },
         { $match: { "v.projectId": projectObj } },
         { $group: { _id: null, sum: { $sum: "$amount" } } },
       ]),
+      ItemLedgerEntry.aggregate<{ sum: number }>([
+        { $match: { projectId: projectObj, vendorId: vendorObj, date: { $lt: startDate }, advanceGenerated: { $gt: 0 } } },
+        { $group: { _id: null, sum: { $sum: "$advanceGenerated" } } },
+      ]),
     ]);
-    const entries: CashExpensesLedgerEntry[] = docs.map((d) => ({
-      id: d._id.toString(),
-      date: d.date,
-      name: "",
-      remarks: joinRemarks(d.referenceId, d.remarks),
-      amount: d.amount,
-    }));
+    const entries: CashExpensesLedgerEntry[] = [
+      ...payDocs.map((d) => ({
+        id: d._id.toString(),
+        date: d.date,
+        name: "",
+        remarks: joinRemarks(d.referenceId, d.remarks),
+        amount: d.amount,
+      })),
+      ...advDocs.map((d) => ({
+        id: d._id.toString(),
+        date: d.date,
+        name: "",
+        remarks: joinRemarks("Advance", populatedIdName(d.itemId).name),
+        amount: d.advanceGenerated,
+      })),
+    ].sort((a, b) => a.date.localeCompare(b.date));
     return {
       entityName: vendor?.name ?? "Vendor",
       entityType,
-      previousAmount: prevAgg[0]?.sum ?? 0,
+      previousAmount: (payPrevAgg[0]?.sum ?? 0) + (advPrevAgg[0]?.sum ?? 0),
       entries,
       currentTotal: entries.reduce((s, e) => s + e.amount, 0),
     };

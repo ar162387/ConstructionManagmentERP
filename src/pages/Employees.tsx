@@ -129,7 +129,7 @@ function EmployeesSalaryPrintSheet({
     let sa = 0;
     let sn = 0;
     const body = employees.map((employee, idx) => {
-      const firstMonth = getFirstMonth(employee.createdAt);
+      const firstMonth = getFirstMonth(employee.createdAt, employee.joiningDate);
       const isBefore = firstMonth ? selectedMonth < firstMonth : false;
       const snapshot = isBefore ? undefined : employee.snapshot;
       const wd = salaryWorkingDays(employee, snapshot, selectedMonth, isBefore);
@@ -268,7 +268,7 @@ function EmployeeRows({
   return (
     <>
       {employees.map((employee) => {
-        const firstMonth = getFirstMonth(employee.createdAt);
+        const firstMonth = getFirstMonth(employee.createdAt, employee.joiningDate);
         const isBeforeEmployeeCreated = firstMonth ? selectedMonth < firstMonth : false;
         const snapshot = isBeforeEmployeeCreated ? undefined : employee.snapshot;
         const totalPaidAllMonths = employee.totalPaid ?? 0;

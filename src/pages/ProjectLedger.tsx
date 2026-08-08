@@ -82,11 +82,9 @@ export default function ProjectLedger() {
         subtitle="Bank-linked transactions and manual balance adjustments"
         printTargetId="project-ledger"
         actions={
-          isSuperAdmin && (
-            <Button variant="warning" size="sm" onClick={() => setAddAdjustmentOpen(true)}>
-              <Plus className="h-4 w-4 mr-1" /> Manual Balance Adjustment
-            </Button>
-          )
+          <Button variant="warning" size="sm" onClick={() => setAddAdjustmentOpen(true)}>
+            <Plus className="h-4 w-4 mr-1" /> Manual Balance Adjustment
+          </Button>
         }
       />
 

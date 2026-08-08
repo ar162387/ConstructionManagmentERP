@@ -164,7 +164,7 @@ export default function CashAndExpenses() {
   );
   const receiptsBalance = {
     current: openingTotals.total,
-    previous: openingTotals.previous,
+    previous: report?.openingBalances.openingRow.tPayment ?? 0,
     total: openingTotals.tPayment,
   };
   const dayClosing = {
