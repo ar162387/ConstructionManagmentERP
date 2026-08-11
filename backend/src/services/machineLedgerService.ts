@@ -273,13 +273,8 @@ export async function createMachinePayment(
     }
   }
 
-  const { remaining } = await getMachineTotals(machineId);
-  if (amount > remaining) {
-    throw new Error(
-      `This payment would overpay. Remaining balance is ${remaining.toLocaleString()} PKR.`
-    );
-  }
-
+  // Payments are allowed to exceed the remaining balance — the excess is simply carried as an
+  // advance against future hours worked, rather than being rejected as an overpayment.
   const payment = await MachinePayment.create({
     machineId,
     date: input.date.trim(),
@@ -312,7 +307,9 @@ export async function createMachinePayment(
   };
 }
 
-/** Delete ledger entry; reverse financial impact and rebuild FIFO. Block if deletion would cause overpayment (total paid > remaining cost). */
+/** Delete ledger entry; reverse financial impact and rebuild FIFO. Payments already recorded
+ * against this machine are never blocked by this — any amount left over from the deleted entry's
+ * cost is simply carried forward as advance, same as an intentional overpayment. */
 export async function deleteMachineEntry(
   actor: { userId: string; email: string; role: string },
   entryId: string
@@ -321,14 +318,6 @@ export async function deleteMachineEntry(
 
   const entry = await MachineLedgerEntry.findById(entryId).lean();
   if (!entry) throw new Error("Entry not found");
-
-  const totals = await getMachineTotals(entry.machineId.toString());
-  const costAfterDelete = totals.totalCost - entry.totalCost;
-  if (totals.totalPaid > costAfterDelete) {
-    throw new Error(
-      `Cannot delete this entry: it would result in overpayment (total paid ${totals.totalPaid.toLocaleString()} PKR would exceed remaining cost ${costAfterDelete.toLocaleString()} PKR). Remove or reduce payment entries first.`
-    );
-  }
 
   const machine = await Machine.findById(entry.machineId).select("name").lean();
 

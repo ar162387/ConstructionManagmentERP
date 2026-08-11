@@ -103,7 +103,11 @@ export interface ListMachinesResult {
   total: number;
 }
 
-/** One row per machine for a dated running bill (period = inclusive YYYY-MM-DD range). */
+/** One row per machine for a dated running bill (period = inclusive YYYY-MM-DD range).
+ * Payments are bucketed the same way as ledger entries: before periodStart → previousBillAdvance,
+ * from periodStart through periodEnd → thisBillAdvance. The frontend decides which machines count
+ * toward the printed total (a selection checkbox), so each row carries its own split figures
+ * rather than the service pre-summing everything. */
 export interface MachineRunningBillRow extends MachinePayload {
   currentHours: number;
   previousHours: number;
@@ -111,8 +115,8 @@ export interface MachineRunningBillRow extends MachinePayload {
   thisBill: number;
   previousBill: number;
   totalAmount: number;
-  advance: number;
-  netAmount: number;
+  previousBillAdvance: number;
+  thisBillAdvance: number;
 }
 
 /** Column totals for the entire project (all machines), same period rules as rows. */
@@ -123,8 +127,8 @@ export interface RunningBillSummary {
   thisBill: number;
   previousBill: number;
   totalAmount: number;
-  advance: number;
-  netAmount: number;
+  previousBillAdvance: number;
+  thisBillAdvance: number;
 }
 
 export interface ListMachinesRunningBillResult {
@@ -167,8 +171,8 @@ export async function listMachinesRunningBill(
     thisBill: 0,
     previousBill: 0,
     totalAmount: 0,
-    advance: 0,
-    netAmount: 0,
+    previousBillAdvance: 0,
+    thisBillAdvance: 0,
   };
 
   if (actor.role === "site_manager" && !projectId) {
@@ -210,7 +214,7 @@ export async function listMachinesRunningBill(
     { $match: { bucket: { $ne: "ignore" } } },
   ] as const;
 
-  const [globalEntryBuckets, globalAdvance] = await Promise.all([
+  const [globalEntryBuckets, globalPaymentBuckets] = await Promise.all([
     MachineLedgerEntry.aggregate<{ _id: string; hours: number; cost: number }>([
       { $match: { projectId: projectObjId } },
       ...bucketStages,
@@ -218,12 +222,12 @@ export async function listMachinesRunningBill(
     ]),
     (async () => {
       const allIds = await Machine.find({ projectId: projectObjId }).distinct("_id");
-      if (allIds.length === 0) return 0;
-      const r = await MachinePayment.aggregate<{ t: number }>([
-        { $match: { machineId: { $in: allIds }, date: { $lte: periodEnd } } },
-        { $group: { _id: null, t: { $sum: "$amount" } } },
+      if (allIds.length === 0) return [] as { _id: string; total: number }[];
+      return MachinePayment.aggregate<{ _id: string; total: number }>([
+        { $match: { machineId: { $in: allIds } } },
+        ...bucketStages,
+        { $group: { _id: "$bucket", total: { $sum: "$amount" } } },
       ]);
-      return r[0]?.t ?? 0;
     })(),
   ]);
 
@@ -240,6 +244,12 @@ export async function listMachinesRunningBill(
       currC = row.cost;
     }
   }
+  let prevAdvance = 0;
+  let currAdvance = 0;
+  for (const row of globalPaymentBuckets) {
+    if (row._id === "previous") prevAdvance = row.total;
+    else if (row._id === "current") currAdvance = row.total;
+  }
   const totalAmt = prevC + currC;
   const summary: RunningBillSummary = {
     currentHours: currH,
@@ -248,8 +258,8 @@ export async function listMachinesRunningBill(
     thisBill: currC,
     previousBill: prevC,
     totalAmount: totalAmt,
-    advance: globalAdvance,
-    netAmount: totalAmt - globalAdvance,
+    previousBillAdvance: prevAdvance,
+    thisBillAdvance: currAdvance,
   };
 
   if (docs.length === 0) {
@@ -297,14 +307,28 @@ export async function listMachinesRunningBill(
         },
       },
     ]),
-    MachinePayment.aggregate<{ _id: mongoose.Types.ObjectId; advance: number }>([
+    MachinePayment.aggregate<{ _id: { m: mongoose.Types.ObjectId; b: string }; total: number }>([
+      { $match: { machineId: { $in: machineObjIds } } },
       {
-        $match: {
-          machineId: { $in: machineObjIds },
-          date: { $lte: periodEnd },
+        $addFields: {
+          bucket: {
+            $switch: {
+              branches: [
+                { case: { $lt: ["$date", periodStart] }, then: "previous" },
+                {
+                  case: {
+                    $and: [{ $gte: ["$date", periodStart] }, { $lte: ["$date", periodEnd] }],
+                  },
+                  then: "current",
+                },
+              ],
+              default: "ignore",
+            },
+          },
         },
       },
-      { $group: { _id: "$machineId", advance: { $sum: "$amount" } } },
+      { $match: { bucket: { $ne: "ignore" } } },
+      { $group: { _id: { m: "$machineId", b: "$bucket" }, total: { $sum: "$amount" } } },
     ]),
   ]);
 
@@ -329,9 +353,13 @@ export async function listMachinesRunningBill(
     }
   }
 
-  const payMap = new Map<string, number>();
+  const payMap = new Map<string, { previous: number; current: number }>();
   for (const p of paymentBuckets) {
-    payMap.set(p._id.toString(), p.advance);
+    const mid = p._id.m.toString();
+    const existing = payMap.get(mid) ?? { previous: 0, current: 0 };
+    if (p._id.b === "previous") existing.previous = p.total;
+    else if (p._id.b === "current") existing.current = p.total;
+    payMap.set(mid, existing);
   }
 
   const items: MachineRunningBillRow[] = docs.map((doc) => {
@@ -343,8 +371,7 @@ export async function listMachinesRunningBill(
     const previousBill = b.previous.c;
     const thisBill = b.current.c;
     const totalAmount = previousBill + thisBill;
-    const advance = payMap.get(idStr) ?? 0;
-    const netAmount = totalAmount - advance;
+    const pay = payMap.get(idStr) ?? { previous: 0, current: 0 };
     return {
       ...toPayload(doc),
       currentHours,
@@ -353,8 +380,8 @@ export async function listMachinesRunningBill(
       thisBill,
       previousBill,
       totalAmount,
-      advance,
-      netAmount,
+      previousBillAdvance: pay.previous,
+      thisBillAdvance: pay.current,
     };
   });
 

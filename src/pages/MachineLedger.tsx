@@ -53,6 +53,8 @@ export default function MachineLedger() {
 
   const { rows, total, totalHours, totalCost, totalPaid, remaining, previousBalance, loading, error, refetch } =
     useMachineLedger(machineId, page, pageSize, startDate || undefined, endDate || undefined);
+  // remaining is clamped to 0 by the backend, so paid-over-cost only shows up as a gap here — recover it as an advance.
+  const advance = Math.max(0, totalPaid - totalCost);
 
   const handleStartDateChange = (value: string) => {
     setStartDate(value);
@@ -182,7 +184,7 @@ export default function MachineLedger() {
             <Button variant="warning" size="sm" onClick={() => setAddEntryOpen(true)}>
               <Plus className="h-4 w-4 mr-1" />Add Entry
             </Button>
-            <Button variant="outline" size="sm" onClick={() => setAddPaymentOpen(true)} disabled={remaining <= 0}>
+            <Button variant="outline" size="sm" onClick={() => setAddPaymentOpen(true)}>
               <Banknote className="h-4 w-4 mr-1" />Add Payment
             </Button>
           </div>
@@ -275,7 +277,11 @@ export default function MachineLedger() {
         <StatCard label="Total Hours" value={totalHours.toString()} variant="info" />
         <StatCard label="Total Cost" value={formatCurrency(totalCost)} />
         <StatCard label="Total Paid" value={formatCurrency(totalPaid)} variant="success" />
-        <StatCard label="Pending" value={formatCurrency(remaining)} variant={remaining > 0 ? "destructive" : "default"} />
+        {advance > 0 ? (
+          <StatCard label="Advance" value={formatCurrency(advance)} variant="success" />
+        ) : (
+          <StatCard label="Pending" value={formatCurrency(remaining)} variant={remaining > 0 ? "destructive" : "default"} />
+        )}
         {startDate && (
           <StatCard label="Previous Balance" value={formatCurrency(previousBalance)} variant="default" />
         )}
@@ -291,7 +297,6 @@ export default function MachineLedger() {
                 <th className="px-4 py-2.5 text-left text-sm font-bold uppercase tracking-wider">Used By</th>
                 <th className="px-4 py-2.5 text-right text-sm font-bold uppercase tracking-wider">Total Cost</th>
                 <th className="px-4 py-2.5 text-right text-sm font-bold uppercase tracking-wider">Paid</th>
-                <th className="px-4 py-2.5 text-right text-sm font-bold uppercase tracking-wider">Remaining</th>
                 <th className="px-4 py-2.5 text-right text-sm font-bold uppercase tracking-wider">Total</th>
                 <th className="px-4 py-2.5 text-left text-sm font-bold uppercase tracking-wider">Remarks</th>
                 {canDeleteEntry && (
@@ -302,19 +307,19 @@ export default function MachineLedger() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={canDeleteEntry ? 9 : 8} className="px-4 py-8 text-center text-muted-foreground">
+                  <td colSpan={canDeleteEntry ? 8 : 7} className="px-4 py-8 text-center text-muted-foreground">
                     Loading…
                   </td>
                 </tr>
               ) : error ? (
                 <tr>
-                  <td colSpan={canDeleteEntry ? 9 : 8} className="px-4 py-8 text-center text-destructive">
+                  <td colSpan={canDeleteEntry ? 8 : 7} className="px-4 py-8 text-center text-destructive">
                     {error}
                   </td>
                 </tr>
               ) : rows.length === 0 ? (
                 <tr>
-                  <td colSpan={canDeleteEntry ? 9 : 8} className="px-4 py-8 text-center text-muted-foreground">
+                  <td colSpan={canDeleteEntry ? 8 : 7} className="px-4 py-8 text-center text-muted-foreground">
                     No ledger entries yet.
                   </td>
                 </tr>
@@ -326,8 +331,7 @@ export default function MachineLedger() {
                       <td className="px-4 py-3 text-right font-mono text-sm">{row.hoursWorked}</td>
                       <td className="px-4 py-3 text-sm">{row.usedBy || "—"}</td>
                       <td className="px-4 py-3 text-right font-mono text-sm font-bold">{formatCurrency(row.totalCost)}</td>
-                      <td className="px-4 py-3 text-right font-mono text-sm text-success">{formatCurrency(row.paidAmount)}</td>
-                      <td className="px-4 py-3 text-right font-mono text-sm text-destructive">{row.remaining > 0 ? formatCurrency(row.remaining) : "—"}</td>
+                      <td className="px-4 py-3 text-right font-mono text-sm text-muted-foreground">—</td>
                       <td className="px-4 py-3 text-right font-mono text-sm font-bold">{formatCurrency(row.runningTotal)}</td>
                       <td className="px-4 py-3 text-sm text-muted-foreground">{row.remarks || "—"}</td>
                       {canDeleteEntry && (
@@ -351,7 +355,6 @@ export default function MachineLedger() {
                       <td className="px-4 py-3 text-sm font-medium">Payment{row.paymentMethod ? ` (${row.paymentMethod})` : ""}</td>
                       <td className="px-4 py-3 text-right font-mono text-sm">—</td>
                       <td className="px-4 py-3 text-right font-mono text-sm text-success">{formatCurrency(row.amount)}</td>
-                      <td className="px-4 py-3 text-right font-mono text-sm">—</td>
                       <td className="px-4 py-3 text-right font-mono text-sm font-bold">{formatCurrency(row.runningTotal)}</td>
                       <td className="px-4 py-3 text-sm text-muted-foreground">{row.referenceId || "—"}</td>
                       {canDeleteEntry && (

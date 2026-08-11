@@ -15,8 +15,8 @@ const emptySummary: ApiRunningBillSummary = {
   thisBill: 0,
   previousBill: 0,
   totalAmount: 0,
-  advance: 0,
-  netAmount: 0,
+  previousBillAdvance: 0,
+  thisBillAdvance: 0,
 };
 
 const emptyResult: ListMachinesRunningBillResult = {

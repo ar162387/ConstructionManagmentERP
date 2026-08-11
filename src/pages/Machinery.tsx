@@ -22,6 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Checkbox } from "@/components/ui/checkbox";
 import { TablePagination } from "@/components/TablePagination";
 import {
   AlertDialog,
@@ -97,6 +98,7 @@ const MACHINERY_RUNNING_PRINT_CSS = `
     text-decoration: none !important;
   }
   table.machinery-running-table tbody tr:nth-child(even) td { background: #f9f9f9; }
+  .machinery-row-excluded { display: none !important; }
   table.machinery-running-table tr.machinery-running-total td { font-weight: 700; background: #f0f0f0; }
   table.machinery-running-table tr.machinery-running-deduction td,
   table.machinery-running-table tr.machinery-running-balance td { font-weight: 700; }
@@ -120,7 +122,10 @@ export default function Machinery() {
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [viewMode, setViewMode] = useState<ViewMode>("standard");
   const [{ start: periodStart, end: periodEnd }, setPeriod] = useState(defaultPeriodBounds);
-  const [lessAdvance, setLessAdvance] = useState(0);
+  /** Machines unchecked from the running bill totals/print. Tracking exclusions (rather than
+   *  inclusions) means every machine defaults to selected without needing to seed the set from
+   *  fetched rows. */
+  const [deselectedMachineIds, setDeselectedMachineIds] = useState<Set<string>>(new Set());
 
   const isSiteManager = currentUser?.role === "Site Manager";
   const canEditDelete = !isSiteManager;
@@ -133,12 +138,14 @@ export default function Machinery() {
     pageSize
   );
 
+  // Running bill selection (which machines count toward totals/print) needs every machine on the
+  // project in hand at once, not just the current standard-view page — so fetch it unpaginated.
   const runningBill = useMachinesRunningBill(
     effectiveProjectId,
     periodStart,
     periodEnd,
-    page,
-    pageSize,
+    1,
+    100,
     viewMode === "runningBill"
   );
 
@@ -210,8 +217,60 @@ export default function Machinery() {
     setPage(1);
   }, [periodStart, periodEnd]);
 
-  const summary = runningBill.summary;
-  const balanceAfterLessAdvance = summary.netAmount - lessAdvance;
+  // Re-include every machine whenever the bill's scope changes, rather than carrying stale
+  // exclusions from a different project/period into a new one.
+  useEffect(() => {
+    setDeselectedMachineIds(new Set());
+  }, [effectiveProjectId, periodStart, periodEnd]);
+
+  const toggleMachineSelected = (id: string, selected: boolean) => {
+    setDeselectedMachineIds((prev) => {
+      const next = new Set(prev);
+      if (selected) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const selectedRunningBillRows = useMemo(
+    () => runningBill.rows.filter((r) => !deselectedMachineIds.has(r.id)),
+    [runningBill.rows, deselectedMachineIds]
+  );
+  const allRunningBillSelected =
+    runningBill.rows.length > 0 && selectedRunningBillRows.length === runningBill.rows.length;
+
+  /** Totals recomputed from only the checked rows — this is what prints and what "Balance" is
+   *  based on, since the client decides which machines belong on a given bill. */
+  const summary = useMemo(
+    () =>
+      selectedRunningBillRows.reduce(
+        (acc, r) => ({
+          currentHours: acc.currentHours + r.currentHours,
+          previousHours: acc.previousHours + r.previousHours,
+          totalHours: acc.totalHours + r.totalHours,
+          thisBill: acc.thisBill + r.thisBill,
+          previousBill: acc.previousBill + r.previousBill,
+          totalAmount: acc.totalAmount + r.totalAmount,
+          previousBillAdvance: acc.previousBillAdvance + r.previousBillAdvance,
+          thisBillAdvance: acc.thisBillAdvance + r.thisBillAdvance,
+        }),
+        {
+          currentHours: 0,
+          previousHours: 0,
+          totalHours: 0,
+          thisBill: 0,
+          previousBill: 0,
+          totalAmount: 0,
+          previousBillAdvance: 0,
+          thisBillAdvance: 0,
+        }
+      ),
+    [selectedRunningBillRows]
+  );
+  const totalAdvance = summary.previousBillAdvance + summary.thisBillAdvance;
+  const balanceThisBill = summary.thisBill - summary.thisBillAdvance;
+  const balancePreviousBill = summary.previousBill - summary.previousBillAdvance;
+  const balanceTotal = summary.totalAmount - totalAdvance;
 
   return (
     <Layout>
@@ -335,23 +394,6 @@ export default function Machinery() {
                 onChange={(e) => setPeriod((p) => ({ ...p, end: e.target.value }))}
               />
             </div>
-            <div>
-              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Less advance</Label>
-              <Input
-                type="number"
-                min={0}
-                step={1}
-                className="mt-1 w-[160px] font-mono text-sm"
-                value={lessAdvance}
-                onChange={(e) => {
-                  const n = Number(e.target.value);
-                  setLessAdvance(Number.isFinite(n) && n >= 0 ? n : 0);
-                }}
-              />
-              <p className="text-xs text-muted-foreground mt-1 max-w-[280px]">
-                Optional extra deduction from net total (paper-style summary line).
-              </p>
-            </div>
           </div>
         )}
       </div>
@@ -381,14 +423,26 @@ export default function Machinery() {
                 className="machinery-running-table w-full min-w-[1040px] border-collapse text-sm [&_tbody_tr:nth-child(even)]:bg-muted/20 [&_td]:px-2.5 [&_td]:py-2 [&_td]:align-middle [&_th]:px-2.5 [&_th]:py-2.5 [&_th]:text-xs [&_th]:font-semibold"
               >
                 <colgroup>
+                  <col className="w-8" />
                   <col className="w-10" />
                   <col className="min-w-[11rem]" />
                   <col span={3} className="w-[4.5rem]" />
                   <col className="w-[5rem]" />
-                  <col span={5} className="min-w-[5.5rem]" />
+                  <col span={3} className="min-w-[5.5rem]" />
                 </colgroup>
                 <thead>
                   <tr>
+                    <th className="text-center print-hidden">
+                      <Checkbox
+                        checked={allRunningBillSelected}
+                        onCheckedChange={(checked) => {
+                          setDeselectedMachineIds(
+                            checked ? new Set() : new Set(runningBill.rows.map((r) => r.id))
+                          );
+                        }}
+                        aria-label="Select all machines"
+                      />
+                    </th>
                     <th className="text-center">#</th>
                     <th className="text-left">Machine</th>
                     <th className="whitespace-nowrap" title="Hours this period">
@@ -408,81 +462,82 @@ export default function Machinery() {
                       Prev bill
                     </th>
                     <th className="whitespace-nowrap">Total</th>
-                    <th className="whitespace-nowrap" title="Paid to bill date">
-                      Advance
-                    </th>
-                    <th className="whitespace-nowrap" title="Total minus advance">
-                      Net
-                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {activeLoading ? (
                     <tr>
-                      <td colSpan={11} className="px-4 py-10 text-center text-muted-foreground">
+                      <td colSpan={10} className="px-4 py-10 text-center text-muted-foreground">
                         Loading…
                       </td>
                     </tr>
                   ) : activeError ? (
                     <tr>
-                      <td colSpan={11} className="px-4 py-10 text-center text-destructive">
+                      <td colSpan={10} className="px-4 py-10 text-center text-destructive">
                         {activeError}
                       </td>
                     </tr>
                   ) : runningBill.rows.length === 0 ? (
                     <tr>
-                      <td colSpan={11} className="px-4 py-10 text-center text-muted-foreground">
+                      <td colSpan={10} className="px-4 py-10 text-center text-muted-foreground">
                         No machines for this project.
                       </td>
                     </tr>
                   ) : (
-                    runningBill.rows.map((m, i) => (
-                      <tr key={m.id} className="border-b border-border/60">
-                        <td className="text-center tabular-nums text-muted-foreground">
-                          {(page - 1) * pageSize + i + 1}
-                        </td>
-                        <td className="max-w-[14rem] truncate text-left font-medium sm:max-w-[18rem]" title={m.name}>
-                          <Link
-                            to={`/machinery/${m.id}`}
-                            className="font-medium text-foreground no-underline hover:underline"
-                          >
-                            {m.name}
-                          </Link>
-                        </td>
-                        <td className="text-right font-mono text-xs tabular-nums sm:text-sm">
-                          {m.currentHours === 0 ? "—" : formatHoursCell(m.currentHours)}
-                        </td>
-                        <td className="text-right font-mono text-xs tabular-nums sm:text-sm">
-                          {formatHoursCell(m.previousHours)}
-                        </td>
-                        <td className="text-right font-mono text-xs font-medium tabular-nums sm:text-sm">
-                          {formatHoursCell(m.totalHours)}
-                        </td>
-                        <td className="border-l border-border/80 text-right font-mono text-xs tabular-nums sm:text-sm">
-                          {formatRunningBillAmount(m.hourlyRate)}
-                        </td>
-                        <td className="border-l-2 border-border text-right font-mono text-xs tabular-nums sm:text-sm">
-                          {cellMoney(m.thisBill, true)}
-                        </td>
-                        <td className="text-right font-mono text-xs tabular-nums sm:text-sm">
-                          {cellMoney(m.previousBill)}
-                        </td>
-                        <td className="text-right font-mono text-xs font-medium tabular-nums sm:text-sm">
-                          {cellMoney(m.totalAmount)}
-                        </td>
-                        <td className="text-right font-mono text-xs tabular-nums sm:text-sm">
-                          {cellMoney(m.advance)}
-                        </td>
-                        <td className="text-right font-mono text-xs font-medium tabular-nums sm:text-sm">
-                          {cellMoney(m.netAmount)}
-                        </td>
-                      </tr>
-                    ))
+                    runningBill.rows.map((m, i) => {
+                      const isSelected = !deselectedMachineIds.has(m.id);
+                      return (
+                        <tr
+                          key={m.id}
+                          className={`border-b border-border/60 ${
+                            isSelected ? "" : "machinery-row-excluded opacity-50"
+                          }`}
+                        >
+                          <td className="text-center print-hidden">
+                            <Checkbox
+                              checked={isSelected}
+                              onCheckedChange={(checked) => toggleMachineSelected(m.id, checked === true)}
+                              aria-label={`Include ${m.name} in bill`}
+                            />
+                          </td>
+                          <td className="text-center tabular-nums text-muted-foreground">{i + 1}</td>
+                          <td className="max-w-[14rem] truncate text-left font-medium sm:max-w-[18rem]" title={m.name}>
+                            <Link
+                              to={`/machinery/${m.id}`}
+                              className="font-medium text-foreground no-underline hover:underline"
+                            >
+                              {m.name}
+                            </Link>
+                          </td>
+                          <td className="text-right font-mono text-xs tabular-nums sm:text-sm">
+                            {m.currentHours === 0 ? "—" : formatHoursCell(m.currentHours)}
+                          </td>
+                          <td className="text-right font-mono text-xs tabular-nums sm:text-sm">
+                            {formatHoursCell(m.previousHours)}
+                          </td>
+                          <td className="text-right font-mono text-xs font-medium tabular-nums sm:text-sm">
+                            {formatHoursCell(m.totalHours)}
+                          </td>
+                          <td className="border-l border-border/80 text-right font-mono text-xs tabular-nums sm:text-sm">
+                            {formatRunningBillAmount(m.hourlyRate)}
+                          </td>
+                          <td className="border-l-2 border-border text-right font-mono text-xs tabular-nums sm:text-sm">
+                            {cellMoney(m.thisBill, true)}
+                          </td>
+                          <td className="text-right font-mono text-xs tabular-nums sm:text-sm">
+                            {cellMoney(m.previousBill)}
+                          </td>
+                          <td className="text-right font-mono text-xs font-medium tabular-nums sm:text-sm">
+                            {cellMoney(m.totalAmount)}
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
-                  {!activeLoading && !activeError && runningBill.rows.length > 0 && (
+                  {!activeLoading && !activeError && selectedRunningBillRows.length > 0 && (
                     <>
                       <tr className="machinery-running-total border-t-2 border-border bg-muted/40">
-                        <td colSpan={2} className="text-left font-semibold">
+                        <td colSpan={3} className="text-left font-semibold">
                           Total
                         </td>
                         <td className="text-right font-mono text-xs font-semibold tabular-nums sm:text-sm">
@@ -504,29 +559,35 @@ export default function Machinery() {
                         <td className="text-right font-mono text-xs font-semibold tabular-nums sm:text-sm">
                           {cellMoney(summary.totalAmount)}
                         </td>
-                        <td className="text-right font-mono text-xs font-semibold tabular-nums sm:text-sm">
-                          {cellMoney(summary.advance)}
-                        </td>
-                        <td className="text-right font-mono text-xs font-semibold tabular-nums sm:text-sm">
-                          {cellMoney(summary.netAmount)}
-                        </td>
                       </tr>
                       <tr className="machinery-running-deduction bg-muted/25">
-                        <td colSpan={2} className="text-left text-sm font-medium">
+                        <td colSpan={7} className="text-left text-sm font-medium">
                           Less advance
                         </td>
-                        <td colSpan={8} className="bg-muted/25" />
                         <td className="text-right font-mono text-sm font-semibold tabular-nums">
-                          {lessAdvance === 0 ? "—" : formatRunningBillAmount(lessAdvance)}
+                          {summary.thisBillAdvance === 0 ? "—" : formatRunningBillAmount(summary.thisBillAdvance)}
+                        </td>
+                        <td className="text-right font-mono text-sm font-semibold tabular-nums">
+                          {summary.previousBillAdvance === 0
+                            ? "—"
+                            : formatRunningBillAmount(summary.previousBillAdvance)}
+                        </td>
+                        <td className="text-right font-mono text-sm font-semibold tabular-nums">
+                          {totalAdvance === 0 ? "—" : formatRunningBillAmount(totalAdvance)}
                         </td>
                       </tr>
                       <tr className="machinery-running-balance bg-muted/40">
-                        <td colSpan={2} className="text-left text-sm font-semibold">
+                        <td colSpan={7} className="text-left text-sm font-semibold">
                           Balance
                         </td>
-                        <td colSpan={8} className="bg-muted/40" />
                         <td className="text-right font-mono text-sm font-bold tabular-nums">
-                          {cellMoney(balanceAfterLessAdvance)}
+                          {cellMoney(balanceThisBill)}
+                        </td>
+                        <td className="text-right font-mono text-sm font-bold tabular-nums">
+                          {cellMoney(balancePreviousBill)}
+                        </td>
+                        <td className="text-right font-mono text-sm font-bold tabular-nums">
+                          {cellMoney(balanceTotal)}
                         </td>
                       </tr>
                     </>
@@ -593,8 +654,14 @@ export default function Machinery() {
                         <td className="px-4 py-3 text-right font-mono text-sm">{m.totalHours}</td>
                         <td className="px-4 py-3 text-right font-mono text-sm font-bold">{formatCurrency(m.totalCost)}</td>
                         <td className="px-4 py-3 text-right font-mono text-sm text-success">{formatCurrency(m.totalPaid)}</td>
-                        <td className="px-4 py-3 text-right font-mono text-sm text-destructive">
-                          {m.totalPending > 0 ? formatCurrency(m.totalPending) : "—"}
+                        <td className="px-4 py-3 text-right font-mono text-sm">
+                          {m.totalPending > 0 ? (
+                            <span className="text-destructive">{formatCurrency(m.totalPending)}</span>
+                          ) : m.totalPaid > m.totalCost ? (
+                            <span className="text-success">+{formatCurrency(m.totalPaid - m.totalCost)} adv</span>
+                          ) : (
+                            "—"
+                          )}
                         </td>
                         {canEditDelete && (
                           <td className="px-4 py-3 text-right print-hidden">
@@ -631,22 +698,24 @@ export default function Machinery() {
             </div>
           </>
         )}
-        <div className="print-hidden">
-          <TablePagination
-            pageSize={pageSize}
-            onPageSizeChange={handlePageSizeChange}
-            page={page}
-            totalPages={totalPages}
-            totalItems={activeTotal}
-            onPrevious={() => setPage((p) => Math.max(1, p - 1))}
-            onNext={() => setPage((p) => Math.min(totalPages, p + 1))}
-            canPrevious={page > 1}
-            canNext={page < totalPages}
-            startIndexOneBased={startIndexOneBased}
-            endIndex={endIndex}
-            pageSizeOptions={PAGE_SIZE_OPTIONS}
-          />
-        </div>
+        {viewMode !== "runningBill" && (
+          <div className="print-hidden">
+            <TablePagination
+              pageSize={pageSize}
+              onPageSizeChange={handlePageSizeChange}
+              page={page}
+              totalPages={totalPages}
+              totalItems={activeTotal}
+              onPrevious={() => setPage((p) => Math.max(1, p - 1))}
+              onNext={() => setPage((p) => Math.min(totalPages, p + 1))}
+              canPrevious={page > 1}
+              canNext={page < totalPages}
+              startIndexOneBased={startIndexOneBased}
+              endIndex={endIndex}
+              pageSizeOptions={PAGE_SIZE_OPTIONS}
+            />
+          </div>
+        )}
       </div>
     </Layout>
   );

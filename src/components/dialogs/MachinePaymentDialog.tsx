@@ -24,7 +24,8 @@ interface MachinePaymentDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   machine: ApiMachineWithTotals | null;
-  /** Remaining balance for validation. Backend enforces amount <= remaining. */
+  /** Remaining balance (pending dues), for informational display only. Paying more than this is
+   *  allowed — the excess is recorded as an advance rather than being rejected. */
   remainingBalance?: number;
   onSuccess?: () => void;
 }
@@ -50,10 +51,6 @@ export function MachinePaymentDialog({
       toast.error("Date and amount are required");
       return;
     }
-    if (amt > remainingBalance) {
-      toast.error(`Amount exceeds remaining balance of ${remainingBalance.toLocaleString()} PKR`);
-      return;
-    }
     setSubmitting(true);
     try {
       await createMachinePayment(machine.id, {
@@ -62,7 +59,11 @@ export function MachinePaymentDialog({
         paymentMethod,
         referenceId: referenceId.trim() || undefined,
       });
-      toast.success("Payment recorded (FIFO applied)");
+      toast.success(
+        amt > remainingBalance && remainingBalance > 0
+          ? "Payment recorded — excess kept as advance"
+          : "Payment recorded"
+      );
       onOpenChange(false);
       setAmount("");
       setReferenceId("");
@@ -81,9 +82,11 @@ export function MachinePaymentDialog({
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>Add Payment — {machine.name}</DialogTitle>
-          {remainingBalance > 0 && (
-            <p className="text-sm text-muted-foreground">Remaining balance: {remainingBalance.toLocaleString()} PKR. Payment will be applied to oldest dues first (FIFO).</p>
-          )}
+          <p className="text-sm text-muted-foreground">
+            {remainingBalance > 0
+              ? `Pending balance: ${remainingBalance.toLocaleString()} PKR. Paying more than this is recorded as an advance.`
+              : "No pending dues. Any amount recorded here is kept as an advance against future hours."}
+          </p>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -121,7 +124,7 @@ export function MachinePaymentDialog({
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button type="submit" variant="warning" disabled={submitting || remainingBalance <= 0}>
+            <Button type="submit" variant="warning" disabled={submitting}>
               {submitting ? "Recording…" : "Record Payment"}
             </Button>
           </DialogFooter>

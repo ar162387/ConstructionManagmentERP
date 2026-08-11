@@ -37,8 +37,10 @@ export interface ApiMachineRunningBillRow extends ApiMachine {
   thisBill: number;
   previousBill: number;
   totalAmount: number;
-  advance: number;
-  netAmount: number;
+  /** Payments recorded before periodStart. */
+  previousBillAdvance: number;
+  /** Payments recorded within [periodStart, periodEnd]. */
+  thisBillAdvance: number;
 }
 
 export interface ApiRunningBillSummary {
@@ -48,8 +50,8 @@ export interface ApiRunningBillSummary {
   thisBill: number;
   previousBill: number;
   totalAmount: number;
-  advance: number;
-  netAmount: number;
+  previousBillAdvance: number;
+  thisBillAdvance: number;
 }
 
 export interface ListMachinesRunningBillResult {

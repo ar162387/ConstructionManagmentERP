@@ -69,7 +69,7 @@ export default function PrintExportButton({
           .print-project { font-size: 14px; font-weight: 700; margin: 0 0 6px; text-transform: uppercase; letter-spacing: 0.04em; }
           .print-secondary-heading { margin: 0 0 10px; border-bottom: 2px solid #000; padding-bottom: 8px; }
           a { color: inherit !important; text-decoration: none !important; }
-          button, [role="button"], .print-hidden, .employees-print-screen-only, .cash-controls, .kpi-card, .stat-card { display: none !important; }
+          button, [role="button"]:not(tr), .print-hidden, .employees-print-screen-only, .cash-controls, .kpi-card, .stat-card { display: none !important; }
           .print-hidden { display: none !important; }
           @media print { body { padding: 0; } }
           ${safeAdditionalCss}
