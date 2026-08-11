@@ -99,6 +99,13 @@ const MACHINERY_RUNNING_PRINT_CSS = `
   }
   table.machinery-running-table tbody tr:nth-child(even) td { background: #f9f9f9; }
   .machinery-row-excluded { display: none !important; }
+  /* Hiding the checkbox column with plain display:none drops it from the table's column count,
+     shifting every later column left and misaligning the Less advance / Balance rows against the
+     header. Keep the cell occupying its column slot in print, just rendered invisible. */
+  table.machinery-running-table .machinery-running-checkbox-cell.print-hidden {
+    display: table-cell !important;
+    visibility: hidden !important;
+  }
   table.machinery-running-table tr.machinery-running-total td { font-weight: 700; background: #f0f0f0; }
   table.machinery-running-table tr.machinery-running-deduction td,
   table.machinery-running-table tr.machinery-running-balance td { font-weight: 700; }
@@ -432,7 +439,7 @@ export default function Machinery() {
                 </colgroup>
                 <thead>
                   <tr>
-                    <th className="text-center print-hidden">
+                    <th className="text-center machinery-running-checkbox-cell print-hidden">
                       <Checkbox
                         checked={allRunningBillSelected}
                         onCheckedChange={(checked) => {
@@ -493,7 +500,7 @@ export default function Machinery() {
                             isSelected ? "" : "machinery-row-excluded opacity-50"
                           }`}
                         >
-                          <td className="text-center print-hidden">
+                          <td className="text-center machinery-running-checkbox-cell print-hidden">
                             <Checkbox
                               checked={isSelected}
                               onCheckedChange={(checked) => toggleMachineSelected(m.id, checked === true)}
