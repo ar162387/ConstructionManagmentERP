@@ -6,6 +6,8 @@ export interface IContractorPayment {
   date: string;
   amount: number;
   paymentMethod: "Cash" | "Bank" | "Online";
+  /** Advances are allowed before a contractor has billable entries. */
+  paymentType: "settlement" | "advance";
   referenceId?: string;
   createdAt: Date;
   updatedAt: Date;
@@ -17,6 +19,7 @@ const contractorPaymentSchema = new mongoose.Schema<IContractorPayment>(
     date: { type: String, required: true },
     amount: { type: Number, required: true, min: 0.01 },
     paymentMethod: { type: String, enum: ["Cash", "Bank", "Online"], required: true },
+    paymentType: { type: String, enum: ["settlement", "advance"], default: "settlement", required: true },
     referenceId: { type: String, trim: true },
   },
   { timestamps: true }

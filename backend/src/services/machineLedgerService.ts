@@ -20,9 +20,8 @@ export interface MachineLedgerEntryRow {
   paidAmount: number;
   remaining: number;
   remarks?: string;
-  /** Cumulative cash paid to the machine as of this row (previousBalance + every payment up to
-   *  and including this row). An entry never changes this by itself — same rule as the vendor
-   *  ledger's Balance column: a row only adds to the running total when real cash moved. */
+  /** Running amount owed to the machine as of this row. Hourly costs increase it; payments
+   *  reduce it. A negative value is an advance paid before sufficient hours were recorded. */
   runningTotal: number;
 }
 
@@ -34,8 +33,7 @@ export interface MachineLedgerPaymentRow {
   amount: number;
   paymentMethod?: "Cash" | "Bank" | "Online";
   referenceId?: string;
-  /** Cumulative cash paid to the machine as of this row (previousBalance + every payment up to
-   *  and including this row). */
+  /** Running amount owed to the machine as of this row. Payments reduce it. */
   runningTotal: number;
 }
 
@@ -48,7 +46,7 @@ export interface GetMachineLedgerResult {
   totalCost: number;
   totalPaid: number;
   remaining: number;
-  /** Cumulative cash paid before startDate (0 when no startDate filter is applied). */
+  /** Opening amount owed from before startDate (0 when no startDate filter is applied). */
   previousBalance: number;
 }
 
@@ -71,7 +69,7 @@ export interface CreateMachinePaymentInput {
 }
 
 /** Get machine ledger: entries (hours) and payments as separate rows. Payments appear as their own record so "on this date, payment was made". Paginated over combined list.
- * When startDate/endDate are given, rows are filtered to that date range and previousBalance carries the cumulative cash paid before startDate. */
+ * When startDate/endDate are given, rows are filtered to that date range and previousBalance carries the amount owed before startDate. */
 export async function getMachineLedger(
   machineId: string,
   options?: { page?: number; pageSize?: number; startDate?: string; endDate?: string }
@@ -134,32 +132,24 @@ export async function getMachineLedger(
     referenceId: p.referenceId,
   }));
 
-  // Same-row tie-break as the vendor ledger: Mongo ObjectId hex is a creation timestamp, so
-  // ordering by id (not by a hardcoded type rule) makes the ascending computation and the
-  // descending display agree on which of two same-day rows came first — whichever was created
-  // later (e.g. a payment recorded against today's entry) sorts later, so it lands on top in
-  // the newest-first display. A hand-rolled "entries always before payments" rule doesn't have
-  // that property: it can order the display one way while the running total is computed as if
-  // the same-day rows happened in the other order, corrupting the balance shown next to them.
+  // Mongo ObjectId hex includes a creation timestamp. It provides a consistent chronological
+  // tie-breaker for records entered on the same date, so display and balance calculation agree.
   const ascendingCmp = (a: { date: string; id: string }, b: { date: string; id: string }) =>
     a.date.localeCompare(b.date) || a.id.localeCompare(b.id);
-  const descendingCmp = (a: { date: string; id: string }, b: { date: string; id: string }) =>
-    b.date.localeCompare(a.date) || b.id.localeCompare(a.id);
 
-  // Running total = cumulative cash actually paid, walked chronologically (ascending) and
-  // seeded by previousBalance. An entry (bill for hours worked) never has cash attached to it
-  // directly — it only adds to what's owed — so it leaves the running total untouched; only a
-  // payment row adds to it. This mirrors the vendor ledger's Balance column exactly.
+  // Running total = amount owed, walked chronologically (ascending) and seeded by the opening
+  // balance. Usage costs increase what is owed; payments reduce it. This deliberately permits
+  // a negative balance when a machine is paid before any hours are entered (an advance).
   const ascending = [...entryRows, ...paymentRows].sort(ascendingCmp);
   const runningTotalByKey = new Map<string, number>();
   let balance = previousBalance;
   for (const row of ascending) {
-    if (row.type === "payment") balance += row.amount;
+    balance += row.type === "entry" ? row.totalCost : -row.amount;
     runningTotalByKey.set(`${row.type}:${row.id}`, balance);
   }
 
   const allRows: MachineLedgerRow[] = [...entryRows, ...paymentRows]
-    .sort(descendingCmp)
+    .sort(ascendingCmp)
     .map((row) => ({ ...row, runningTotal: runningTotalByKey.get(`${row.type}:${row.id}`) ?? previousBalance } as MachineLedgerRow));
 
   const total = allRows.length;
@@ -176,15 +166,22 @@ export async function getMachineLedger(
   };
 }
 
-/** Cumulative cash paid to a machine before startDate (0 when startDate is not given).
- * Same rule as the running total itself: only payments count, entries never do. */
+/** Amount owed to a machine before startDate (0 when startDate is not given).
+ * Usage costs increase the balance and payments reduce it. */
 async function getMachinePreviousBalance(machineObjId: mongoose.Types.ObjectId, startDate?: string): Promise<number> {
   if (!startDate) return 0;
-  const [paymentAgg] = await MachinePayment.aggregate<{ sum: number }>([
-    { $match: { machineId: machineObjId, date: { $lt: startDate } } },
-    { $group: { _id: null, sum: { $sum: "$amount" } } },
+  const beforeStart = { machineId: machineObjId, date: { $lt: startDate } };
+  const [entryAgg, paymentAgg] = await Promise.all([
+    MachineLedgerEntry.aggregate<{ sum: number }>([
+      { $match: beforeStart },
+      { $group: { _id: null, sum: { $sum: "$totalCost" } } },
+    ]),
+    MachinePayment.aggregate<{ sum: number }>([
+      { $match: beforeStart },
+      { $group: { _id: null, sum: { $sum: "$amount" } } },
+    ]),
   ]);
-  return paymentAgg?.sum ?? 0;
+  return (entryAgg[0]?.sum ?? 0) - (paymentAgg[0]?.sum ?? 0);
 }
 
 /** Create ledger entry (hours worked). totalCost = hoursWorked * machine.hourlyRate at creation time. */

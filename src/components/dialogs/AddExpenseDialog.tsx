@@ -69,7 +69,6 @@ export function AddExpenseDialog({ open, onOpenChange, projectId, categoriesRefr
         amount: amt,
       });
       toast.success("Expense added");
-      onOpenChange(false);
       setDescription("");
       setCategory("");
       setAmount("");

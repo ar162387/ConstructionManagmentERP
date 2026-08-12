@@ -69,7 +69,7 @@ export function SelectConsumableItemDialog({
               <SelectContent>
                 {items.map((i) => (
                   <SelectItem key={i.id} value={i.id}>
-                    {i.name} ({i.unit})
+                    {i.name}
                   </SelectItem>
                 ))}
               </SelectContent>

@@ -15,6 +15,7 @@ export interface ProjectLedgerRow {
   destination?: string;
   referenceId?: string;
   remarks?: string;
+  balance?: number;
 }
 
 export interface GetProjectLedgerResult {

@@ -26,8 +26,22 @@ export interface ApiMonthlySnapshot {
 
 export interface ApiEmployeeLedger {
   payments: ApiEmployeePayment[];
+  rows: ApiEmployeeLedgerRow[];
+  previousBalance: number;
   total: number;
   snapshot?: ApiMonthlySnapshot;
+}
+
+export interface ApiEmployeeLedgerRow {
+  type: "payable" | "payment" | "previous";
+  id: string;
+  date: string;
+  month: string;
+  amount: number;
+  remarks?: string;
+  paymentMethod?: string;
+  paymentType?: string;
+  runningTotal: number;
 }
 
 export interface CreateEmployeePaymentInput {
@@ -62,10 +76,12 @@ export interface PutAttendanceInput {
 
 export async function getEmployeeLedger(
   employeeId: string,
-  options?: { month?: string; page?: number; pageSize?: number }
+  options?: { month?: string; startDate?: string; endDate?: string; page?: number; pageSize?: number }
 ): Promise<ApiEmployeeLedger> {
   const params = new URLSearchParams();
   if (options?.month) params.set("month", options.month);
+  if (options?.startDate) params.set("startDate", options.startDate);
+  if (options?.endDate) params.set("endDate", options.endDate);
   if (options?.page != null) params.set("page", String(options.page));
   if (options?.pageSize != null) params.set("pageSize", String(options.pageSize));
   const q = params.toString();

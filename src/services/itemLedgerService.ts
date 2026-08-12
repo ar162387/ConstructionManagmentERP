@@ -1,6 +1,7 @@
 import { api } from "./api";
 
 export interface ApiItemLedgerEntry {
+  type: "purchase";
   id: string;
   projectId: string;
   itemId: string;
@@ -8,6 +9,7 @@ export interface ApiItemLedgerEntry {
   vendorName: string;
   date: string;
   quantity: number;
+  unit?: string;
   unitPrice: number;
   totalPrice: number;
   paidAmount: number;
@@ -18,12 +20,26 @@ export interface ApiItemLedgerEntry {
   paymentMethod: "Cash" | "Bank" | "Online";
   referenceId?: string;
   remarks?: string;
+  runningBalance?: number;
 }
+
+export interface ApiItemConsumptionLedgerEntry {
+  type: "consumption";
+  id: string;
+  date: string;
+  quantityUsed: number;
+  unit?: string;
+  remarks?: string;
+  runningBalance: number;
+}
+
+export type ApiItemLedgerRow = ApiItemLedgerEntry | ApiItemConsumptionLedgerEntry;
 
 export interface CreateItemLedgerInput {
   vendorId: string;
   date: string;
   quantity: number;
+  unit?: string;
   unitPrice: number;
   paidAmount?: number;
   biltyNumber?: string;
@@ -37,6 +53,7 @@ export interface UpdateItemLedgerInput {
   vendorId?: string;
   date?: string;
   quantity?: number;
+  unit?: string;
   unitPrice?: number;
   paidAmount?: number;
   biltyNumber?: string;
@@ -52,7 +69,7 @@ export interface ListItemLedgerParams {
 }
 
 export interface ListItemLedgerResponse {
-  entries: ApiItemLedgerEntry[];
+  entries: ApiItemLedgerRow[];
   total: number;
 }
 

@@ -21,22 +21,18 @@ interface AddConsumableItemDialogProps {
 
 export function AddConsumableItemDialog({ open, onOpenChange, projectId, onSuccess }: AddConsumableItemDialogProps) {
   const [name, setName] = useState("");
-  const [unit, setUnit] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) { toast.error("Item name is required"); return; }
-    if (!unit.trim()) { toast.error("Unit is required"); return; }
     if (!projectId) { toast.error("No project selected"); return; }
     setLoading(true);
     try {
-      await createConsumableItem({ projectId, name: name.trim(), unit: unit.trim() });
+      await createConsumableItem({ projectId, name: name.trim() });
       toast.success("Item added");
       onSuccess();
-      onOpenChange(false);
       setName("");
-      setUnit("");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to add item");
     } finally {
@@ -54,10 +50,6 @@ export function AddConsumableItemDialog({ open, onOpenChange, projectId, onSucce
           <div>
             <Label>Item Name *</Label>
             <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Cement" className="mt-1" />
-          </div>
-          <div>
-            <Label>Unit *</Label>
-            <Input value={unit} onChange={(e) => setUnit(e.target.value)} placeholder="e.g. bag, kg, piece, cft" className="mt-1" />
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>

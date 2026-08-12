@@ -45,7 +45,6 @@ export function AddVendorDialog({ open, onOpenChange, projectId, onSuccess }: Ad
         description: description.trim(),
       });
       toast.success("Vendor added");
-      onOpenChange(false);
       setName("");
       setPhone("");
       setDescription("");

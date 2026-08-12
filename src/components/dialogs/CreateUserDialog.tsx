@@ -89,7 +89,11 @@ export function CreateUserDialog({
       });
       toast.success("User created");
       onCreated();
-      onOpenChange(false);
+      setName("");
+      setEmail("");
+      setPassword("");
+      setRole("site_manager");
+      setProjectId("");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to create user");
     } finally {

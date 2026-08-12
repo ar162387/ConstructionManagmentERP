@@ -237,15 +237,20 @@ async function fetchAllPriorPaymentTotals(
       {
         $match: {
           date: beforeStart,
-          eventType: "Purchase",
           totalCost: { $gt: 0 },
-          $or: [{ projectTo: projectObj }, { projectFrom: projectObj }],
+          // Older entries predate expenseProjectId; retain them by using the project that was
+          // previously stored on the movement itself. New entries use expenseProjectId.
+          $or: [
+            { expenseProjectId: projectObj },
+            { expenseProjectId: { $exists: false }, projectTo: projectObj },
+            { expenseProjectId: { $exists: false }, projectFrom: projectObj },
+          ],
         },
       },
-      { $group: { _id: "$itemId", sum: { $sum: "$totalCost" } } },
-      { $lookup: { from: nonConsumablesColl, localField: "_id", foreignField: "_id", as: "e" } },
+      { $lookup: { from: nonConsumablesColl, localField: "itemId", foreignField: "_id", as: "e" } },
       { $unwind: { path: "$e", preserveNullAndEmptyArrays: true } },
-      { $project: { sum: 1, name: "$e.name" } },
+      { $group: { _id: "$e.category", sum: { $sum: "$totalCost" } } },
+      { $project: { sum: 1, name: "$_id" } },
     ]),
   ]);
 
@@ -254,7 +259,10 @@ async function fetchAllPriorPaymentTotals(
   for (const r of vendorAdvanceRows) add(`Vendor:${r._id.toString()}`, r.sum, r.name);
   for (const r of contractorRows) add(`Contractor:${r._id.toString()}`, r.sum, r.name);
   for (const r of machineRows) add(`Machinery:${r._id.toString()}`, r.sum, r.name);
-  for (const r of nonConsumableRows) add(`NonConsumable:${r._id.toString()}`, r.sum, r.name);
+  for (const r of nonConsumableRows) {
+    const category = r._id?.toString();
+    if (category) add(`NonConsumable:${category}`, r.sum, r.name);
+  }
   for (const r of expenseRows) {
     if (!r._id) continue;
     add(`Expense:${r._id}`, r.sum, r._id);
@@ -393,7 +401,7 @@ export async function getCashExpensesReport(
     BankTransaction.find({ projectId: projectObj, type: "outflow", date: inRange }).lean(),
     ProjectBalanceAdjustment.find({ projectId: projectObj, date: inRange }).lean(),
     ItemLedgerEntry.find({ projectId: projectObj, date: inRange, paidAmount: { $gt: 0 } })
-      .populate<{ itemId: { name: string } }>("itemId", "name")
+      .populate<{ itemId: { name: string; category: string } }>("itemId", "name category")
       .lean(),
     VendorPayment.find({ date: inRange, source: { $ne: "advance" } })
       .populate<{ vendorId: { projectId: mongoose.Types.ObjectId; name: string } }>("vendorId", "projectId name")
@@ -417,11 +425,14 @@ export async function getCashExpensesReport(
       .then((rows) => rows.filter((r) => r.machineId?.projectId?.toString() === projectId)),
     NonConsumableLedgerEntry.find({
       date: inRange,
-      eventType: "Purchase",
       totalCost: { $gt: 0 },
-      $or: [{ projectTo: projectObj }, { projectFrom: projectObj }],
+      $or: [
+        { expenseProjectId: projectObj },
+        { expenseProjectId: { $exists: false }, projectTo: projectObj },
+        { expenseProjectId: { $exists: false }, projectFrom: projectObj },
+      ],
     })
-      .populate<{ itemId: { name: string } }>("itemId", "name")
+      .populate<{ itemId: { name: string; category: string } }>("itemId", "name category")
       .lean(),
     fetchProjectInflowsBeforeDate(projectObj, startDate),
   ]);
@@ -491,14 +502,22 @@ export async function getCashExpensesReport(
     "Machinery"
   );
 
-  pushAggregatedByEntity(
-    internal,
-    nonConsumablePayments
-      .filter((row) => (row.totalCost ?? 0) > 0)
-      .map((row) => ({ ...populatedIdName(row.itemId), amount: row.totalCost ?? 0 })),
-    "NonConsumable",
-    "Non-Consumable"
-  );
+  const nonConsumableByCategory = new Map<string, number>();
+  for (const row of nonConsumablePayments) {
+    const category = (row.itemId as unknown as { category?: string } | null)?.category?.trim();
+    if (!category || (row.totalCost ?? 0) <= 0) continue;
+    nonConsumableByCategory.set(category, (nonConsumableByCategory.get(category) ?? 0) + (row.totalCost ?? 0));
+  }
+  for (const [category, amount] of nonConsumableByCategory) {
+    internal.push({
+      entityName: category,
+      entityType: "NonConsumable",
+      amount,
+      remarks: "",
+      sourceId: `non-consumable-category-${category}`,
+      entityKey: `NonConsumable:${category}`,
+    });
+  }
 
   const priorByEntity = await fetchAllPriorPaymentTotals(projectObj, startDate);
 
@@ -771,39 +790,52 @@ export async function getCashExpensesEntityLedger(
   }
 
   if (entityType === "NonConsumable") {
-    if (!mongoose.Types.ObjectId.isValid(entityId)) throw new Error("Invalid entity ID");
-    const ncItemObj = new mongoose.Types.ObjectId(entityId);
-    const [ncItem, docs, prevAgg] = await Promise.all([
-      NonConsumableItem.findById(ncItemObj).select("name").lean(),
+    const category = entityId;
+    const itemIds = await NonConsumableItem.find({ category }).distinct("_id");
+    const [docs, prevAgg] = await Promise.all([
       NonConsumableLedgerEntry.find({
-        itemId: ncItemObj,
+        itemId: { $in: itemIds },
         date: inRange,
-        eventType: "Purchase",
         totalCost: { $gt: 0 },
-        $or: [{ projectTo: projectObj }, { projectFrom: projectObj }],
-      }).sort({ date: 1, createdAt: 1 }).lean(),
+        $or: [
+          { expenseProjectId: projectObj },
+          { expenseProjectId: { $exists: false }, projectTo: projectObj },
+          { expenseProjectId: { $exists: false }, projectFrom: projectObj },
+        ],
+      }).populate<{ itemId: { name: string } }>("itemId", "name").sort({ date: 1, createdAt: 1 }).lean(),
       NonConsumableLedgerEntry.aggregate<{ sum: number }>([
         {
           $match: {
-            itemId: ncItemObj,
+            itemId: { $in: itemIds },
             date: { $lt: startDate },
-            eventType: "Purchase",
             totalCost: { $gt: 0 },
-            $or: [{ projectTo: projectObj }, { projectFrom: projectObj }],
+            $or: [
+              { expenseProjectId: projectObj },
+              { expenseProjectId: { $exists: false }, projectTo: projectObj },
+              { expenseProjectId: { $exists: false }, projectFrom: projectObj },
+            ],
           },
         },
         { $group: { _id: null, sum: { $sum: "$totalCost" } } },
       ]),
     ]);
-    const entries: CashExpensesLedgerEntry[] = docs.map((d) => ({
-      id: d._id.toString(),
-      date: d.date,
-      name: "",
-      remarks: d.remarks ?? "",
-      amount: d.totalCost ?? 0,
-    }));
+    const eventLabel: Record<string, string> = {
+      Purchase: "Purchase (Add to Company Store)",
+      Repair: "Repair / Maintenance",
+    };
+    const entries: CashExpensesLedgerEntry[] = docs.map((d) => {
+      const itemName = populatedIdName(d.itemId).name ?? "Non-Consumable item";
+      const purpose = eventLabel[d.eventType] ?? d.eventType;
+      return {
+        id: d._id.toString(),
+        date: d.date,
+        name: itemName,
+        remarks: joinRemarks(`${itemName} — ${purpose}`, d.remarks),
+        amount: d.totalCost ?? 0,
+      };
+    });
     return {
-      entityName: ncItem?.name ?? "Non-Consumable",
+      entityName: category,
       entityType,
       previousAmount: prevAgg[0]?.sum ?? 0,
       entries,

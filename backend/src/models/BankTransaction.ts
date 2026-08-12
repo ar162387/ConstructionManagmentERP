@@ -11,7 +11,9 @@ export interface IBankTransaction {
   amount: number;
   source: string;
   destination: string;
+  clientId?: mongoose.Types.ObjectId;
   projectId?: mongoose.Types.ObjectId;
+  customHeadId?: mongoose.Types.ObjectId;
   mode: BankTransactionMode;
   referenceId?: string;
   remarks?: string;
@@ -27,7 +29,9 @@ const bankTransactionSchema = new mongoose.Schema<IBankTransaction>(
     amount: { type: Number, required: true, min: 0.01 },
     source: { type: String, required: true, trim: true },
     destination: { type: String, required: true, trim: true },
+    clientId: { type: mongoose.Schema.Types.ObjectId, ref: "Client" },
     projectId: { type: mongoose.Schema.Types.ObjectId, ref: "Project" },
+    customHeadId: { type: mongoose.Schema.Types.ObjectId, ref: "CustomHead" },
     mode: { type: String, required: true, enum: ["Cash", "Bank", "Online"], default: "Bank" },
     referenceId: { type: String, trim: true },
     remarks: { type: String, trim: true },
@@ -37,6 +41,7 @@ const bankTransactionSchema = new mongoose.Schema<IBankTransaction>(
 
 bankTransactionSchema.index({ accountId: 1, date: -1 });
 bankTransactionSchema.index({ projectId: 1, date: -1 });
+bankTransactionSchema.index({ clientId: 1, date: 1 });
 bankTransactionSchema.index({ date: 1 });
 
 export const BankTransaction = mongoose.model<IBankTransaction>("BankTransaction", bankTransactionSchema);

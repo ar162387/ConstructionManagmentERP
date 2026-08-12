@@ -21,13 +21,11 @@ interface EditConsumableItemDialogProps {
 
 export function EditConsumableItemDialog({ open, onOpenChange, item, onSave }: EditConsumableItemDialogProps) {
   const [name, setName] = useState("");
-  const [unit, setUnit] = useState("");
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (item) {
       setName(item.name);
-      setUnit(item.unit);
     }
   }, [item]);
 
@@ -35,10 +33,9 @@ export function EditConsumableItemDialog({ open, onOpenChange, item, onSave }: E
     e.preventDefault();
     if (!item) return;
     if (!name.trim()) { toast.error("Item name is required"); return; }
-    if (!unit.trim()) { toast.error("Unit is required"); return; }
     setLoading(true);
     try {
-      await updateConsumableItem(item.id, { name: name.trim(), unit: unit.trim() });
+      await updateConsumableItem(item.id, { name: name.trim() });
       toast.success("Item updated");
       onSave();
     } catch (err) {
@@ -58,10 +55,6 @@ export function EditConsumableItemDialog({ open, onOpenChange, item, onSave }: E
           <div>
             <Label>Item Name *</Label>
             <Input value={name} onChange={(e) => setName(e.target.value)} className="mt-1" />
-          </div>
-          <div>
-            <Label>Unit *</Label>
-            <Input value={unit} onChange={(e) => setUnit(e.target.value)} className="mt-1" />
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>

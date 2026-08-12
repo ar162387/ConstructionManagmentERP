@@ -64,7 +64,6 @@ export function MachinePaymentDialog({
           ? "Payment recorded — excess kept as advance"
           : "Payment recorded"
       );
-      onOpenChange(false);
       setAmount("");
       setReferenceId("");
       onSuccess?.();

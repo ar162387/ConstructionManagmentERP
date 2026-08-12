@@ -19,13 +19,13 @@ export interface CreateStockConsumptionInput {
   projectId: string;
   date: string;
   remarks?: string;
-  items: { itemId: string; quantityUsed: number }[];
+  items: { itemId: string; unit: string; quantityUsed: number }[];
 }
 
 export interface UpdateStockConsumptionInput {
   date?: string;
   remarks?: string;
-  items?: { itemId: string; quantityUsed: number }[];
+  items?: { itemId: string; unit: string; quantityUsed: number }[];
 }
 
 export async function listStockConsumption(projectId?: string | null): Promise<ApiStockConsumption[]> {

@@ -99,7 +99,6 @@ export function AddEmployeeDialog({ open, onOpenChange, restrictedProjectId, res
         });
       }
       toast.success("Employee added");
-      onOpenChange(false);
       setName("");
       setRole("");
       setMonthlySalary("");

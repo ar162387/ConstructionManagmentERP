@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import Layout from "@/components/Layout";
 import PageHeader from "@/components/PageHeader";
 import StatusBadge from "@/components/StatusBadge";
@@ -6,6 +7,8 @@ import { formatCurrency } from "@/lib/mock-data";
 import { useBankAccounts } from "@/hooks/useBankAccounts";
 import { useBankTransactions } from "@/hooks/useBankTransactions";
 import { useProjects } from "@/hooks/useProjects";
+import { useClients } from "@/hooks/useClients";
+import { listCustomHeads, type ApiCustomHead } from "@/services/customHeadsService";
 import { AddBankAccountDialog } from "@/components/dialogs/AddBankAccountDialog";
 import { AddBankTransactionDialog } from "@/components/dialogs/AddBankTransactionDialog";
 import { EditBankAccountDialog } from "@/components/dialogs/EditBankAccountDialog";
@@ -71,6 +74,10 @@ export default function BankAccounts() {
 
   const { accounts, loading: accountsLoading, error: accountsError, refetch: refetchAccounts } = useBankAccounts();
   const { projects } = useProjects();
+  const { clients, refetch: refetchClients } = useClients();
+  const [customHeads, setCustomHeads] = useState<ApiCustomHead[]>([]);
+
+  useEffect(() => { void listCustomHeads().then(setCustomHeads).catch(() => setCustomHeads([])); }, []);
 
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(12);
@@ -145,6 +152,8 @@ export default function BankAccounts() {
   const handleSuccess = () => {
     refetchAccounts();
     refetchTx();
+    refetchClients();
+    void listCustomHeads().then(setCustomHeads).catch(() => undefined);
   };
 
   const handleOpenPrintDialog = () => {
@@ -328,6 +337,8 @@ export default function BankAccounts() {
         onOpenChange={setAddTxOpen}
         accounts={accounts}
         projects={projects}
+        clients={clients}
+        customHeads={customHeads}
         onSuccess={handleSuccess}
       />
       <EditBankAccountDialog
@@ -438,6 +449,7 @@ export default function BankAccounts() {
                   <span className="text-success">↑ {formatCurrency(acc.totalInflow)}</span>
                   <span className="text-destructive">↓ {formatCurrency(acc.totalOutflow)}</span>
                 </div>
+                <Link to={`/bank-accounts/${acc.id}/ledger`} className="inline-flex text-sm font-medium text-primary hover:underline">View ledger</Link>
               </div>
             ))}
           </div>

@@ -4,7 +4,8 @@ export interface ApiConsumableItem {
   id: string;
   projectId: string;
   name: string;
-  unit: string;
+  /** Legacy value only; units are selected per purchase or consumption row. */
+  unit?: string;
   currentStock: number;
   totalPurchased: number;
   totalAmount: number;
@@ -15,12 +16,10 @@ export interface ApiConsumableItem {
 export interface CreateConsumableItemInput {
   projectId: string;
   name: string;
-  unit: string;
 }
 
 export interface UpdateConsumableItemInput {
   name?: string;
-  unit?: string;
 }
 
 export async function listConsumableItems(projectId?: string | null): Promise<ApiConsumableItem[]> {

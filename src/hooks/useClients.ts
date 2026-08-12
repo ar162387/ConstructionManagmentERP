@@ -1,0 +1,3 @@
+import { useCallback, useEffect, useState } from "react";
+import { listClients, type ApiClient } from "@/services/clientsService";
+export function useClients() { const [clients, setClients] = useState<ApiClient[]>([]); const [loading, setLoading] = useState(true); const [error, setError] = useState<string>(); const refetch = useCallback(async () => { setLoading(true); try { setClients(await listClients()); setError(undefined); } catch (err) { setError(err instanceof Error ? err.message : "Failed to load clients"); } finally { setLoading(false); } }, []); useEffect(() => { void refetch(); }, [refetch]); return { clients, loading, error, refetch }; }

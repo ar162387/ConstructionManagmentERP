@@ -23,14 +23,12 @@ interface EditBankAccountDialogProps {
 export function EditBankAccountDialog({ open, onOpenChange, account, onSuccess }: EditBankAccountDialogProps) {
   const [accountName, setAccountName] = useState("");
   const [accountNumber, setAccountNumber] = useState("");
-  const [openingBalance, setOpeningBalance] = useState("0");
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (account) {
       setAccountName(account.name);
       setAccountNumber(account.accountNumber);
-      setOpeningBalance(String(account.openingBalance));
     }
   }, [account]);
 
@@ -41,17 +39,11 @@ export function EditBankAccountDialog({ open, onOpenChange, account, onSuccess }
       toast.error("Account name is required");
       return;
     }
-    const ob = parseFloat(openingBalance);
-    if (isNaN(ob) || ob < 0) {
-      toast.error("Enter valid opening balance");
-      return;
-    }
     setLoading(true);
     try {
       await updateBankAccount(account.id, {
         name: accountName.trim(),
         accountNumber: accountNumber.trim() || undefined,
-        openingBalance: ob,
       });
       toast.success("Account updated");
       onOpenChange(false);
@@ -77,10 +69,6 @@ export function EditBankAccountDialog({ open, onOpenChange, account, onSuccess }
           <div>
             <Label>Account Number</Label>
             <Input value={accountNumber} onChange={(e) => setAccountNumber(e.target.value)} placeholder="XXXX-XXXX-1234" className="mt-1" />
-          </div>
-          <div>
-            <Label>Opening Balance</Label>
-            <Input type="number" min={0} step="0.01" value={openingBalance} onChange={(e) => setOpeningBalance(e.target.value)} className="mt-1" />
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>Cancel</Button>

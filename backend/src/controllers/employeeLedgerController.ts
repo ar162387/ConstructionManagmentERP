@@ -20,10 +20,12 @@ export async function getLedger(req: AuthRequest, res: Response) {
     const month = typeof req.query.month === "string" ? req.query.month : undefined;
     const page = req.query.page ? Number(req.query.page) : undefined;
     const pageSize = req.query.pageSize ? Number(req.query.pageSize) : undefined;
+    const startDate = typeof req.query.startDate === "string" ? req.query.startDate : undefined;
+    const endDate = typeof req.query.endDate === "string" ? req.query.endDate : undefined;
     const data = await getEmployeeLedger(
       { userId: actor.userId, role: actor.role },
       employeeId,
-      { month, page, pageSize }
+      { month, startDate, endDate, page, pageSize }
     );
     res.json(data);
   } catch (err) {

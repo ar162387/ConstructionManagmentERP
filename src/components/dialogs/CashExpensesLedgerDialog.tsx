@@ -67,7 +67,7 @@ export function CashExpensesLedgerDialog({
     return ledger.entries.map((e) => { acc += e.amount; return acc; });
   }, [ledger]);
 
-  const showNameCol = entityType === "Salary";
+  const showNameCol = entityType === "Salary" || entityType === "NonConsumable";
   const periodLabel = startDate === endDate ? startDate : `${startDate} to ${endDate}`;
 
   const handlePrint = () => {
@@ -149,7 +149,7 @@ export function CashExpensesLedgerDialog({
                   <thead>
                     <tr>
                       <th className={thCls}>Date</th>
-                      {showNameCol && <th className={thCls}>Employee</th>}
+                      {showNameCol && <th className={thCls}>{entityType === "NonConsumable" ? "Item" : "Employee"}</th>}
                       <th className={thCls}>Remarks</th>
                       <th className={thNumCls + " num"}>Amount</th>
                       <th className={thNumCls + " num"}>Running Total</th>

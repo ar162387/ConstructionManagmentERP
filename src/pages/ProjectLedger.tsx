@@ -79,7 +79,7 @@ export default function ProjectLedger() {
 
       <PageHeader
         title={`${ledger?.projectName ?? "Project"} — Ledger`}
-        subtitle="Bank-linked transactions and manual balance adjustments"
+        subtitle="Project funding and manual balance adjustments"
         printTargetId="project-ledger"
         actions={
           <Button variant="warning" size="sm" onClick={() => setAddAdjustmentOpen(true)}>
@@ -111,7 +111,7 @@ export default function ProjectLedger() {
       ) : error ? (
         <p className="text-destructive py-8">{error}</p>
       ) : (
-        <>
+        <div id="project-ledger">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 mb-6">
             <StatCard
               label="Current Project Balance"
@@ -126,11 +126,11 @@ export default function ProjectLedger() {
                 <thead>
                   <tr className="border-b border-border/40 bg-muted/10 text-muted-foreground">
                     <th className="px-5 py-3 text-left text-sm font-medium">Date</th>
-                    <th className="px-5 py-3 text-left text-sm font-medium">Type</th>
-                    <th className="px-5 py-3 text-right text-sm font-medium">Amount</th>
+                    <th className="px-5 py-3 text-left text-sm font-medium">Remarks / Reference</th>
                     <th className="px-5 py-3 text-left text-sm font-medium">Source</th>
-                    <th className="px-5 py-3 text-left text-sm font-medium">Destination</th>
-                    <th className="px-5 py-3 text-left text-sm font-medium">Reference / Remarks</th>
+                    <th className="px-5 py-3 text-right text-sm font-medium">Amount</th>
+                    <th className="px-5 py-3 text-right text-sm font-medium">Balance</th>
+                    <th className="px-5 py-3 text-left text-sm font-medium">Type</th>
                     {isSuperAdmin && <th className="px-5 py-3 text-right text-sm font-medium print-hidden">Actions</th>}
                   </tr>
                 </thead>
@@ -145,9 +145,8 @@ export default function ProjectLedger() {
                     ledger.rows.map((row) => (
                       <tr key={row.id} className="border-b border-border/40 hover:bg-muted/30 transition-colors">
                         <td className="px-5 py-3.5 text-sm text-muted-foreground">{row.date}</td>
-                        <td className="px-5 py-3.5 text-sm">
-                          {row.type === "bank_outflow" ? "Bank Outflow" : "Manual Adjustment"}
-                        </td>
+                        <td className="px-5 py-3.5 text-sm text-muted-foreground">{row.type === "bank_outflow" ? ([row.referenceId, row.remarks].filter(Boolean).join(" — ") || "—") : (row.remarks ?? "—")}</td>
+                        <td className="px-5 py-3.5 text-sm text-muted-foreground">{row.source ?? "—"}</td>
                         <td className="px-5 py-3.5 text-right font-mono text-sm font-medium">
                           {row.amount >= 0 ? (
                             <span className="text-success">+{formatCurrency(row.amount)}</span>
@@ -155,13 +154,8 @@ export default function ProjectLedger() {
                             <span className="text-destructive">{formatCurrency(row.amount)}</span>
                           )}
                         </td>
-                        <td className="px-5 py-3.5 text-sm text-muted-foreground">{row.source ?? "—"}</td>
-                        <td className="px-5 py-3.5 text-sm text-muted-foreground">{row.destination ?? "—"}</td>
-                        <td className="px-5 py-3.5 text-sm text-muted-foreground">
-                          {row.type === "bank_outflow"
-                            ? ([row.referenceId, row.remarks].filter(Boolean).join(" — ") || "—")
-                            : (row.remarks ?? "—")}
-                        </td>
+                        <td className="px-5 py-3.5 text-right font-mono text-sm font-medium">{formatCurrency(row.balance ?? 0)}</td>
+                        <td className="px-5 py-3.5 text-sm">{row.type === "bank_outflow" ? "Bank Outflow" : "Manual Adjustment"}</td>
                         {isSuperAdmin && (
                           <td className="px-5 py-3.5 text-right print-hidden">
                             {row.type === "manual_adjustment" ? (
@@ -211,7 +205,7 @@ export default function ProjectLedger() {
               />
             </div>
           </div>
-        </>
+        </div>
       )}
 
       <AlertDialog open={!!deleteAdjustment} onOpenChange={(open) => !open && setDeleteAdjustment(null)}>

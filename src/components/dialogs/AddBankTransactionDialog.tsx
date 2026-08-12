@@ -20,6 +20,8 @@ import { Combobox } from "@/components/ui/combobox";
 import { createBankTransaction } from "@/services/bankTransactionService";
 import type { ApiBankAccount } from "@/services/bankAccountService";
 import type { ApiProject } from "@/services/projectsService";
+import type { ApiClient } from "@/services/clientsService";
+import type { ApiCustomHead } from "@/services/customHeadsService";
 import { toast } from "sonner";
 
 interface AddBankTransactionDialogProps {
@@ -27,16 +29,20 @@ interface AddBankTransactionDialogProps {
   onOpenChange: (open: boolean) => void;
   accounts: ApiBankAccount[];
   projects: ApiProject[];
+  clients?: ApiClient[];
+  customHeads?: ApiCustomHead[];
   onSuccess?: () => void;
 }
 
-type DestinationType = "general" | "project";
+type DestinationType = "custom" | "project";
 
 export function AddBankTransactionDialog({
   open,
   onOpenChange,
   accounts,
   projects,
+  clients = [],
+  customHeads = [],
   onSuccess,
 }: AddBankTransactionDialogProps) {
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
@@ -44,7 +50,8 @@ export function AddBankTransactionDialog({
   const [amount, setAmount] = useState("");
   const [accountId, setAccountId] = useState<string | null>(null);
   const [source, setSource] = useState("");
-  const [destinationType, setDestinationType] = useState<DestinationType>("general");
+  const [clientId, setClientId] = useState<string | null>(null);
+  const [destinationType, setDestinationType] = useState<DestinationType>("custom");
   const [destinationText, setDestinationText] = useState("");
   const [projectId, setProjectId] = useState<string | null>(null);
   const [mode, setMode] = useState<"Cash" | "Bank" | "Online">("Bank");
@@ -64,6 +71,8 @@ export function AddBankTransactionDialog({
 
   const selectedAccount = accounts.find((a) => a.id === accountId);
   const selectedProject = projects.find((p) => p.id === projectId);
+  const clientOptions = useMemo(() => clients.map((c) => ({ value: c.id, label: c.name })), [clients]);
+  const headOptions = useMemo(() => customHeads.map((h) => ({ value: h.name, label: h.name })), [customHeads]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -80,7 +89,7 @@ export function AddBankTransactionDialog({
       toast.error("Bank account is required");
       return;
     }
-    if (type === "inflow" && !source.trim()) {
+    if (type === "inflow" && !source.trim() && !clientId) {
       toast.error("Source is required");
       return;
     }
@@ -90,8 +99,9 @@ export function AddBankTransactionDialog({
     let projectIdPayload: string | undefined;
 
     if (type === "inflow") {
-      sourcePayload = source.trim();
+      sourcePayload = clientId ? (clients.find((c) => c.id === clientId)?.name ?? source.trim()) : source.trim();
       destination = selectedAccount?.name ?? "";
+      projectIdPayload = projectId ?? undefined;
     } else {
       sourcePayload = selectedAccount?.name ?? "";
       if (destinationType === "project") {
@@ -104,7 +114,7 @@ export function AddBankTransactionDialog({
       } else {
         destination = destinationText.trim();
         if (!destination) {
-          toast.error("Destination is required (general expense or project)");
+          toast.error("Head is required");
           return;
         }
       }
@@ -119,15 +129,17 @@ export function AddBankTransactionDialog({
         amount: amt,
         source: sourcePayload,
         destination,
+        clientId: clientId ?? undefined,
         projectId: projectIdPayload,
+        customHeadName: type === "outflow" && destinationType === "custom" ? destination : undefined,
         mode,
         referenceId: referenceId.trim() || undefined,
         remarks: remarks.trim() || undefined,
       });
       toast.success("Transaction recorded");
-      onOpenChange(false);
       setAmount("");
       setSource("");
+      setClientId(null);
       setDestinationText("");
       setProjectId(null);
       setReferenceId("");
@@ -208,15 +220,10 @@ export function AddBankTransactionDialog({
           </div>
 
           {type === "inflow" ? (
-            <div>
-              <Label className="text-xs">Source *</Label>
-              <Input
-                value={source}
-                onChange={(e) => setSource(e.target.value)}
-                placeholder="e.g. Client Payment"
-                className="mt-0.5 h-9"
-              />
-              <p className="text-[10px] text-muted-foreground mt-0.5">Who paid into the account</p>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div><Label className="text-xs">Client (optional)</Label><Combobox options={clientOptions} value={clientId} onValueChange={(value) => { setClientId(value); if (value) setSource(""); }} placeholder="Select client" searchPlaceholder="Search clients..." emptyText="No client found" className="mt-0.5 h-9" /></div>
+              <div><Label className="text-xs">Source *</Label><Input value={source} disabled={!!clientId} onChange={(e) => setSource(e.target.value)} placeholder="Type payer name" className="mt-0.5 h-9" /></div>
+              <div className="sm:col-span-2"><Label className="text-xs">Project (optional)</Label><Combobox options={projectOptions} value={projectId} onValueChange={setProjectId} placeholder="Select project for attribution" searchPlaceholder="Search..." emptyText="No project found" className="mt-0.5 h-9" /><p className="text-[10px] text-muted-foreground mt-0.5">This records the client payment against a project; it does not fund the project balance.</p></div>
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -226,7 +233,7 @@ export function AddBankTransactionDialog({
                   value={destinationType}
                   onValueChange={(v: DestinationType) => {
                     setDestinationType(v);
-                    if (v === "general") setProjectId(null);
+                    if (v === "custom") setProjectId(null);
                     else setDestinationText("");
                   }}
                 >
@@ -234,20 +241,16 @@ export function AddBankTransactionDialog({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="general">General expense</SelectItem>
+                    <SelectItem value="custom">Custom</SelectItem>
                     <SelectItem value="project">Project</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-              {destinationType === "general" ? (
+              {destinationType === "custom" ? (
                 <div>
-                  <Label className="text-xs">Expense/Party *</Label>
-                  <Input
-                    value={destinationText}
-                    onChange={(e) => setDestinationText(e.target.value)}
-                    placeholder="e.g. ABC Traders"
-                    className="mt-0.5 h-9"
-                  />
+                  <Label className="text-xs">Head *</Label>
+                  <Combobox options={headOptions} value={destinationText || null} onValueChange={(value) => setDestinationText(value ?? "")} placeholder="Select or type a new head" searchPlaceholder="Search heads..." emptyText="Type a new head below" className="mt-0.5 h-9" />
+                  <Input value={destinationText} onChange={(e) => setDestinationText(e.target.value)} placeholder="New head name" className="mt-1 h-9" />
                 </div>
               ) : (
                 <div className="sm:col-span-2">

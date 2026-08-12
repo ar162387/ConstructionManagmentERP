@@ -18,6 +18,7 @@ export interface ApiVendorLedgerRow {
   date: string;
   itemName?: string;
   quantity?: number;
+  unitPrice?: number;
   totalPrice?: number;
   paidAmount?: number;
   remaining?: number;
@@ -27,7 +28,7 @@ export interface ApiVendorLedgerRow {
   paymentMethod: "Cash" | "Bank" | "Online";
   referenceId?: string;
   remarks?: string;
-  /** Running balance owed as of this row's date. */
+  /** Signed running balance owed as of this row's date. */
   runningTotal: number;
 }
 
@@ -37,7 +38,7 @@ export interface ApiVendorLedger {
   totalPaid: number;
   remaining: number;
   advanceBalance: number;
-  /** Opening balance owed carried in from before startDate (0 when no startDate filter is applied). */
+  /** Signed opening balance carried in from before startDate (0 when no startDate filter is applied). */
   previousBalance: number;
   total: number;
 }

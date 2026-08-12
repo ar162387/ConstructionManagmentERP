@@ -71,7 +71,6 @@ export function AddMachineDialog({
         projectId: effectiveProjectId,
       });
       toast.success("Machine added");
-      onOpenChange(false);
       setName("");
       setHourlyRate("");
       onSuccess?.();

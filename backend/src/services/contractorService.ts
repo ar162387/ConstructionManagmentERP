@@ -67,7 +67,9 @@ export async function getContractorTotals(contractorId: string): Promise<Contrac
   ]);
   const totalAmount = entrySum;
   const totalPaid = paymentSum;
-  const remaining = Math.max(0, totalAmount - totalPaid);
+  // Keep this signed: a negative amount means the contractor has received an
+  // advance and the company has a credit to recover through future bills.
+  const remaining = totalAmount - totalPaid;
   return { totalAmount, totalPaid, remaining };
 }
 

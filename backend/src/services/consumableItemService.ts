@@ -11,7 +11,8 @@ export interface ConsumableItemPayload {
   id: string;
   projectId: string;
   name: string;
-  unit: string;
+  /** Legacy item-level unit; units now belong to individual movements. */
+  unit?: string;
   currentStock: number;
   totalPurchased: number;
   totalAmount: number;
@@ -22,7 +23,7 @@ export interface ConsumableItemPayload {
 export interface CreateConsumableItemInput {
   projectId: string;
   name: string;
-  unit: string;
+  unit?: string;
 }
 
 export interface UpdateConsumableItemInput {
@@ -34,7 +35,7 @@ function toPayload(doc: {
   _id: mongoose.Types.ObjectId;
   projectId: mongoose.Types.ObjectId;
   name: string;
-  unit: string;
+  unit?: string;
   currentStock?: number;
   totalPurchased?: number;
   totalAmount?: number;
@@ -128,7 +129,6 @@ export async function createConsumableItem(
   input: CreateConsumableItemInput
 ): Promise<ConsumableItemPayload> {
   if (!input.name?.trim()) throw new Error("Item name is required");
-  if (!input.unit?.trim()) throw new Error("Unit is required");
 
   let projectId: string;
   if (actor.role === "site_manager") {
@@ -151,7 +151,7 @@ export async function createConsumableItem(
   const item = await ConsumableItem.create({
     projectId,
     name: input.name.trim(),
-    unit: input.unit.trim(),
+    unit: "",
     currentStock: 0,
     totalPurchased: 0,
     totalAmount: 0,
@@ -169,8 +169,8 @@ export async function createConsumableItem(
     action: "create",
     module: "consumable_items",
     entityId: item._id.toString(),
-    description: `Created consumable item: ${item.name} (${item.unit})`,
-    newValue: { name: item.name, unit: item.unit },
+    description: `Created consumable item: ${item.name}`,
+    newValue: { name: item.name },
   });
 
   return toPayload(item);
@@ -199,10 +199,6 @@ export async function updateConsumableItem(
 
   const updates: Record<string, unknown> = {};
   if (input.name != null) updates.name = input.name.trim();
-  if (input.unit != null) {
-    if (!input.unit.trim()) throw new Error("Unit cannot be empty");
-    updates.unit = input.unit.trim();
-  }
 
   const updated = await ConsumableItem.findByIdAndUpdate(id, updates, { new: true }).lean();
   if (!updated) throw new Error("Update failed");
@@ -218,8 +214,8 @@ export async function updateConsumableItem(
     module: "consumable_items",
     entityId: id,
     description: `Updated consumable item: ${target.name}`,
-    oldValue: { name: target.name, unit: target.unit },
-    newValue: { name: updated.name, unit: updated.unit },
+    oldValue: { name: target.name },
+    newValue: { name: updated.name },
   });
 
   return toPayload(updated);
@@ -259,6 +255,6 @@ export async function deleteConsumableItem(
     module: "consumable_items",
     entityId: id,
     description: `Deleted consumable item: ${target.name}`,
-    oldValue: { name: target.name, unit: target.unit },
+    oldValue: { name: target.name },
   });
 }

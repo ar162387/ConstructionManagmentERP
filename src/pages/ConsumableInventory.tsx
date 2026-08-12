@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Link } from "react-router-dom";
 import Layout from "@/components/Layout";
 import PageHeader from "@/components/PageHeader";
@@ -12,7 +12,7 @@ import { AddConsumableItemDialog } from "@/components/dialogs/AddConsumableItemD
 import { EditConsumableItemDialog } from "@/components/dialogs/EditConsumableItemDialog";
 import { StockConsumptionDialog } from "@/components/dialogs/StockConsumptionDialog";
 import { Button } from "@/components/ui/button";
-import { Plus, Minus, Pencil, Trash2 } from "lucide-react";
+import { Plus, Pencil, Trash2 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
@@ -38,6 +38,9 @@ import { deleteConsumableItem, type ApiConsumableItem } from "@/services/consuma
 import { deleteStockConsumption, type ApiStockConsumption } from "@/services/stockConsumptionService";
 import { useTablePagination } from "@/hooks/useTablePagination";
 import { TablePagination } from "@/components/TablePagination";
+import { useVendors } from "@/hooks/useVendors";
+import { getConsumableRunningBill, type ApiConsumableRunningBill } from "@/services/consumableRunningBillService";
+import PrintExportButton from "@/components/PrintExportButton";
 
 export default function ConsumableInventory() {
   const { user } = useAuth();
@@ -51,6 +54,7 @@ export default function ConsumableInventory() {
 
   const { items, loading: itemsLoading, refetch: refetchItems } = useConsumableItems(effectiveProjectId);
   const { entries: consumptionEntries, loading: consumptionLoading, refetch: refetchConsumption } = useStockConsumption(effectiveProjectId);
+  const { vendors } = useVendors(effectiveProjectId);
 
   const canEditDelete = !isSiteManager;
 
@@ -68,6 +72,13 @@ export default function ConsumableInventory() {
   const [consumptionOpen, setConsumptionOpen] = useState(false);
   const [editConsumption, setEditConsumption] = useState<ApiStockConsumption | null>(null);
   const [deleteConsumptionState, setDeleteConsumptionState] = useState<ApiStockConsumption | null>(null);
+  const [billVendorId, setBillVendorId] = useState("");
+  const [billStart, setBillStart] = useState(new Date().toISOString().slice(0, 10));
+  const [billEnd, setBillEnd] = useState(new Date().toISOString().slice(0, 10));
+  const [runningBill, setRunningBill] = useState<ApiConsumableRunningBill | null>(null);
+  const [billLoading, setBillLoading] = useState(false);
+  const [billError, setBillError] = useState<string | null>(null);
+  const [selectedBillRows, setSelectedBillRows] = useState<Set<string>>(new Set());
   const selectedProjectName = isSiteManager
     ? (projects.find((p) => p.id === assignedProjectId)?.name ?? "Project")
     : (projects.find((p) => p.id === selectedProjectId)?.name ?? "Project");
@@ -78,14 +89,44 @@ export default function ConsumableInventory() {
 
     return items.filter((item) => {
       return (
-        item.name.toLowerCase().includes(q) ||
-        item.unit.toLowerCase().includes(q)
+        item.name.toLowerCase().includes(q)
       );
     });
   }, [items, searchQuery]);
 
   const itemsPagination = useTablePagination(filteredItems, { defaultPageSize: 12 });
   const consumptionPagination = useTablePagination(consumptionEntries, { defaultPageSize: 12 });
+
+  useEffect(() => {
+    if (!effectiveProjectId || !billVendorId || !billStart || !billEnd) {
+      setRunningBill(null); setBillError(null); return;
+    }
+    let cancelled = false;
+    setBillLoading(true); setBillError(null);
+    getConsumableRunningBill({ projectId: effectiveProjectId, vendorId: billVendorId, periodStart: billStart, periodEnd: billEnd })
+      .then((bill) => {
+        if (cancelled) return;
+        setRunningBill(bill);
+        setSelectedBillRows(new Set(bill.rows.map((row) => row.id)));
+      })
+      .catch((err) => !cancelled && (setRunningBill(null), setBillError(err instanceof Error ? err.message : "Failed to generate bill")))
+      .finally(() => !cancelled && setBillLoading(false));
+    return () => { cancelled = true; };
+  }, [effectiveProjectId, billVendorId, billStart, billEnd]);
+
+  const selectedBillData = useMemo(() => {
+    const rows = runningBill?.rows.filter((row) => selectedBillRows.has(row.id)) ?? [];
+    const summary = rows.reduce((total, row) => ({
+      quantity: total.quantity + row.quantity,
+      previousQuantity: total.previousQuantity + row.previousQuantity,
+      totalQuantity: total.totalQuantity + row.totalQuantity,
+      thisBill: total.thisBill + row.thisBill,
+      previousBill: total.previousBill + row.previousBill,
+      totalAmount: total.totalAmount + row.totalAmount,
+    }), { quantity: 0, previousQuantity: 0, totalQuantity: 0, thisBill: 0, previousBill: 0, totalAmount: 0 });
+    const advances = runningBill?.summary ?? { thisBillAdvance: 0, previousBillAdvance: 0 };
+    return { rows, summary, advances };
+  }, [runningBill, selectedBillRows]);
 
   const handleDeleteItemConfirm = async () => {
     if (!deleteItemState) return;
@@ -123,9 +164,6 @@ export default function ConsumableInventory() {
         printTargetId="consumable-tabs"
         actions={
           <>
-            <Button variant="outline" size="sm" onClick={() => setConsumptionOpen(true)} disabled={!effectiveProjectId}>
-              <Minus className="h-4 w-4 mr-1" /> Stock Consumption
-            </Button>
             <Button variant="warning" size="sm" onClick={() => setAddItemOpen(true)} disabled={!effectiveProjectId}>
               <Plus className="h-4 w-4 mr-1" /> Add Item
             </Button>
@@ -154,7 +192,7 @@ export default function ConsumableInventory() {
           <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Search Items</Label>
           <Input
             className="mt-1"
-            placeholder="Name or unit"
+            placeholder="Item name"
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
           />
@@ -232,6 +270,7 @@ export default function ConsumableInventory() {
         <TabsList>
           <TabsTrigger value="inventory">Item list</TabsTrigger>
           <TabsTrigger value="consumption">Stock consumption</TabsTrigger>
+          <TabsTrigger value="generate-bill">Generate Bill</TabsTrigger>
         </TabsList>
 
         <TabsContent value="inventory">
@@ -241,7 +280,6 @@ export default function ConsumableInventory() {
                 <thead>
                   <tr className="border-b-2 border-border bg-primary text-primary-foreground">
                     <th className="px-4 py-2.5 text-left text-sm font-bold uppercase tracking-wider">Item</th>
-                    <th className="px-4 py-2.5 text-left text-sm font-bold uppercase tracking-wider">Unit</th>
                     <th className="px-4 py-2.5 text-right text-sm font-bold uppercase tracking-wider">Current Stock</th>
                     <th className="px-4 py-2.5 text-right text-sm font-bold uppercase tracking-wider">Total Purchased</th>
                     <th className="px-4 py-2.5 text-right text-sm font-bold uppercase tracking-wider">Total Amount</th>
@@ -254,13 +292,13 @@ export default function ConsumableInventory() {
                 </thead>
                 <tbody>
                   {itemsLoading ? (
-                    <tr><td colSpan={canEditDelete ? 8 : 7} className="px-4 py-8 text-center text-muted-foreground">Loading…</td></tr>
+                    <tr><td colSpan={canEditDelete ? 7 : 6} className="px-4 py-8 text-center text-muted-foreground">Loading…</td></tr>
                   ) : !effectiveProjectId ? (
-                    <tr><td colSpan={canEditDelete ? 8 : 7} className="px-4 py-8 text-center text-muted-foreground">Select a project to view items.</td></tr>
+                    <tr><td colSpan={canEditDelete ? 7 : 6} className="px-4 py-8 text-center text-muted-foreground">Select a project to view items.</td></tr>
                   ) : items.length === 0 ? (
-                    <tr><td colSpan={canEditDelete ? 8 : 7} className="px-4 py-8 text-center text-muted-foreground">No consumable items for this project. Add one to get started.</td></tr>
+                    <tr><td colSpan={canEditDelete ? 7 : 6} className="px-4 py-8 text-center text-muted-foreground">No consumable items for this project. Add one to get started.</td></tr>
                   ) : itemsPagination.paginatedItems.length === 0 ? (
-                    <tr><td colSpan={canEditDelete ? 8 : 7} className="px-4 py-8 text-center text-muted-foreground">No items match your search.</td></tr>
+                    <tr><td colSpan={canEditDelete ? 7 : 6} className="px-4 py-8 text-center text-muted-foreground">No items match your search.</td></tr>
                   ) : (
                     itemsPagination.paginatedItems.map((item) => (
                       <tr key={item.id} className="border-b border-border hover:bg-accent/50 transition-colors">
@@ -269,7 +307,6 @@ export default function ConsumableInventory() {
                             {item.name}
                           </Link>
                         </td>
-                        <td className="px-4 py-3 text-sm uppercase">{item.unit}</td>
                         <td className="px-4 py-3 text-right font-mono text-sm font-bold">{item.currentStock.toLocaleString()}</td>
                         <td className="px-4 py-3 text-right font-mono text-sm">{item.totalPurchased.toLocaleString()}</td>
                         <td className="px-4 py-3 text-right font-mono text-sm">{formatCurrency(item.totalAmount)}</td>
@@ -382,6 +419,78 @@ export default function ConsumableInventory() {
                   startIndexOneBased={consumptionPagination.startIndexOneBased}
                   endIndex={consumptionPagination.endIndex}
                 />
+              </div>
+            )}
+          </div>
+        </TabsContent>
+
+        <TabsContent value="generate-bill">
+          <div className="mt-4 space-y-4">
+            <div className="print-hidden flex flex-wrap items-end gap-4 border-2 border-border p-4">
+              <div className="min-w-[240px]">
+                <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Vendor</Label>
+                <Select value={billVendorId} onValueChange={setBillVendorId}>
+                  <SelectTrigger className="mt-1"><SelectValue placeholder="Select vendor" /></SelectTrigger>
+                  <SelectContent>{vendors.map((vendor) => <SelectItem key={vendor.id} value={vendor.id}>{vendor.name}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Start date</Label>
+                <Input className="mt-1 w-44" type="date" value={billStart} onChange={(event) => setBillStart(event.target.value)} />
+              </div>
+              <div>
+                <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">End date / bill date</Label>
+                <Input className="mt-1 w-44" type="date" value={billEnd} onChange={(event) => setBillEnd(event.target.value)} />
+              </div>
+            </div>
+
+            {!effectiveProjectId ? (
+              <div className="border-2 border-border p-8 text-center text-muted-foreground">Select a project to generate a bill.</div>
+            ) : !billVendorId ? (
+              <div className="border-2 border-border p-8 text-center text-muted-foreground">Select a vendor to show its purchased items.</div>
+            ) : billLoading ? (
+              <div className="border-2 border-border p-8 text-center text-muted-foreground">Generating bill…</div>
+            ) : billError ? (
+              <div className="border-2 border-destructive p-8 text-center text-destructive">{billError}</div>
+            ) : runningBill && (
+              <div id="consumable-running-bill" className="border-2 border-border bg-card p-4 sm:p-6">
+                <header className="mb-4 border-b border-border pb-4 text-center">
+                  <p className="text-base font-semibold">{selectedProjectName}</p>
+                  <h2 className="mt-3 text-xl font-bold uppercase tracking-wide">Consumable running bill</h2>
+                  <div className="mt-2 flex flex-wrap justify-center gap-x-6 gap-y-1 text-sm text-muted-foreground">
+                    <span>Vendor: <strong className="text-foreground">{runningBill.vendorName}</strong></span>
+                    <span>Period: {billStart} – {billEnd}</span>
+                    <span>Bill date: {billEnd}</span>
+                  </div>
+                </header>
+                <div className="mb-3 flex justify-end print-hidden">
+                  <PrintExportButton title="Consumable Running Bill" printProjectName={selectedProjectName} printTargetId="consumable-running-bill" omitDefaultHeader additionalPrintCss={`
+                    table.consumable-running-bill-table { table-layout: fixed; }
+                    .consumable-running-bill-table th, .consumable-running-bill-table td { padding: 6px 7px; font-size: 10px; white-space: nowrap; }
+                    .consumable-running-bill-table .bill-selector-control { display: none !important; }
+                  `} />
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="consumable-running-bill-table w-full min-w-[950px] border-collapse text-sm [&_td]:border [&_td]:border-border [&_td]:px-2 [&_td]:py-2 [&_th]:border [&_th]:border-border [&_th]:px-2 [&_th]:py-2">
+                    <thead className="bg-primary text-primary-foreground">
+                      <tr>
+                        <th className="w-9 text-center"><input className="bill-selector-control" type="checkbox" checked={runningBill.rows.length > 0 && selectedBillRows.size === runningBill.rows.length} onChange={(event) => setSelectedBillRows(event.target.checked ? new Set(runningBill.rows.map((row) => row.id)) : new Set())} aria-label="Select all items" /></th>
+                        <th className="text-left">Item Name</th><th className="text-right">Qty</th><th className="text-right">Previous Qty</th><th className="text-right">Total Qty</th><th className="text-right">Rate (Unit Price)</th><th className="text-right">This Bill</th><th className="text-right">Previous Bill</th><th className="text-right">Total Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {runningBill.rows.length === 0 ? <tr><td colSpan={9} className="py-8 text-center text-muted-foreground">No purchases for this vendor up to the selected bill date.</td></tr> : selectedBillData.rows.map((row) => <tr key={row.id}>
+                        <td className="text-center"><input className="bill-selector-control" type="checkbox" checked={selectedBillRows.has(row.id)} onChange={(event) => setSelectedBillRows((current) => { const next = new Set(current); event.target.checked ? next.add(row.id) : next.delete(row.id); return next; })} aria-label={`Include ${row.itemName}`} /></td>
+                        <td>{row.itemName}</td><td className="text-right font-mono">{row.quantity || "—"}</td><td className="text-right font-mono">{row.previousQuantity || "—"}</td><td className="text-right font-mono">{row.totalQuantity || "—"}</td><td className="text-right font-mono">{formatCurrency(row.rate)}</td><td className="text-right font-mono">{row.thisBill ? formatCurrency(row.thisBill) : "—"}</td><td className="text-right font-mono">{row.previousBill ? formatCurrency(row.previousBill) : "—"}</td><td className="text-right font-mono font-semibold">{row.totalAmount ? formatCurrency(row.totalAmount) : "—"}</td>
+                      </tr>)}
+                      {selectedBillData.rows.length > 0 && <>
+                        <tr className="bg-muted/40 font-bold"><td colSpan={2} className="text-left">Total</td><td className="text-right font-mono">{selectedBillData.summary.quantity || "—"}</td><td className="text-right font-mono">{selectedBillData.summary.previousQuantity || "—"}</td><td className="text-right font-mono">{selectedBillData.summary.totalQuantity || "—"}</td><td>—</td><td className="text-right font-mono">{selectedBillData.summary.thisBill ? formatCurrency(selectedBillData.summary.thisBill) : "—"}</td><td className="text-right font-mono">{selectedBillData.summary.previousBill ? formatCurrency(selectedBillData.summary.previousBill) : "—"}</td><td className="text-right font-mono">{formatCurrency(selectedBillData.summary.totalAmount)}</td></tr>
+                        <tr className="bg-muted/20 font-semibold"><td colSpan={6}>Less Advance</td><td className="text-right font-mono">{selectedBillData.advances.thisBillAdvance ? formatCurrency(selectedBillData.advances.thisBillAdvance) : "—"}</td><td className="text-right font-mono">{selectedBillData.advances.previousBillAdvance ? formatCurrency(selectedBillData.advances.previousBillAdvance) : "—"}</td><td className="text-right font-mono">{selectedBillData.advances.thisBillAdvance + selectedBillData.advances.previousBillAdvance ? formatCurrency(selectedBillData.advances.thisBillAdvance + selectedBillData.advances.previousBillAdvance) : "—"}</td></tr>
+                        <tr className="bg-muted/40 font-bold"><td colSpan={6}>Balance</td><td className="text-right font-mono">{formatCurrency(selectedBillData.summary.thisBill - selectedBillData.advances.thisBillAdvance)}</td><td className="text-right font-mono">{formatCurrency(selectedBillData.summary.previousBill - selectedBillData.advances.previousBillAdvance)}</td><td className="text-right font-mono">{formatCurrency(selectedBillData.summary.totalAmount - selectedBillData.advances.thisBillAdvance - selectedBillData.advances.previousBillAdvance)}</td></tr>
+                      </>}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
           </div>

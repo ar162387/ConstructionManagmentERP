@@ -24,16 +24,16 @@ export interface CreateConsumptionInput {
   projectId: string;
   date: string;
   remarks?: string;
-  items: { itemId: string; quantityUsed: number }[];
+  items: { itemId: string; unit: string; quantityUsed: number }[];
 }
 
 export interface UpdateConsumptionInput {
   date?: string;
   remarks?: string;
-  items?: { itemId: string; quantityUsed: number }[];
+  items?: { itemId: string; unit: string; quantityUsed: number }[];
 }
 
-function assertUniqueItems(items: { itemId: string; quantityUsed: number }[]) {
+function assertUniqueItems(items: { itemId: string; unit: string; quantityUsed: number }[]) {
   const seen = new Set<string>();
   for (const line of items) {
     if (seen.has(line.itemId)) {
@@ -48,7 +48,7 @@ async function buildPayload(doc: {
   projectId: mongoose.Types.ObjectId;
   date: string;
   remarks?: string;
-  items: { itemId: mongoose.Types.ObjectId; quantityUsed: number }[];
+  items: { itemId: mongoose.Types.ObjectId; unit?: string; quantityUsed: number }[];
 }): Promise<StockConsumptionPayload> {
   const itemIds = doc.items.map((i) => i.itemId);
   const itemDocs = await ConsumableItem.find({ _id: { $in: itemIds } }).select("name unit").lean();
@@ -64,7 +64,7 @@ async function buildPayload(doc: {
       return {
         itemId: i.itemId.toString(),
         itemName: item?.name ?? "Unknown",
-        unit: item?.unit ?? "",
+        unit: i.unit ?? item?.unit ?? "",
         quantityUsed: i.quantityUsed,
       };
     }),
@@ -118,11 +118,12 @@ export async function createStockConsumption(
         if (!Number.isInteger(line.quantityUsed) || line.quantityUsed < 1) {
           throw new Error("Quantity must be a positive integer");
         }
+        if (!line.unit?.trim()) throw new Error("Unit is required");
         const item = await ConsumableItem.findOne({ _id: line.itemId, projectId }).session(session).lean();
         if (!item) throw new Error(`Item not found or does not belong to this project: ${line.itemId}`);
         if (item.currentStock < line.quantityUsed) {
           throw new Error(
-            `Insufficient stock for "${item.name}": available ${item.currentStock} ${item.unit}, requested ${line.quantityUsed}`
+            `Insufficient stock for "${item.name}": available ${item.currentStock}, requested ${line.quantityUsed}`
           );
         }
       }
@@ -133,7 +134,7 @@ export async function createStockConsumption(
             projectId,
             date: input.date,
             remarks: input.remarks?.trim() || undefined,
-            items: input.items.map((i) => ({ itemId: i.itemId, quantityUsed: i.quantityUsed })),
+            items: input.items.map((i) => ({ itemId: i.itemId, unit: i.unit.trim(), quantityUsed: i.quantityUsed })),
           },
         ],
         { session }
@@ -195,6 +196,7 @@ export async function updateStockConsumption(
 
       const newItems = input.items ?? existing.items.map((i) => ({
         itemId: i.itemId.toString(),
+        unit: i.unit ?? "",
         quantityUsed: i.quantityUsed,
       }));
       assertUniqueItems(newItems);
@@ -204,11 +206,12 @@ export async function updateStockConsumption(
         if (!Number.isInteger(line.quantityUsed) || line.quantityUsed < 1) {
           throw new Error("Quantity must be a positive integer");
         }
+        if (!line.unit?.trim()) throw new Error("Unit is required");
         const item = await ConsumableItem.findById(line.itemId).session(session).lean();
         if (!item) throw new Error(`Item not found: ${line.itemId}`);
         if (item.currentStock < line.quantityUsed) {
           throw new Error(
-            `Insufficient stock for "${item.name}": available ${item.currentStock} ${item.unit}, requested ${line.quantityUsed}`
+            `Insufficient stock for "${item.name}": available ${item.currentStock}, requested ${line.quantityUsed}`
           );
         }
       }
@@ -216,7 +219,7 @@ export async function updateStockConsumption(
       const updates: Record<string, unknown> = {};
       if (input.date) updates.date = input.date;
       if (input.remarks !== undefined) updates.remarks = input.remarks?.trim() || undefined;
-      if (input.items) updates.items = newItems.map((i) => ({ itemId: i.itemId, quantityUsed: i.quantityUsed }));
+      if (input.items) updates.items = newItems.map((i) => ({ itemId: i.itemId, unit: i.unit.trim(), quantityUsed: i.quantityUsed }));
 
       const updated = await StockConsumptionEntry.findByIdAndUpdate(id, updates, { new: true, session }).lean();
       if (!updated) throw new Error("Update failed");

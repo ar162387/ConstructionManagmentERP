@@ -4,6 +4,7 @@ import { requireContractorManageAccess } from "../middleware/rbac.js";
 import { list, getOne, create, update, remove } from "../controllers/contractorsController.js";
 import {
   getLedger,
+  getAllTimeLedger,
   createEntry,
   deleteEntry,
   deletePayment,
@@ -14,6 +15,7 @@ contractorRoutes.use(authMiddleware);
 
 // Ledger routes must come before /:id to avoid "ledger" being parsed as id
 contractorRoutes.get("/ledger", getLedger);
+contractorRoutes.get("/ledger/all-time", getAllTimeLedger);
 contractorRoutes.post("/entries", createEntry);
 contractorRoutes.delete("/entries/:entryId", requireContractorManageAccess, deleteEntry);
 contractorRoutes.delete("/payments/:paymentId", requireContractorManageAccess, deletePayment);

@@ -199,7 +199,7 @@ export async function deleteProject(actor: { userId: string; email: string; role
   }
 
   const nonConsumableCount = await NonConsumableLedgerEntry.countDocuments({
-    $or: [{ projectTo: projectObjId }, { projectFrom: projectObjId }],
+    $or: [{ projectTo: projectObjId }, { projectFrom: projectObjId }, { expenseProjectId: projectObjId }],
   });
   if (nonConsumableCount > 0) {
     throw new Error(

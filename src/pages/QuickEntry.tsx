@@ -307,20 +307,20 @@ export default function QuickEntry() {
       <AddBankAccountDialog
         open={dialogType === "add-bank-account"}
         onOpenChange={(open) => !open && closeDialog()}
-        onSuccess={() => { refetchAccounts(); closeDialog(); }}
+        onSuccess={refetchAccounts}
       />
       <AddBankTransactionDialog
         open={dialogType === "add-bank-transaction"}
         onOpenChange={(open) => !open && closeDialog()}
         accounts={accounts}
         projects={projects}
-        onSuccess={closeDialog}
+        onSuccess={refetchAccounts}
       />
       {user?.role && (
         <CreateUserDialog
           open={dialogType === "create-user"}
           onOpenChange={(open) => !open && closeDialog()}
-          onCreated={closeDialog}
+          onCreated={() => undefined}
           currentUserRole={user.role}
           projects={projects}
         />
@@ -331,7 +331,7 @@ export default function QuickEntry() {
         open={dialogType === "add-vendor"}
         onOpenChange={(open) => !open && closeDialog()}
         projectId={effectiveProjectId}
-        onSuccess={() => { refetchVendors(); closeDialog(); }}
+        onSuccess={refetchVendors}
       />
       <AddContractorDialog
         open={dialogType === "add-contractor"}
@@ -339,7 +339,7 @@ export default function QuickEntry() {
         restrictedProjectId={effectiveProjectId ?? undefined}
         restrictedProjectName={effectiveProjectName || undefined}
         projects={projectOptions}
-        onSuccess={() => { refetchContractors(); closeDialog(); }}
+        onSuccess={refetchContractors}
       />
       <AddEmployeeDialog
         open={dialogType === "add-employee"}
@@ -353,7 +353,7 @@ export default function QuickEntry() {
         onOpenChange={(open) => !open && closeDialog()}
         projectId={effectiveProjectId}
         categoriesRefreshKey={categoriesRefreshKey}
-        onSuccess={() => { setCategoriesRefreshKey((k) => k + 1); closeDialog(); }}
+        onSuccess={() => setCategoriesRefreshKey((k) => k + 1)}
       />
       <AddMachineDialog
         open={dialogType === "add-machine"}
@@ -361,18 +361,18 @@ export default function QuickEntry() {
         restrictedProjectId={effectiveProjectId ?? undefined}
         restrictedProjectName={effectiveProjectName || undefined}
         projects={projectOptions}
-        onSuccess={() => { refetchMachines(); closeDialog(); }}
+        onSuccess={refetchMachines}
       />
       <AddConsumableItemDialog
         open={dialogType === "add-consumable-item"}
         onOpenChange={(open) => !open && closeDialog()}
         projectId={effectiveProjectId}
-        onSuccess={() => { refetchConsumableItems(); closeDialog(); }}
+        onSuccess={refetchConsumableItems}
       />
       <AddNonConsumableItemDialog
         open={dialogType === "add-non-consumable-item"}
         onOpenChange={(open) => !open && closeDialog()}
-        onSuccess={closeDialog}
+        onSuccess={() => undefined}
       />
 
       {/* Picker dialogs */}
@@ -427,7 +427,7 @@ export default function QuickEntry() {
           open={dialogType === "vendor-payment"}
           onOpenChange={(open) => { if (!open) closeDialog(); }}
           vendor={selectedVendor}
-          onSuccess={() => { refetchVendors(); closeDialog(); }}
+          onSuccess={refetchVendors}
         />
       )}
       {selectedContractor && effectiveProjectId && (
@@ -438,14 +438,14 @@ export default function QuickEntry() {
             projectId={effectiveProjectId}
             contractors={contractors}
             defaultContractorId={selectedContractor.id}
-            onSuccess={() => { refetchContractors(); closeDialog(); }}
+            onSuccess={refetchContractors}
           />
           <ContractorPaymentDialog
             open={dialogType === "contractor-payment"}
             onOpenChange={(open) => { if (!open) closeDialog(); }}
             contractor={selectedContractor}
             remainingBalance={selectedContractor.remaining ?? 0}
-            onSuccess={() => { refetchContractors(); closeDialog(); }}
+            onSuccess={refetchContractors}
           />
         </>
       )}
@@ -454,7 +454,7 @@ export default function QuickEntry() {
           open={dialogType === "employee-payment"}
           onOpenChange={(open) => { if (!open) closeDialog(); }}
           employee={selectedEmployee}
-          onSuccess={() => { refetchEmployees(); closeDialog(); }}
+          onSuccess={refetchEmployees}
         />
       )}
       {selectedConsumableItem && effectiveProjectId && (
@@ -464,7 +464,7 @@ export default function QuickEntry() {
             itemId={selectedConsumableItem.id}
             itemName={selectedConsumableItem.name}
             projectId={effectiveProjectId}
-            onSuccess={() => { refetchConsumableItems(); closeDialog(); }}
+            onSuccess={refetchConsumableItems}
           />
         )}
       {effectiveProjectId && (
@@ -473,7 +473,7 @@ export default function QuickEntry() {
             onOpenChange={(open) => { if (!open) closeDialog(); }}
             projectId={effectiveProjectId}
             consumableItems={consumableItems}
-            onSuccess={() => { refetchConsumableItems(); closeDialog(); }}
+            onSuccess={refetchConsumableItems}
           />
         )}
       {selectedNonConsumableItem && (
@@ -487,7 +487,7 @@ export default function QuickEntry() {
           companyStore={selectedNonConsumableItem.companyStore}
           inUse={selectedNonConsumableItem.inUse}
           underRepair={selectedNonConsumableItem.underRepair}
-          onSuccess={closeDialog}
+          onSuccess={() => undefined}
         />
       )}
       {selectedMachine && (
@@ -496,14 +496,14 @@ export default function QuickEntry() {
             open={dialogType === "machine-ledger-entry"}
             onOpenChange={(open) => { if (!open) closeDialog(); }}
             machine={selectedMachine}
-            onSuccess={() => { refetchMachines(); closeDialog(); }}
+            onSuccess={refetchMachines}
           />
           <MachinePaymentDialog
             open={dialogType === "machine-payment"}
             onOpenChange={(open) => { if (!open) closeDialog(); }}
             machine={selectedMachine}
             remainingBalance={selectedMachine.totalPending ?? 0}
-            onSuccess={() => { refetchMachines(); closeDialog(); }}
+            onSuccess={refetchMachines}
           />
         </>
       )}

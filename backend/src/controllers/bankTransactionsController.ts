@@ -7,6 +7,7 @@ import {
   type CreateBankTransactionInput,
   type UpdateBankTransactionInput,
   type ListBankTransactionsOptions,
+  getBankAccountLedger,
 } from "../services/bankTransactionService.js";
 import type { AuthRequest } from "../middleware/auth.js";
 
@@ -31,6 +32,11 @@ export async function list(req: AuthRequest, res: Response) {
     const message = err instanceof Error ? err.message : "Failed to list transactions";
     res.status(500).json({ error: message });
   }
+}
+
+export async function accountLedger(req: AuthRequest, res: Response) {
+  try { res.json(await getBankAccountLedger(req.params.accountId, typeof req.query.startDate === "string" ? req.query.startDate : undefined, typeof req.query.endDate === "string" ? req.query.endDate : undefined)); }
+  catch (err) { const message = err instanceof Error ? err.message : "Failed to get account ledger"; res.status(message.includes("not found") ? 404 : 400).json({ error: message }); }
 }
 
 export async function create(req: AuthRequest, res: Response) {

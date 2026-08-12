@@ -170,7 +170,6 @@ export default function NonConsumableItemLedger() {
         inUse={item.inUse}
         underRepair={item.underRepair}
         onSuccess={() => {
-          setAddEntryOpen(false);
           refetch();
           refreshItem();
         }}
@@ -270,7 +269,7 @@ export default function NonConsumableItemLedger() {
                   Cost
                 </th>
                 <th className="px-3 py-2.5 text-left text-sm font-bold uppercase tracking-wider">
-                  Project
+                  Project / Expense Project
                 </th>
                 <th className="px-3 py-2.5 text-left text-sm font-bold uppercase tracking-wider">
                   Remarks
@@ -316,7 +315,7 @@ export default function NonConsumableItemLedger() {
                       {entry.totalCost != null ? formatCurrency(entry.totalCost) : "—"}
                     </td>
                     <td className="px-3 py-3 text-sm">
-                      {entry.projectToName ?? entry.projectFromName ?? "—"}
+                      {entry.expenseProjectName ?? entry.projectToName ?? entry.projectFromName ?? "—"}
                     </td>
                     <td className="px-3 py-3 text-sm text-muted-foreground">
                       {entry.remarks ?? "—"}

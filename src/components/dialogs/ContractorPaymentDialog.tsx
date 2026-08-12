@@ -39,6 +39,7 @@ export function ContractorPaymentDialog({
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [amount, setAmount] = useState("");
   const [paymentMode, setPaymentMode] = useState<"Cash" | "Bank" | "Online">("Bank");
+  const [paymentType, setPaymentType] = useState<"settlement" | "advance">("settlement");
   const [referenceId, setReferenceId] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -50,7 +51,7 @@ export function ContractorPaymentDialog({
       toast.error("Date and amount are required");
       return;
     }
-    if (amt > remainingBalance) {
+    if (paymentType === "settlement" && amt > remainingBalance) {
       toast.error(`Amount exceeds remaining balance of ${remainingBalance.toLocaleString()} PKR`);
       return;
     }
@@ -60,12 +61,13 @@ export function ContractorPaymentDialog({
         date,
         amount: amt,
         paymentMethod: paymentMode,
+        paymentType,
         referenceId: referenceId.trim() || undefined,
       });
       toast.success("Payment recorded");
-      onOpenChange(false);
       setAmount("");
       setReferenceId("");
+      setPaymentType("settlement");
       onSuccess?.();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to record payment");
@@ -81,9 +83,11 @@ export function ContractorPaymentDialog({
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>Record Payment — {contractor.name}</DialogTitle>
-          {remainingBalance > 0 && (
-            <p className="text-sm text-muted-foreground">Remaining balance: {remainingBalance.toLocaleString()} PKR</p>
-          )}
+          <p className="text-sm text-muted-foreground">
+            {remainingBalance < 0
+              ? `Advance credit: ${Math.abs(remainingBalance).toLocaleString()} PKR`
+              : `Remaining balance: ${remainingBalance.toLocaleString()} PKR`}
+          </p>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -98,9 +102,20 @@ export function ContractorPaymentDialog({
               step="any"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
-              placeholder={remainingBalance > 0 ? String(remainingBalance) : ""}
+              placeholder={paymentType === "settlement" && remainingBalance > 0 ? String(remainingBalance) : ""}
               className="mt-1"
             />
+          </div>
+          <div>
+            <Label>Payment Type *</Label>
+            <Select value={paymentType} onValueChange={(v) => setPaymentType(v as "settlement" | "advance")}>
+              <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="settlement">Payment against bill</SelectItem>
+                <SelectItem value="advance">Advance payment</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="mt-1 text-xs text-muted-foreground">An advance can be recorded before bills exist and remains a credit until future entries use it.</p>
           </div>
           <div>
             <Label>Payment Mode *</Label>
@@ -121,7 +136,7 @@ export function ContractorPaymentDialog({
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>Cancel</Button>
-            <Button type="submit" variant="warning" disabled={submitting || remainingBalance <= 0}>Record Payment</Button>
+            <Button type="submit" variant="warning" disabled={submitting || (paymentType === "settlement" && remainingBalance <= 0)}>Record Payment</Button>
           </DialogFooter>
         </form>
       </DialogContent>

@@ -50,7 +50,6 @@ export function AddMachineLedgerEntryDialog({
         remarks: remarks.trim() || undefined,
       });
       toast.success("Ledger entry added");
-      onOpenChange(false);
       setHoursWorked("");
       setUsedBy("");
       setRemarks("");

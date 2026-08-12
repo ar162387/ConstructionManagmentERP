@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import { NonConsumableLedgerEntry } from "../models/NonConsumableLedgerEntry.js";
 import { NonConsumableItem } from "../models/NonConsumableItem.js";
+import { Project } from "../models/Project.js";
 import { User } from "../models/User.js";
 import { logAudit } from "./auditService.js";
 import { roleDisplay } from "./authService.js";
@@ -13,6 +14,8 @@ export interface NonConsumableLedgerPayload {
   eventType: NonConsumableEventType;
   quantity: number;
   totalCost?: number;
+  expenseProjectId?: string;
+  expenseProjectName?: string;
   projectTo?: string;
   projectToName?: string;
   projectFrom?: string;
@@ -27,6 +30,7 @@ export interface CreateNonConsumableLedgerInput {
   eventType: NonConsumableEventType;
   quantity: number;
   totalCost?: number;
+  expenseProjectId?: string;
   projectTo?: string;
   projectFrom?: string;
   remarks?: string;
@@ -37,6 +41,7 @@ export interface UpdateNonConsumableLedgerInput {
   eventType?: NonConsumableEventType;
   quantity?: number;
   totalCost?: number;
+  expenseProjectId?: string;
   projectTo?: string;
   projectFrom?: string;
   remarks?: string;
@@ -59,6 +64,25 @@ const EVENT_TYPES: NonConsumableEventType[] = [
 ];
 
 const DEFAULT_PAGE_SIZE = 12;
+
+async function validateProjectAccess(
+  actor: { userId: string; role: string },
+  projectId: string | undefined,
+  label: string
+): Promise<mongoose.Types.ObjectId> {
+  if (!projectId || !mongoose.Types.ObjectId.isValid(projectId)) {
+    throw new Error(`${label} project is required`);
+  }
+  if (actor.role === "site_manager") {
+    const user = await User.findById(actor.userId).select("assignedProjectId").lean();
+    if (!user?.assignedProjectId || user.assignedProjectId !== projectId) {
+      throw new Error("Site Managers can only use their assigned project");
+    }
+  }
+  const project = await Project.findById(projectId).select("_id").lean();
+  if (!project) throw new Error("Project not found");
+  return project._id;
+}
 
 export interface ListNonConsumableLedgerOptions {
   page?: number;
@@ -169,6 +193,7 @@ async function buildPayload(
     eventType: NonConsumableEventType;
     quantity: number;
     totalCost?: number;
+    expenseProjectId?: mongoose.Types.ObjectId;
     projectTo?: mongoose.Types.ObjectId;
     projectFrom?: mongoose.Types.ObjectId;
     remarks?: string;
@@ -183,6 +208,7 @@ async function buildPayload(
     eventType: doc.eventType,
     quantity: doc.quantity,
     totalCost: doc.totalCost,
+    expenseProjectId: doc.expenseProjectId?.toString(),
     projectTo: doc.projectTo?.toString(),
     projectFrom: doc.projectFrom?.toString(),
     remarks: doc.remarks,
@@ -192,6 +218,8 @@ async function buildPayload(
     payload.projectToName = projectNames.get(doc.projectTo.toString());
   if (projectNames && doc.projectFrom)
     payload.projectFromName = projectNames.get(doc.projectFrom.toString());
+  if (projectNames && doc.expenseProjectId)
+    payload.expenseProjectName = projectNames.get(doc.expenseProjectId.toString());
   return payload;
 }
 
@@ -209,6 +237,7 @@ export async function listNonConsumableLedger(
     ...new Set([
       ...docs.map((d) => d.projectTo?.toString()).filter(Boolean),
       ...docs.map((d) => d.projectFrom?.toString()).filter(Boolean),
+      ...docs.map((d) => d.expenseProjectId?.toString()).filter(Boolean),
     ]),
   ].filter((id): id is string => !!id);
 
@@ -248,6 +277,7 @@ export async function createNonConsumableLedgerEntry(
   if (input.eventType === "Purchase") {
     const totalCost = input.totalCost ?? 0;
     if (totalCost < 0) throw new Error("Total cost cannot be negative");
+    await validateProjectAccess(actor, input.expenseProjectId, "Expense");
   }
 
   if (input.eventType === "AssignToProject") {
@@ -288,6 +318,17 @@ export async function createNonConsumableLedgerEntry(
     throw new Error("Total cost cannot be negative");
   }
 
+  if (input.eventType === "Repair") {
+    await validateProjectAccess(actor, input.expenseProjectId, "Expense");
+  }
+
+  if (input.eventType === "AssignToProject") {
+    await validateProjectAccess(actor, input.projectTo, "Assigned");
+  }
+  if (input.eventType === "ReturnToCompany" || input.eventType === "Repair" || input.eventType === "MarkLost") {
+    await validateProjectAccess(actor, input.projectFrom, "Source");
+  }
+
   const userId = new mongoose.Types.ObjectId(actor.userId);
   const entry = await NonConsumableLedgerEntry.create({
     itemId: input.itemId,
@@ -295,6 +336,10 @@ export async function createNonConsumableLedgerEntry(
     eventType: input.eventType,
     quantity: input.quantity,
     totalCost: input.eventType === "Purchase" || input.eventType === "Repair" ? input.totalCost : undefined,
+    expenseProjectId:
+      (input.eventType === "Purchase" || input.eventType === "Repair") && input.expenseProjectId
+        ? new mongoose.Types.ObjectId(input.expenseProjectId)
+        : undefined,
     projectTo:
       input.eventType === "AssignToProject" && input.projectTo
         ? new mongoose.Types.ObjectId(input.projectTo)
@@ -312,8 +357,7 @@ export async function createNonConsumableLedgerEntry(
 
   await syncItemBalances(item._id);
 
-  const { Project } = await import("../models/Project.js");
-  const projectIds = [entry.projectTo?.toString(), entry.projectFrom?.toString()].filter(
+  const projectIds = [entry.projectTo?.toString(), entry.projectFrom?.toString(), entry.expenseProjectId?.toString()].filter(
     (id): id is string => !!id
   );
   const projectNames = new Map<string, string>();
@@ -368,6 +412,12 @@ export async function updateNonConsumableLedgerEntry(
         ? new mongoose.Types.ObjectId(input.projectFrom)
         : undefined
       : existing.projectFrom;
+  const newExpenseProjectId =
+    input.expenseProjectId !== undefined
+      ? input.expenseProjectId
+        ? new mongoose.Types.ObjectId(input.expenseProjectId)
+        : undefined
+      : existing.expenseProjectId;
 
   if (newQuantity < 1) throw new Error("Quantity must be at least 1");
 
@@ -429,6 +479,7 @@ export async function updateNonConsumableLedgerEntry(
   // Validate new movement against balancesWithoutOld
   if (newEventType === "Purchase") {
     if ((newTotalCost ?? 0) < 0) throw new Error("Total cost cannot be negative");
+    await validateProjectAccess(actor, newExpenseProjectId?.toString(), "Expense");
   }
   if (newEventType === "AssignToProject") {
     const projId = newProjectTo?.toString();
@@ -458,12 +509,24 @@ export async function updateNonConsumableLedgerEntry(
     throw new Error("Total cost cannot be negative");
   }
 
+  if (newEventType === "Repair") {
+    await validateProjectAccess(actor, newExpenseProjectId?.toString(), "Expense");
+  }
+  if (newEventType === "AssignToProject") {
+    await validateProjectAccess(actor, newProjectTo?.toString(), "Assigned");
+  }
+  if (newEventType === "ReturnToCompany" || newEventType === "Repair" || newEventType === "MarkLost") {
+    await validateProjectAccess(actor, newProjectFrom?.toString(), "Source");
+  }
+
   await NonConsumableLedgerEntry.findByIdAndUpdate(id, {
     date: newDate,
     eventType: newEventType,
     quantity: newQuantity,
     totalCost:
       newEventType === "Purchase" || newEventType === "Repair" ? (newTotalCost ?? 0) : undefined,
+    expenseProjectId:
+      newEventType === "Purchase" || newEventType === "Repair" ? newExpenseProjectId : undefined,
     projectTo: newEventType === "AssignToProject" ? newProjectTo : undefined,
     projectFrom:
       newEventType === "ReturnToCompany" ||
@@ -479,8 +542,7 @@ export async function updateNonConsumableLedgerEntry(
   const updated = await NonConsumableLedgerEntry.findById(id).lean();
   if (!updated) throw new Error("Update failed");
 
-  const { Project } = await import("../models/Project.js");
-  const projectIds = [updated.projectTo?.toString(), updated.projectFrom?.toString()].filter(
+  const projectIds = [updated.projectTo?.toString(), updated.projectFrom?.toString(), updated.expenseProjectId?.toString()].filter(
     (id): id is string => !!id
   );
   const projectNames = new Map<string, string>();

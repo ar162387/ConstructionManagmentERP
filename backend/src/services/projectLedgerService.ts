@@ -17,6 +17,7 @@ export interface ProjectLedgerRow {
   destination?: string; // destination text for bank_outflow
   referenceId?: string; // bank_outflow only
   remarks?: string;
+  balance?: number;
 }
 
 export interface GetProjectLedgerOptions {
@@ -78,11 +79,11 @@ export async function getProjectLedger(
 
   const [bankTxDocs, adjustmentDocs] = await Promise.all([
     BankTransaction.find({ projectId, type: "outflow" })
-      .sort({ date: -1, createdAt: -1 })
+      .sort({ date: 1, createdAt: 1, _id: 1 })
       .populate("accountId", "name")
       .lean(),
     ProjectBalanceAdjustment.find({ projectId })
-      .sort({ date: -1, createdAt: -1 })
+      .sort({ date: 1, createdAt: 1, _id: 1 })
       .lean(),
   ]);
 
@@ -109,10 +110,12 @@ export async function getProjectLedger(
   }));
 
   const allRows = [...bankRows, ...adjRows].sort((a, b) => {
-    const cmp = b.date.localeCompare(a.date);
+    const cmp = a.date.localeCompare(b.date);
     if (cmp !== 0) return cmp;
-    return a.type === "bank_outflow" ? -1 : 1; // bank before adjustment on same date
+    return a.type === "bank_outflow" ? -1 : 1;
   });
+  let runningBalance = 0;
+  for (const row of allRows) { runningBalance += row.amount; row.balance = runningBalance; }
 
   const total = allRows.length;
   const page = Math.max(1, options?.page ?? 1);

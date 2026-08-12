@@ -1,6 +1,7 @@
 import { Response } from "express";
 import {
   getContractorLedger,
+  getContractorLedgerAllTime,
   createContractorEntry,
   createContractorPayment,
   deleteContractorEntry,
@@ -25,6 +26,28 @@ export async function getLedger(req: AuthRequest, res: Response) {
 
     const actor = req.user!;
     const data = await getContractorLedger(projectId, month, { contractorId, page, pageSize, actor });
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : "Failed to get contractor ledger" });
+  }
+}
+
+export async function getAllTimeLedger(req: AuthRequest, res: Response) {
+  try {
+    const projectId = typeof req.query.projectId === "string" ? req.query.projectId : undefined;
+    const contractorId = typeof req.query.contractorId === "string" ? req.query.contractorId : undefined;
+    if (!projectId || !contractorId) {
+      res.status(400).json({ error: "projectId and contractorId are required" });
+      return;
+    }
+    const actor = req.user!;
+    const data = await getContractorLedgerAllTime(projectId, contractorId, {
+      startDate: typeof req.query.startDate === "string" ? req.query.startDate : undefined,
+      endDate: typeof req.query.endDate === "string" ? req.query.endDate : undefined,
+      page: req.query.page ? Number(req.query.page) : undefined,
+      pageSize: req.query.pageSize ? Number(req.query.pageSize) : undefined,
+      actor,
+    });
     res.json(data);
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : "Failed to get contractor ledger" });

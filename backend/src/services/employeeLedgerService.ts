@@ -25,6 +25,12 @@ function monthEndDate(month: string): string {
   return `${month}-${String(days).padStart(2, "0")}`;
 }
 
+function nextMonth(month: string): string {
+  const [year, monthNumber] = month.split("-").map(Number);
+  const date = new Date(year, monthNumber, 1);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
 /** First month (YYYY-MM) the employee is eligible for salary/attendance data.
  * Prefers the user-specified joiningDate over the DB-insert createdAt timestamp. */
 function effectiveFirstMonth(employee: { joiningDate?: string; createdAt?: Date }): string | null {
@@ -89,7 +95,7 @@ function computePayableFromEntries(
       .filter(([, status]) => status === "unpaid_leave")
       .map(([day]) => Number(day));
     const unpaidLeaves = unpaidLeaveDays.length;
-    const unpaidLeaveDeduction = roundAmount((baseSalary / getDaysInMonth(month)) * unpaidLeaves);
+    const unpaidLeaveDeduction = roundAmount((baseSalary / 30) * unpaidLeaves);
     return Math.max(baseSalary - unpaidLeaveDeduction, 0);
   }
 
@@ -131,7 +137,8 @@ export async function computePayableForMonth(
       .filter(([, status]) => status === "unpaid_leave")
       .map(([day]) => Number(day));
     const unpaidLeaves = unpaidLeaveDays.length;
-    const unpaidLeaveDeduction = roundAmount((baseSalary / getDaysInMonth(month)) * unpaidLeaves);
+    // Fixed monthly salaries use a consistent 30-day payroll basis.
+    const unpaidLeaveDeduction = roundAmount((baseSalary / 30) * unpaidLeaves);
     return Math.max(baseSalary - unpaidLeaveDeduction, 0);
   }
 
@@ -611,6 +618,8 @@ export async function deleteEmployeePayment(
 
 export interface GetEmployeeLedgerOptions {
   month?: string;
+  startDate?: string;
+  endDate?: string;
   page?: number;
   pageSize?: number;
 }
@@ -619,8 +628,22 @@ const DEFAULT_PAGE_SIZE = 12;
 
 export interface GetEmployeeLedgerResult {
   payments: EmployeePaymentPayload[];
+  rows: EmployeeLedgerRow[];
+  previousBalance: number;
   total: number;
   snapshot?: MonthlySnapshot;
+}
+
+export interface EmployeeLedgerRow {
+  type: "payable" | "payment";
+  id: string;
+  date: string;
+  month: string;
+  amount: number;
+  remarks?: string;
+  paymentMethod?: string;
+  paymentType?: string;
+  runningTotal: number;
 }
 
 export async function getEmployeeLedger(
@@ -629,7 +652,7 @@ export async function getEmployeeLedger(
   options?: GetEmployeeLedgerOptions
 ): Promise<GetEmployeeLedgerResult> {
   if (!mongoose.Types.ObjectId.isValid(employeeId)) {
-    return { payments: [], total: 0 };
+    return { payments: [], rows: [], previousBalance: 0, total: 0 };
   }
 
   await ensureEmployeeAccess(actor, employeeId);
@@ -638,14 +661,16 @@ export async function getEmployeeLedger(
   const pageSize = Math.min(100, Math.max(1, options?.pageSize ?? DEFAULT_PAGE_SIZE));
   const baseMatch = { employeeId: new mongoose.Types.ObjectId(employeeId) };
 
-  // Payments ledger: always return all records, sorted by date descending (unaffected by month filter)
-  const [total, paymentDocs] = await Promise.all([
+  // Payments remain available for existing consumers; the rows below are the
+  // complete economics ledger, including monthly payable salary/wage entries.
+  const [total, paymentDocs, employee] = await Promise.all([
     EmployeePayment.countDocuments(baseMatch),
     EmployeePayment.find(baseMatch)
-      .sort({ date: -1, month: -1 })
+      .sort({ date: 1, month: 1, _id: 1 })
       .skip((page - 1) * pageSize)
       .limit(pageSize)
       .lean(),
+    Employee.findById(employeeId).lean(),
   ]);
 
   const payments = paymentDocs.map((doc) => toPaymentPayload(doc));
@@ -674,7 +699,36 @@ export async function getEmployeeLedger(
     };
   }
 
-  return { payments, total, snapshot };
+  const allPaymentDocs = await EmployeePayment.find(baseMatch).sort({ date: 1, _id: 1 }).lean();
+  const firstMonth = employee ? effectiveFirstMonth(employee) : null;
+  const currentMonth = new Date().toISOString().slice(0, 7);
+  const payableRows: Omit<EmployeeLedgerRow, "runningTotal">[] = [];
+  if (firstMonth) {
+    for (let cursor = firstMonth; cursor <= currentMonth; cursor = nextMonth(cursor)) {
+      const payable = await computePayableForMonth(employeeId, cursor);
+      if (payable > 0) {
+        payableRows.push({ type: "payable", id: `payable-${cursor}`, date: monthEndDate(cursor), month: cursor, amount: payable, remarks: employee?.type === "Fixed" ? "Monthly salary payable" : "Monthly wage payable" });
+      }
+    }
+  }
+  const allRows: Omit<EmployeeLedgerRow, "runningTotal">[] = [
+    ...payableRows,
+    ...allPaymentDocs.map((payment) => ({ type: "payment" as const, id: payment._id.toString(), date: payment.date, month: payment.month, amount: payment.amount, remarks: payment.remarks, paymentMethod: payment.paymentMethod, paymentType: payment.type })),
+  ].sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
+  let balance = 0;
+  let previousBalance = 0;
+  const rows: EmployeeLedgerRow[] = [];
+  for (const row of allRows) {
+    balance += row.type === "payable" ? row.amount : -row.amount;
+    if (options?.startDate && row.date < options.startDate) {
+      previousBalance = balance;
+      continue;
+    }
+    if (options?.endDate && row.date > options.endDate) continue;
+    rows.push({ ...row, runningTotal: balance });
+  }
+
+  return { payments, rows, previousBalance, total: rows.length, snapshot };
 }
 
 /** Get only the monthly snapshot (payable, paid, remaining, paymentStatus) for an employee. Used when month changes so payments list is not refetched. */

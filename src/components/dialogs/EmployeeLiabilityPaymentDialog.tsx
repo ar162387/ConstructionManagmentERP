@@ -132,7 +132,13 @@ export function EmployeeLiabilityPaymentDialog({
       });
       toast.success("Payment recorded");
       onSuccess?.();
-      onOpenChange(false);
+      setSnapshot((current) => current
+        ? {
+            ...current,
+            paid: current.paid + amt,
+            remaining: Math.max(0, current.remaining - amt),
+          }
+        : current);
       setAmount("");
       setRemarks("");
       setReferenceId("");

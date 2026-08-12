@@ -15,6 +15,8 @@ export interface INonConsumableLedgerEntry {
   eventType: NonConsumableEventType;
   quantity: number;
   totalCost?: number;
+  /** Project whose Cash & Expenses ledger bears this cost. */
+  expenseProjectId?: mongoose.Types.ObjectId;
   projectTo?: mongoose.Types.ObjectId;
   projectFrom?: mongoose.Types.ObjectId;
   remarks?: string;
@@ -34,6 +36,7 @@ const nonConsumableLedgerEntrySchema = new mongoose.Schema<INonConsumableLedgerE
     },
     quantity: { type: Number, required: true, min: 1 },
     totalCost: { type: Number, min: 0 },
+    expenseProjectId: { type: mongoose.Schema.Types.ObjectId, ref: "Project" },
     projectTo: { type: mongoose.Schema.Types.ObjectId, ref: "Project" },
     projectFrom: { type: mongoose.Schema.Types.ObjectId, ref: "Project" },
     remarks: { type: String, trim: true },
@@ -45,6 +48,7 @@ const nonConsumableLedgerEntrySchema = new mongoose.Schema<INonConsumableLedgerE
 nonConsumableLedgerEntrySchema.index({ itemId: 1, date: -1 });
 nonConsumableLedgerEntrySchema.index({ projectTo: 1 });
 nonConsumableLedgerEntrySchema.index({ projectFrom: 1 });
+nonConsumableLedgerEntrySchema.index({ expenseProjectId: 1 });
 
 export const NonConsumableLedgerEntry = mongoose.model<INonConsumableLedgerEntry>(
   "NonConsumableLedgerEntry",

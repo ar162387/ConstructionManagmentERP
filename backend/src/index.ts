@@ -8,6 +8,7 @@ import { auditLogRoutes } from "./routes/auditLogs.js";
 import { projectRoutes } from "./routes/projects.js";
 import { vendorRoutes } from "./routes/vendors.js";
 import { consumableItemRoutes } from "./routes/consumableItems.js";
+import { consumableUnitRoutes } from "./routes/consumableUnits.js";
 import { itemLedgerRoutes } from "./routes/itemLedger.js";
 import { stockConsumptionRoutes } from "./routes/stockConsumption.js";
 import { vendorPaymentRoutes } from "./routes/vendorPayments.js";
@@ -22,6 +23,8 @@ import { machineRoutes } from "./routes/machines.js";
 import { bankAccountRoutes } from "./routes/bankAccounts.js";
 import { bankTransactionRoutes } from "./routes/bankTransactions.js";
 import { projectLedgerRoutes } from "./routes/projectLedger.js";
+import { clientRoutes } from "./routes/clients.js";
+import { customHeadRoutes } from "./routes/customHeads.js";
 
 const PORT = process.env.PORT ?? 3001;
 const MONGODB_URI = process.env.MONGODB_URI ?? "mongodb://localhost:27017/builderp";
@@ -66,6 +69,7 @@ app.use("/api/projects", projectRoutes);
 app.use("/api/projects/:projectId/ledger", projectLedgerRoutes);
 app.use("/api/vendors", vendorRoutes);
 app.use("/api/consumable-items", consumableItemRoutes);
+app.use("/api/consumable-units", consumableUnitRoutes);
 app.use("/api/consumable-items/:itemId/ledger", itemLedgerRoutes);
 app.use("/api/stock-consumption", stockConsumptionRoutes);
 app.use("/api/vendors/:vendorId", vendorPaymentRoutes);
@@ -79,6 +83,8 @@ app.use("/api/expenses", expenseRoutes);
 app.use("/api/machines", machineRoutes);
 app.use("/api/bank-accounts", bankAccountRoutes);
 app.use("/api/bank-transactions", bankTransactionRoutes);
+app.use("/api/clients", clientRoutes);
+app.use("/api/custom-heads", customHeadRoutes);
 
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true });

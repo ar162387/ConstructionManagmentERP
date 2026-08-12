@@ -37,7 +37,8 @@ export async function create(req: AuthRequest, res: Response) {
       msg.includes("exceeds") ||
       msg.includes("not found") ||
       msg.includes("Invalid") ||
-      msg.includes("negative")
+      msg.includes("negative") ||
+      msg.includes("only")
         ? 400
         : 500;
     res.status(status).json({ error: msg });
@@ -56,7 +57,7 @@ export async function update(req: AuthRequest, res: Response) {
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Failed to update ledger entry";
     const status =
-      msg.includes("not found") ? 404 : msg.includes("exceeds") || msg.includes("Invalid") ? 400 : 500;
+      msg.includes("not found") ? 404 : msg.includes("exceeds") || msg.includes("Invalid") || msg.includes("required") || msg.includes("only") ? 400 : 500;
     res.status(status).json({ error: msg });
   }
 }

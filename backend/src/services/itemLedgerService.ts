@@ -1,5 +1,7 @@
 import mongoose from "mongoose";
 import { ItemLedgerEntry } from "../models/ItemLedgerEntry.js";
+import { VendorPayment } from "../models/VendorPayment.js";
+import { StockConsumptionEntry } from "../models/StockConsumptionEntry.js";
 import { ConsumableItem } from "../models/ConsumableItem.js";
 import { Vendor } from "../models/Vendor.js";
 import { User } from "../models/User.js";
@@ -8,6 +10,7 @@ import { roleDisplay } from "./authService.js";
 import { getFifoAllocationForVendor } from "./fifoAllocation.js";
 
 export interface ItemLedgerPayload {
+  type: "purchase";
   id: string;
   projectId: string;
   itemId: string;
@@ -15,6 +18,7 @@ export interface ItemLedgerPayload {
   vendorName: string;
   date: string;
   quantity: number;
+  unit?: string;
   unitPrice: number;
   totalPrice: number;
   paidAmount: number;
@@ -25,7 +29,20 @@ export interface ItemLedgerPayload {
   paymentMethod: "Cash" | "Bank" | "Online";
   referenceId?: string;
   remarks?: string;
+  runningBalance?: number;
 }
+
+export interface ItemConsumptionLedgerPayload {
+  type: "consumption";
+  id: string;
+  date: string;
+  quantityUsed: number;
+  unit?: string;
+  remarks?: string;
+  runningBalance: number;
+}
+
+export type ItemLedgerRowPayload = ItemLedgerPayload | ItemConsumptionLedgerPayload;
 
 export interface CreateItemLedgerInput {
   projectId: string;
@@ -33,6 +50,7 @@ export interface CreateItemLedgerInput {
   vendorId: string;
   date: string;
   quantity: number;
+  unit?: string;
   unitPrice: number;
   paidAmount?: number;
   biltyNumber?: string;
@@ -46,6 +64,7 @@ export interface UpdateItemLedgerInput {
   vendorId?: string;
   date?: string;
   quantity?: number;
+  unit?: string;
   unitPrice?: number;
   paidAmount?: number;
   biltyNumber?: string;
@@ -62,6 +81,7 @@ async function buildPayload(doc: {
   vendorId: mongoose.Types.ObjectId;
   date: string;
   quantity: number;
+  unit?: string;
   unitPrice: number;
   totalPrice: number;
   paidAmount: number;
@@ -75,6 +95,7 @@ async function buildPayload(doc: {
 }): Promise<ItemLedgerPayload> {
   const vendor = await Vendor.findById(doc.vendorId).select("name").lean();
   return {
+    type: "purchase",
     id: doc._id.toString(),
     projectId: doc.projectId.toString(),
     itemId: doc.itemId.toString(),
@@ -82,6 +103,7 @@ async function buildPayload(doc: {
     vendorName: vendor?.name ?? "Unknown",
     date: doc.date,
     quantity: doc.quantity,
+    unit: doc.unit,
     unitPrice: doc.unitPrice,
     totalPrice: doc.totalPrice,
     paidAmount: doc.paidAmount,
@@ -103,7 +125,7 @@ export interface ListItemLedgerOptions {
 }
 
 export interface ListItemLedgerResult {
-  entries: ItemLedgerPayload[];
+  entries: ItemLedgerRowPayload[];
   total: number;
 }
 
@@ -114,7 +136,10 @@ export async function listItemLedger(
   if (!mongoose.Types.ObjectId.isValid(itemId)) {
     return { entries: [], total: 0 };
   }
-  const docs = await ItemLedgerEntry.find({ itemId }).sort({ date: -1 }).lean();
+  const [docs, consumptionDocs] = await Promise.all([
+    ItemLedgerEntry.find({ itemId }).sort({ date: 1, createdAt: 1 }).lean(),
+    StockConsumptionEntry.find({ "items.itemId": itemId }).sort({ date: 1, createdAt: 1 }).lean(),
+  ]);
   const vendorIds = [...new Set(docs.map((d) => d.vendorId.toString()))];
   const allocationByVendor = new Map<string, Awaited<ReturnType<typeof getFifoAllocationForVendor>>>();
   await Promise.all(
@@ -130,11 +155,32 @@ export async function listItemLedger(
       payloads[i].remaining = alloc.allocatedRemaining;
     }
   }
-  const total = payloads.length;
+  const consumptionRows: ItemConsumptionLedgerPayload[] = consumptionDocs.flatMap((doc) =>
+    doc.items
+      .filter((line) => line.itemId.toString() === itemId)
+      .map((line) => ({
+        type: "consumption" as const,
+        id: doc._id.toString(),
+        date: doc.date,
+        quantityUsed: line.quantityUsed,
+        unit: line.unit,
+        remarks: doc.remarks,
+        runningBalance: 0,
+      }))
+  );
+  const allRows: ItemLedgerRowPayload[] = [...payloads, ...consumptionRows].sort(
+    (a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id)
+  );
+  let balance = 0;
+  for (const row of allRows) {
+    balance += row.type === "purchase" ? row.quantity : -row.quantityUsed;
+    row.runningBalance = balance;
+  }
+  const total = allRows.length;
   const pageSize = Math.min(Math.max(1, options?.pageSize ?? DEFAULT_PAGE_SIZE), 100);
   const page = Math.max(1, options?.page ?? 1);
   const start = (page - 1) * pageSize;
-  const entries = payloads.slice(start, start + pageSize);
+  const entries = allRows.slice(start, start + pageSize);
   return { entries, total };
 }
 
@@ -145,17 +191,18 @@ export async function createItemLedgerEntry(
 ): Promise<ItemLedgerPayload> {
   if (!input.date) throw new Error("Date is required");
   if (!input.quantity || input.quantity < 1) throw new Error("Quantity must be at least 1");
+  if (!input.unit?.trim()) throw new Error("Unit is required");
   if (input.unitPrice == null || input.unitPrice < 0) throw new Error("Unit price must be >= 0");
   if (!input.vendorId) throw new Error("Vendor is required");
   if (!["Cash", "Bank", "Online"].includes(input.paymentMethod)) throw new Error("Invalid payment method");
 
   const totalPrice = input.quantity * input.unitPrice;
   const rawPaid = input.paidAmount ?? 0;
-  // This entry's own paid/remaining stay capped at its own total, exactly as before — any
-  // amount paid beyond that isn't "for this bill", it's a prepayment recorded as vendor advance.
-  const paidAmount = Math.min(rawPaid, totalPrice);
-  const remaining = totalPrice - paidAmount;
-  const advanceGenerated = Math.max(0, rawPaid - totalPrice);
+  // An invoice is always its own bill row. When money is entered alongside it, create a
+  // separate VendorPayment row below it rather than embedding payment/advance into the bill.
+  const paidAmount = 0;
+  const remaining = totalPrice;
+  const advanceGenerated = 0;
 
   const item = await ConsumableItem.findById(input.itemId).lean();
   if (!item) throw new Error("Item not found");
@@ -175,6 +222,7 @@ export async function createItemLedgerEntry(
             vendorId: input.vendorId,
             date: input.date,
             quantity: input.quantity,
+            unit: input.unit?.trim() || undefined,
             unitPrice: input.unitPrice,
             totalPrice,
             paidAmount,
@@ -190,6 +238,23 @@ export async function createItemLedgerEntry(
         { session }
       );
 
+      if (rawPaid > 0) {
+        await VendorPayment.create(
+          [{
+            vendorId: input.vendorId,
+            date: input.date,
+            amount: rawPaid,
+            paymentMethod: input.paymentMethod,
+            source: "external",
+            advancePortion: 0,
+            targetEntryId: entry._id,
+            referenceId: input.referenceId?.trim() || undefined,
+            remarks: input.remarks?.trim() || `Payment for ${item.name}`,
+          }],
+          { session }
+        );
+      }
+
       await ConsumableItem.findByIdAndUpdate(
         input.itemId,
         {
@@ -197,8 +262,8 @@ export async function createItemLedgerEntry(
             currentStock: input.quantity,
             totalPurchased: input.quantity,
             totalAmount: totalPrice,
-            totalPaid: paidAmount,
-            totalPending: remaining,
+            totalPaid: rawPaid,
+            totalPending: Math.max(0, totalPrice - rawPaid),
           },
         },
         { session }
@@ -210,8 +275,8 @@ export async function createItemLedgerEntry(
           $inc: {
             totalBilled: totalPrice,
             totalPaid: rawPaid,
-            remaining,
-            advanceBalance: advanceGenerated,
+            remaining: totalPrice - rawPaid,
+            advanceBalance: Math.max(0, rawPaid - totalPrice),
           },
         },
         { session }
@@ -221,13 +286,6 @@ export async function createItemLedgerEntry(
     });
   } finally {
     session.endSession();
-  }
-
-  const fifoMap = await getFifoAllocationForVendor(result!.vendorId);
-  const alloc = fifoMap.get(result!.id);
-  if (alloc) {
-    result!.paidAmount = alloc.allocatedPaid;
-    result!.remaining = alloc.allocatedRemaining;
   }
 
   const actorUser = await User.findById(actor.userId).lean();
@@ -241,7 +299,7 @@ export async function createItemLedgerEntry(
     module: "item_ledger",
     entityId: result!.id,
     description: `Added ledger entry: ${item.name} — qty ${input.quantity} @ ${input.unitPrice}`,
-    newValue: { quantity: input.quantity, totalPrice, paidAmount, remaining },
+    newValue: { quantity: input.quantity, totalPrice, paidAmount: rawPaid, remaining: totalPrice - rawPaid },
   });
 
   return result!;
@@ -259,6 +317,7 @@ export async function updateItemLedgerEntry(
   if (!existing) throw new Error("Ledger entry not found");
 
   const newQuantity = input.quantity ?? existing.quantity;
+  if (input.unit !== undefined && !input.unit.trim()) throw new Error("Unit is required");
   const newUnitPrice = input.unitPrice ?? existing.unitPrice;
   const newTotalPrice = newQuantity * newUnitPrice;
   // Original raw paid amount typed at entry time, reconstructed: paidAmount is capped at
@@ -348,6 +407,7 @@ export async function updateItemLedgerEntry(
 
       const updates: Record<string, unknown> = {
         quantity: newQuantity,
+        unit: input.unit?.trim() || existing.unit,
         unitPrice: newUnitPrice,
         totalPrice: newTotalPrice,
         paidAmount: newPaidAmount,
@@ -409,7 +469,7 @@ export async function deleteItemLedgerEntry(
   if (!item) throw new Error("Item not found");
   if (item.currentStock - existing.quantity < 0) {
     throw new Error(
-      `Cannot delete this ledger entry: it would make stock negative. Current stock for "${item.name}" is ${item.currentStock} ${item.unit}; this entry adds ${existing.quantity}. Delete or reduce stock consumption first.`
+      `Cannot delete this ledger entry: it would make stock negative. Current stock for "${item.name}" is ${item.currentStock}; this entry adds ${existing.quantity}. Delete or reduce stock consumption first.`
     );
   }
 

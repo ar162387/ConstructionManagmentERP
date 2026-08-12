@@ -8,9 +8,10 @@ import { useItemLedger } from "@/hooks/useItemLedger";
 import { getConsumableItem } from "@/services/consumableItemsService";
 import { deleteItemLedgerEntry, type ApiItemLedgerEntry } from "@/services/itemLedgerService";
 import { AddLedgerEntryDialog } from "@/components/dialogs/AddLedgerEntryDialog";
+import { ConsumeConsumableItemDialog } from "@/components/dialogs/ConsumeConsumableItemDialog";
 import { TablePagination } from "@/components/TablePagination";
 import { Button } from "@/components/ui/button";
-import { Plus, ArrowLeft, Pencil, Trash2 } from "lucide-react";
+import { Plus, ArrowLeft, Pencil, Trash2, Minus } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
 import {
@@ -31,7 +32,7 @@ export default function ItemLedger() {
   const { user } = useAuth();
   const canEditDelete = user?.role !== "Site Manager";
 
-  const [item, setItem] = useState<{ id: string; projectId: string; name: string; unit: string; currentStock: number; totalAmount: number; totalPaid: number; totalPending: number } | null>(null);
+  const [item, setItem] = useState<{ id: string; projectId: string; name: string; unit?: string; currentStock: number; totalAmount: number; totalPaid: number; totalPending: number } | null>(null);
   const [itemLoading, setItemLoading] = useState(true);
 
   useEffect(() => {
@@ -53,6 +54,7 @@ export default function ItemLedger() {
   const endIndex = Math.min(page * pageSize, total);
 
   const [addEntryOpen, setAddEntryOpen] = useState(false);
+  const [consumeOpen, setConsumeOpen] = useState(false);
   const [editEntry, setEditEntry] = useState<ApiItemLedgerEntry | null>(null);
   const [deleteEntry, setDeleteEntry] = useState<ApiItemLedgerEntry | null>(null);
 
@@ -92,13 +94,9 @@ export default function ItemLedger() {
 
       <PageHeader
         title={`${item.name} Ledger`}
-        subtitle={`Unit: ${item.unit} — Current Stock: ${item.currentStock.toLocaleString()}`}
+        subtitle={`Current Stock: ${item.currentStock.toLocaleString()}`}
         printTargetId="item-ledger"
-        actions={
-          <Button variant="warning" size="sm" onClick={() => setAddEntryOpen(true)}>
-            <Plus className="h-4 w-4 mr-1" />Add Entry
-          </Button>
-        }
+        actions={<div className="flex gap-2"><Button variant="outline" size="sm" onClick={() => setConsumeOpen(true)} disabled={item.currentStock === 0}><Minus className="h-4 w-4 mr-1" />Consume</Button><Button variant="warning" size="sm" onClick={() => setAddEntryOpen(true)}><Plus className="h-4 w-4 mr-1" />Add Entry</Button></div>}
       />
 
       <AddLedgerEntryDialog
@@ -109,11 +107,11 @@ export default function ItemLedger() {
         projectId={item.projectId}
         editEntry={null}
         onSuccess={() => {
-          setAddEntryOpen(false);
           refetch();
           getConsumableItem(item.id).then(setItem).catch(() => null);
         }}
       />
+      <ConsumeConsumableItemDialog open={consumeOpen} onOpenChange={setConsumeOpen} item={item} onSuccess={() => { refetch(); getConsumableItem(item.id).then(setItem).catch(() => null); }} />
       {editEntry && (
         <AddLedgerEntryDialog
           open={!!editEntry}
@@ -160,14 +158,14 @@ export default function ItemLedger() {
             <thead>
               <tr className="border-b-2 border-border bg-primary text-primary-foreground">
                 <th className="px-3 py-2.5 text-left text-sm font-bold uppercase tracking-wider">Date</th>
-                <th className="px-3 py-2.5 text-right text-sm font-bold uppercase tracking-wider">Qty</th>
+                <th className="px-3 py-2.5 text-left text-sm font-bold uppercase tracking-wider">Description</th>
                 <th className="px-3 py-2.5 text-right text-sm font-bold uppercase tracking-wider">Unit Price</th>
-                <th className="px-3 py-2.5 text-right text-sm font-bold uppercase tracking-wider">Total</th>
-                <th className="px-3 py-2.5 text-right text-sm font-bold uppercase tracking-wider">Paid</th>
-                <th className="px-3 py-2.5 text-right text-sm font-bold uppercase tracking-wider">Due</th>
-                <th className="px-3 py-2.5 text-left text-sm font-bold uppercase tracking-wider">Vendor</th>
-                <th className="px-3 py-2.5 text-left text-sm font-bold uppercase tracking-wider">Payment</th>
-                <th className="px-3 py-2.5 text-left text-sm font-bold uppercase tracking-wider">Ref / Vehicle</th>
+                <th className="px-3 py-2.5 text-left text-sm font-bold uppercase tracking-wider">VH NO</th>
+                <th className="px-3 py-2.5 text-left text-sm font-bold uppercase tracking-wider">Bilty NO.</th>
+                <th className="px-3 py-2.5 text-left text-sm font-bold uppercase tracking-wider">Unit</th>
+                <th className="px-3 py-2.5 text-right text-sm font-bold uppercase tracking-wider">Qty</th>
+                <th className="px-3 py-2.5 text-right text-sm font-bold uppercase tracking-wider">Use</th>
+                <th className="px-3 py-2.5 text-right text-sm font-bold uppercase tracking-wider">Balance</th>
                 {canEditDelete && (
                   <th className="px-3 py-2.5 text-right text-sm font-bold uppercase tracking-wider print-hidden">Actions</th>
                 )}
@@ -175,35 +173,31 @@ export default function ItemLedger() {
             </thead>
             <tbody>
               {ledgerLoading ? (
-                <tr><td colSpan={canEditDelete ? 10 : 9} className="px-4 py-8 text-center text-muted-foreground">Loading…</td></tr>
+                <tr><td colSpan={canEditDelete ? 9 : 8} className="px-4 py-8 text-center text-muted-foreground">Loading…</td></tr>
               ) : entries.length === 0 ? (
-                <tr><td colSpan={canEditDelete ? 10 : 9} className="px-4 py-8 text-center text-muted-foreground">No ledger entries yet. Add one to record a purchase.</td></tr>
+                <tr><td colSpan={canEditDelete ? 9 : 8} className="px-4 py-8 text-center text-muted-foreground">No ledger entries yet. Add one to record a purchase.</td></tr>
               ) : (
                 entries.map((entry) => (
-                  <tr key={entry.id} className="border-b border-border hover:bg-accent/50 transition-colors">
+                  <tr key={`${entry.type}-${entry.id}`} className="border-b border-border hover:bg-accent/50 transition-colors">
                     <td className="px-3 py-3 text-sm">{entry.date}</td>
-                    <td className="px-3 py-3 text-right font-mono text-sm">{entry.quantity}</td>
-                    <td className="px-3 py-3 text-right font-mono text-sm">{formatCurrency(entry.unitPrice)}</td>
-                    <td className="px-3 py-3 text-right font-mono text-sm font-bold">{formatCurrency(entry.totalPrice)}</td>
-                    <td className="px-3 py-3 text-right font-mono text-sm text-success">{formatCurrency(entry.paidAmount)}</td>
-                    <td className="px-3 py-3 text-right font-mono text-sm text-destructive">{entry.remaining > 0 ? formatCurrency(entry.remaining) : "—"}</td>
-                    <td className="px-3 py-3 text-sm font-bold">{entry.vendorName}</td>
-                    <td className="px-3 py-3 text-sm">{entry.paymentMethod}</td>
-                    <td className="px-3 py-3 text-sm text-muted-foreground">
-                      {entry.referenceId && <span>{entry.referenceId}</span>}
-                      {entry.vehicleNumber && <span className="block">{entry.vehicleNumber}</span>}
-                      {entry.biltyNumber && <span className="block text-xs">Bilty: {entry.biltyNumber}</span>}
-                    </td>
+                    <td className="px-3 py-3 text-sm text-muted-foreground">{entry.type === "purchase" ? entry.remarks || "—" : entry.remarks || "Consumption"}</td>
+                    <td className="px-3 py-3 text-right font-mono text-sm">{entry.type === "purchase" ? formatCurrency(entry.unitPrice) : "—"}</td>
+                    <td className="px-3 py-3 text-sm">{entry.type === "purchase" ? entry.vehicleNumber || "—" : "—"}</td>
+                    <td className="px-3 py-3 text-sm">{entry.type === "purchase" ? entry.biltyNumber || "—" : "—"}</td>
+                    <td className="px-3 py-3 text-sm">{entry.unit || "—"}</td>
+                    <td className="px-3 py-3 text-right font-mono text-sm text-success">{entry.type === "purchase" ? entry.quantity : "—"}</td>
+                    <td className="px-3 py-3 text-right font-mono text-sm text-destructive">{entry.type === "consumption" ? entry.quantityUsed : "—"}</td>
+                    <td className="px-3 py-3 text-right font-mono text-sm font-bold">{entry.runningBalance ?? "—"}</td>
                     {canEditDelete && (
                     <td className="px-3 py-3 text-right print-hidden">
-                        <div className="flex items-center justify-end gap-1">
+                        {entry.type === "purchase" && <div className="flex items-center justify-end gap-1">
                           <Button variant="ghost" size="icon" onClick={() => setEditEntry(entry)}>
                             <Pencil className="h-4 w-4" />
                           </Button>
                           <Button variant="ghost" size="icon" onClick={() => setDeleteEntry(entry)}>
                             <Trash2 className="h-4 w-4 text-destructive" />
                           </Button>
-                        </div>
+                        </div>}
                       </td>
                     )}
                   </tr>

@@ -12,7 +12,9 @@ export function useContractorLedger(
   month: string,
   contractorId?: string | null,
   page: number = 1,
-  pageSize: number = DEFAULT_PAGE_SIZE
+  pageSize: number = DEFAULT_PAGE_SIZE,
+  startDate?: string,
+  endDate?: string
 ) {
   const [ledger, setLedger] = useState<ApiContractorLedger | null>(null);
   const [loading, setLoading] = useState(true);
@@ -32,12 +34,17 @@ export function useContractorLedger(
         const data = await getContractorLedgerAllTime(projectId, contractorId, {
           page,
           pageSize,
+          startDate,
+          endDate,
         });
+        const rows = startDate
+          ? [{ type: "previous" as const, id: "previous-balance", date: "", amount: 0, remarks: "Previous", runningTotal: data.previousBalance }, ...data.rows]
+          : data.rows;
         setLedger({
-          rows: data.rows,
+          rows,
           total: data.total,
-          totalAmount: 0,
-          totalPaid: 0,
+          totalAmount: data.totalAmount,
+          totalPaid: data.totalPaid,
           remaining: 0,
         });
       } else {
@@ -52,7 +59,7 @@ export function useContractorLedger(
     } finally {
       setLoading(false);
     }
-  }, [projectId, month, contractorId ?? "", page, pageSize]);
+  }, [projectId, month, contractorId ?? "", page, pageSize, startDate ?? "", endDate ?? ""]);
 
   useEffect(() => {
     refetch();

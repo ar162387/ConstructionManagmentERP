@@ -212,7 +212,7 @@ export function computeMonthlySnapshot(
     const leaves = paidLeaves + unpaidLeaves;
     const unpaidLeaveDays = new Set<number>(explicitUnpaidLeaveDays);
 
-    const unpaidLeaveDeduction = roundAmount((baseSalary / getDaysInMonth(month)) * unpaidLeaves);
+    const unpaidLeaveDeduction = roundAmount((baseSalary / 30) * unpaidLeaves);
     const payable = Math.max(baseSalary - unpaidLeaveDeduction, 0);
     const salaryPaid = sumAmount(monthPayments.filter((payment) => payment.type === "Salary"));
     const paid = salaryPaid + advances;

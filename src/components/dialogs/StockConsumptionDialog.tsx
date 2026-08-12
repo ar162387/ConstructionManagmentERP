@@ -21,9 +21,11 @@ import { toast } from "sonner";
 import { Plus, Trash2 } from "lucide-react";
 import { createStockConsumption, updateStockConsumption, type ApiStockConsumption } from "@/services/stockConsumptionService";
 import type { ApiConsumableItem } from "@/services/consumableItemsService";
+import { createConsumableUnit, listConsumableUnits, type ApiConsumableUnit } from "@/services/consumableUnitService";
 
 interface ConsumptionRow {
   itemId: string;
+  unit: string;
   quantityUsed: string;
 }
 
@@ -49,7 +51,9 @@ export function StockConsumptionDialog({
   const isEdit = !!editEntry;
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [remarks, setRemarks] = useState("");
-  const [rows, setRows] = useState<ConsumptionRow[]>([{ itemId: "", quantityUsed: "" }]);
+  const [rows, setRows] = useState<ConsumptionRow[]>([{ itemId: "", unit: "", quantityUsed: "" }]);
+  const [units, setUnits] = useState<ApiConsumableUnit[]>([]);
+  const [newUnit, setNewUnit] = useState("");
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -57,16 +61,17 @@ export function StockConsumptionDialog({
       if (editEntry) {
         setDate(editEntry.date);
         setRemarks(editEntry.remarks ?? "");
-        setRows(editEntry.items.map((i) => ({ itemId: i.itemId, quantityUsed: String(i.quantityUsed) })));
+        setRows(editEntry.items.map((i) => ({ itemId: i.itemId, unit: i.unit, quantityUsed: String(i.quantityUsed) })));
       } else {
         setDate(new Date().toISOString().slice(0, 10));
         setRemarks("");
-        setRows([{ itemId: "", quantityUsed: "" }]);
+        setRows([{ itemId: "", unit: "", quantityUsed: "" }]);
       }
+      listConsumableUnits().then(setUnits).catch(() => toast.error("Failed to load units"));
     }
   }, [open, editEntry]);
 
-  const addRow = () => setRows((r) => [...r, { itemId: "", quantityUsed: "" }]);
+  const addRow = () => setRows((r) => [...r, { itemId: "", unit: "", quantityUsed: "" }]);
   const removeRow = (i: number) => setRows((r) => r.filter((_, idx) => idx !== i));
 
   const updateRow = (i: number, field: keyof ConsumptionRow, value: string) => {
@@ -82,12 +87,13 @@ export function StockConsumptionDialog({
     if (!projectId) { toast.error("No project selected"); return; }
     if (!date) { toast.error("Date is required"); return; }
 
-    const items: { itemId: string; quantityUsed: number }[] = [];
+    const items: { itemId: string; unit: string; quantityUsed: number }[] = [];
     const seen = new Set<string>();
     for (const row of rows) {
       if (!row.itemId) continue;
       const qty = parseInt(row.quantityUsed, 10);
       if (isNaN(qty) || qty < 1) { toast.error("All quantities must be positive integers"); return; }
+      if (!row.unit.trim()) { toast.error("Select a unit for each item"); return; }
 
       if (seen.has(row.itemId)) {
         const dupName = consumableItems.find((c) => c.id === row.itemId)?.name ?? "This item";
@@ -101,11 +107,11 @@ export function StockConsumptionDialog({
         const existingQty = editEntry?.items.find((ei) => ei.itemId === row.itemId)?.quantityUsed ?? 0;
         const availableAfterReverse = item.currentStock + (isEdit ? existingQty : 0);
         if (qty > availableAfterReverse) {
-          toast.error(`Insufficient stock for "${item.name}": available ${availableAfterReverse} ${item.unit}, requested ${qty}`);
+          toast.error(`Insufficient stock for "${item.name}": available ${availableAfterReverse}, requested ${qty}`);
           return;
         }
       }
-      items.push({ itemId: row.itemId, quantityUsed: qty });
+      items.push({ itemId: row.itemId, unit: row.unit.trim(), quantityUsed: qty });
     }
 
     if (items.length === 0) { toast.error("Add at least one item with quantity"); return; }
@@ -120,7 +126,10 @@ export function StockConsumptionDialog({
         toast.success("Stock consumption recorded");
       }
       onSuccess();
-      onOpenChange(false);
+      if (!isEdit) {
+        setRemarks("");
+        setRows([{ itemId: "", unit: "", quantityUsed: "" }]);
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to save consumption");
     } finally {
@@ -149,6 +158,15 @@ export function StockConsumptionDialog({
               <Button type="button" variant="outline" size="sm" onClick={addRow}>
                 <Plus className="h-3 w-3 mr-1" /> Add row
               </Button>
+            </div>
+            <div className="mb-2 flex gap-2">
+              <Input value={newUnit} onChange={(e) => setNewUnit(e.target.value)} placeholder="New unit (e.g. bag, kg, cft)" />
+              <Button type="button" variant="outline" onClick={async () => {
+                const name = newUnit.trim();
+                if (!name) return toast.error("Enter a unit name");
+                try { const created = await createConsumableUnit({ name }); setUnits((current) => [...current, created].sort((a, b) => a.name.localeCompare(b.name))); setNewUnit(""); }
+                catch (err) { toast.error(err instanceof Error ? err.message : "Failed to create unit"); }
+              }}>Add unit</Button>
             </div>
             <div className="space-y-2 border border-border p-3 rounded-md">
               {rows.map((row, i) => {
@@ -180,6 +198,10 @@ export function StockConsumptionDialog({
                         ))}
                       </SelectContent>
                     </Select>
+                    <Select value={row.unit} onValueChange={(v) => updateRow(i, "unit", v)}>
+                      <SelectTrigger className="w-[110px]"><SelectValue placeholder="Unit" /></SelectTrigger>
+                      <SelectContent>{units.map((u) => <SelectItem key={u.id} value={u.name}>{u.name}</SelectItem>)}</SelectContent>
+                    </Select>
                     <Input
                       type="number"
                       min={1}
@@ -190,7 +212,7 @@ export function StockConsumptionDialog({
                       onChange={(e) => updateRow(i, "quantityUsed", e.target.value)}
                     />
                     <span className="text-xs text-muted-foreground min-w-[60px]">
-                      {selectedItem ? `${selectedItem.unit} (avail: ${available})` : "—"}
+                      {selectedItem ? `Avail: ${available}` : "—"}
                     </span>
                     <Button type="button" variant="ghost" size="icon" onClick={() => removeRow(i)}>
                       <Trash2 className="h-4 w-4 text-destructive" />

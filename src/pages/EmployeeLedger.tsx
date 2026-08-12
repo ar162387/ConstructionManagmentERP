@@ -425,6 +425,8 @@ export default function EmployeeLedger() {
   const [selectedMonth, setSelectedMonth] = useState(clampedUrlMonth);
   const [paymentsPage, setPaymentsPage] = useState(1);
   const [paymentsPageSize, setPaymentsPageSize] = useState(12);
+  const [ledgerStartDate, setLedgerStartDate] = useState("");
+  const [ledgerEndDate, setLedgerEndDate] = useState("");
   const monthOptions = useMemo(() => buildMonthOptionsUpToCurrent(12), []);
   const canGoNext = selectedMonth < currentMonth;
 
@@ -436,9 +438,10 @@ export default function EmployeeLedger() {
     dataLoading,
     error: ledgerError,
     refetchLedger,
+    refetchSnapshot,
     refetchAttendance,
     refetchEmployee,
-  } = useEmployeeLedger(employeeId ?? undefined, selectedMonth, paymentsPage, paymentsPageSize);
+  } = useEmployeeLedger(employeeId ?? undefined, selectedMonth, paymentsPage, paymentsPageSize, ledgerStartDate || undefined, ledgerEndDate || undefined);
 
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [paymentQuickMode, setPaymentQuickMode] = useState<PaymentQuickMode>("partial");
@@ -513,17 +516,19 @@ export default function EmployeeLedger() {
   );
 
   const payments = useMemo(() => {
-    if (!ledger?.payments) return [];
-    return [...ledger.payments].sort((a, b) => {
-      const diff = toDateValue(b.date) - toDateValue(a.date);
-      return diff !== 0 ? diff : b.month.localeCompare(a.month);
-    });
-  }, [ledger?.payments]);
+    const rows = ledger?.rows ?? [];
+    return ledgerStartDate
+      ? [{ type: "previous" as const, id: "previous-balance", date: "", month: "", amount: 0, remarks: "Previous", runningTotal: ledger?.previousBalance ?? 0 }, ...rows]
+      : rows;
+  }, [ledger?.rows, ledger?.previousBalance, ledgerStartDate]);
 
-  const totalPayments = ledger?.total ?? 0;
+  const totalPayments = payments.length;
   const totalPaymentPages = Math.max(1, Math.ceil(totalPayments / paymentsPageSize));
   const paymentsStartIndex = totalPayments === 0 ? 0 : (paymentsPage - 1) * paymentsPageSize + 1;
   const paymentsEndIndex = Math.min(paymentsPage * paymentsPageSize, totalPayments);
+  const paginatedPayments = payments.slice((paymentsPage - 1) * paymentsPageSize, paymentsPage * paymentsPageSize);
+  const ledgerPayableTotal = payments.reduce((sum, row) => sum + (row.type === "payable" ? row.amount : 0), 0);
+  const ledgerPaymentTotal = payments.reduce((sum, row) => sum + (row.type === "payment" ? row.amount : 0), 0);
 
   const advanceMonthOptions = useMemo(() => buildAdvanceMonthOptions(6), []);
 
@@ -633,7 +638,7 @@ export default function EmployeeLedger() {
       const fixedEntries = Object.entries(next).map(([d, s]) => ({ day: Number(d), status: s }));
       try {
         await putAttendance(employeeId, { month: selectedMonth, fixedEntries });
-        await refetchLedger();
+        await refetchSnapshot();
         await refetchAttendance();
         setSelectedDays(new Set());
         toast.success(`Marked ${selectedDays.size} day(s) as ${status === "present" ? "Present" : status === "absent" ? "Absent" : status === "paid_leave" ? "Paid Leave" : "Unpaid Leave"}`);
@@ -643,7 +648,7 @@ export default function EmployeeLedger() {
         setSavingBulkAttendance(false);
       }
     },
-    [employeeId, selectedMonth, selectedDays, fixedAttendance, refetchLedger, refetchAttendance, savingBulkAttendance]
+    [employeeId, selectedMonth, selectedDays, fixedAttendance, refetchSnapshot, refetchAttendance, savingBulkAttendance]
   );
 
   const applyBulkDailyStatus = useCallback(
@@ -667,7 +672,7 @@ export default function EmployeeLedger() {
       }));
       try {
         await putAttendance(employeeId, { month: selectedMonth, dailyEntries });
-        await refetchLedger();
+        await refetchSnapshot();
         await refetchAttendance();
         setSelectedDays(new Set());
         toast.success(`Marked ${selectedDays.size} day(s) as ${status === "present" ? "Present" : status === "absent" ? "Absent" : "Leave"}`);
@@ -677,7 +682,7 @@ export default function EmployeeLedger() {
         setSavingBulkAttendance(false);
       }
     },
-    [employeeId, selectedMonth, selectedDays, dailyAttendance, refetchLedger, refetchAttendance, savingBulkAttendance]
+    [employeeId, selectedMonth, selectedDays, dailyAttendance, refetchSnapshot, refetchAttendance, savingBulkAttendance]
   );
 
   if (!employeeId) {
@@ -749,7 +754,7 @@ export default function EmployeeLedger() {
     const fixedEntries = Object.entries(next).map(([d, s]) => ({ day: Number(d), status: s }));
     try {
       await putAttendance(employeeId, { month: selectedMonth, fixedEntries });
-      await refetchLedger();
+      await refetchSnapshot();
       await refetchAttendance();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to save attendance");
@@ -768,7 +773,7 @@ export default function EmployeeLedger() {
     }));
     try {
       await putAttendance(employeeId, { month: selectedMonth, dailyEntries });
-      await refetchLedger();
+      await refetchSnapshot();
       await refetchAttendance();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to save attendance");
@@ -787,7 +792,7 @@ export default function EmployeeLedger() {
     }));
     try {
       await putAttendance(employeeId, { month: selectedMonth, dailyEntries });
-      await refetchLedger();
+      await refetchSnapshot();
       await refetchAttendance();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to save attendance");
@@ -813,6 +818,7 @@ export default function EmployeeLedger() {
     try {
       await deleteEmployeePayment(employeeId!, deleteConfirmPayment.id);
       await refetchLedger();
+      await refetchSnapshot();
       setDeleteConfirmPayment(null);
       toast.success("Payment deleted");
     } catch (err) {
@@ -854,6 +860,7 @@ export default function EmployeeLedger() {
         remarks: paymentRemarks.trim() || undefined,
       });
       await refetchLedger();
+      await refetchSnapshot();
       setPaymentDialogOpen(false);
       setPaymentAmount("");
       setPaymentRemarks("");
@@ -1021,6 +1028,19 @@ export default function EmployeeLedger() {
             </Button>
           </div>
         </div>
+        <div className="mb-3 flex flex-wrap items-end gap-2 print-hidden">
+          <div>
+            <Label className="text-xs uppercase text-muted-foreground">From</Label>
+            <Input type="date" value={ledgerStartDate} onChange={(e) => { setLedgerStartDate(e.target.value); setPaymentsPage(1); }} className="mt-1 h-9 w-[155px]" />
+          </div>
+          <div>
+            <Label className="text-xs uppercase text-muted-foreground">To</Label>
+            <Input type="date" min={ledgerStartDate || undefined} value={ledgerEndDate} onChange={(e) => { setLedgerEndDate(e.target.value); setPaymentsPage(1); }} className="mt-1 h-9 w-[155px]" />
+          </div>
+          {(ledgerStartDate || ledgerEndDate) && (
+            <Button type="button" variant="outline" size="sm" onClick={() => { setLedgerStartDate(""); setLedgerEndDate(""); setPaymentsPage(1); }}>Clear range</Button>
+          )}
+        </div>
 
         <div id="employee-payment-ledger" className="border border-border rounded-md overflow-x-auto">
           {dataLoading ? (
@@ -1034,38 +1054,50 @@ export default function EmployeeLedger() {
               <tr>
                 <th className="px-3 py-2 text-left font-semibold">Date</th>
                 <th className="px-3 py-2 text-left font-semibold">Month</th>
-                <th className="px-3 py-2 text-right font-semibold">Amount</th>
-                <th className="px-3 py-2 text-left font-semibold">Type</th>
-                <th className="px-3 py-2 text-left font-semibold">Method</th>
                 <th className="px-3 py-2 text-left font-semibold">Remarks</th>
+                <th className="px-3 py-2 text-right font-semibold">Salary / Wage</th>
+                <th className="px-3 py-2 text-right font-semibold">Payment Given</th>
+                <th className="px-3 py-2 text-right font-semibold">Running Total</th>
                 {!isSiteManager && <th className="px-3 py-2 text-left font-semibold print-hidden">Actions</th>}
               </tr>
             </thead>
             <tbody>
               {payments.length === 0 ? (
                 <tr>
-                  <td colSpan={isSiteManager ? 6 : 7} className="px-3 py-6 text-center text-muted-foreground">
-                    No payments recorded.
+                  <td colSpan={isSiteManager ? 7 : 8} className="px-3 py-6 text-center text-muted-foreground">
+                    No ledger entries recorded.
                   </td>
                 </tr>
               ) : (
-                payments.map((payment) => (
+                paginatedPayments.map((payment) => (
                   <tr key={payment.id} className="border-t border-border">
-                    <td className="px-3 py-2">{payment.date}</td>
-                    <td className="px-3 py-2">{payment.month}</td>
-                    <td className="px-3 py-2 text-right font-mono">{formatCurrency(payment.amount)}</td>
-                    <td className="px-3 py-2">{payment.type}</td>
-                    <td className="px-3 py-2">{payment.paymentMethod}</td>
-                    <td className="px-3 py-2">{payment.remarks ?? "-"}</td>
-                {!isSiteManager && (
+                    <td className="px-3 py-2">{payment.date || "—"}</td>
+                    <td className="px-3 py-2">{payment.month ? monthLabel(payment.month) : "—"}</td>
+                    <td className="px-3 py-2">{payment.remarks ?? "—"}{payment.paymentMethod ? ` · ${payment.paymentMethod}` : ""}</td>
+                    <td className="px-3 py-2 text-right font-mono">{payment.type === "payable" ? formatCurrency(payment.amount) : "—"}</td>
+                    <td className="px-3 py-2 text-right font-mono">{payment.type === "payment" ? formatCurrency(payment.amount) : "—"}</td>
+                    <td className={`px-3 py-2 text-right font-mono font-semibold ${payment.runningTotal < 0 ? "text-success" : ""}`}>{formatCurrency(payment.runningTotal)}</td>
+                {!isSiteManager && payment.type === "payment" && (
                   <td className="px-3 py-2 print-hidden">
-                        <Button variant="ghost" size="sm" className="text-destructive" onClick={() => setDeleteConfirmPayment(payment)}>Delete</Button>
+                        <Button variant="ghost" size="sm" className="text-destructive" onClick={() => setDeleteConfirmPayment(payment as unknown as ApiEmployeePayment)}>Delete</Button>
                       </td>
                     )}
+                    {!isSiteManager && payment.type !== "payment" && <td className="print-hidden" />}
                   </tr>
                 ))
               )}
             </tbody>
+            {payments.length > 0 && (
+              <tfoot>
+                <tr className="border-t-2 border-border bg-muted font-semibold">
+                  <td colSpan={3} className="px-3 py-2 text-right">Totals</td>
+                  <td className="px-3 py-2 text-right font-mono">{formatCurrency(ledgerPayableTotal)}</td>
+                  <td className="px-3 py-2 text-right font-mono">{formatCurrency(ledgerPaymentTotal)}</td>
+                  <td className="px-3 py-2" />
+                  {!isSiteManager && <td className="print-hidden" />}
+                </tr>
+              </tfoot>
+            )}
           </table>
           )}
         </div>
@@ -1294,11 +1326,11 @@ export default function EmployeeLedger() {
                 disabled={paymentQuickMode === "full"}
               />
               {paymentQuickMode === "partial" && snapshot?.remaining != null && (
-                <p className="text-xs text-muted-foreground mt-1">Remaining for {selectedMonth}: {formatCurrency(snapshot.remaining)}</p>
+                <p className="text-xs text-muted-foreground mt-1">Remaining for {monthLabel(selectedMonth)}: {formatCurrency(snapshot.remaining)}</p>
               )}
               {paymentQuickMode === "full" && (
                 <p className="text-xs text-muted-foreground mt-1">
-                  Full remaining for {selectedMonth}: {snapshot ? formatCurrency(snapshot.remaining) : "—"}
+                  Full remaining for {monthLabel(selectedMonth)}: {snapshot ? formatCurrency(snapshot.remaining) : "—"}
                 </p>
               )}
             </div>

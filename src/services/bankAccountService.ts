@@ -23,7 +23,6 @@ export interface CreateBankAccountInput {
 export interface UpdateBankAccountInput {
   name?: string;
   accountNumber?: string;
-  openingBalance?: number;
 }
 
 export async function listBankAccounts(): Promise<ApiBankAccount[]> {

@@ -15,6 +15,8 @@ export interface ApiNonConsumableLedgerEntry {
   eventType: NonConsumableEventType;
   quantity: number;
   totalCost?: number;
+  expenseProjectId?: string;
+  expenseProjectName?: string;
   projectTo?: string;
   projectToName?: string;
   projectFrom?: string;
@@ -28,6 +30,7 @@ export interface CreateNonConsumableLedgerInput {
   eventType: NonConsumableEventType;
   quantity: number;
   totalCost?: number;
+  expenseProjectId?: string;
   projectTo?: string;
   projectFrom?: string;
   remarks?: string;
@@ -38,6 +41,7 @@ export interface UpdateNonConsumableLedgerInput {
   eventType?: NonConsumableEventType;
   quantity?: number;
   totalCost?: number;
+  expenseProjectId?: string;
   projectTo?: string;
   projectFrom?: string;
   remarks?: string;

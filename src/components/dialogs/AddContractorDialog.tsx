@@ -59,7 +59,6 @@ export function AddContractorDialog({ open, onOpenChange, restrictedProjectId, r
         description: description.trim(),
       });
       toast.success("Contractor added");
-      onOpenChange(false);
       setName("");
       setPhone("");
       setDescription("");

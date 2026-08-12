@@ -165,7 +165,7 @@ export interface ApiMachineLedgerResult {
   totalCost: number;
   totalPaid: number;
   remaining: number;
-  /** Opening balance owed carried in from before startDate (0 when no date filter is applied). */
+  /** Opening amount owed carried in from before startDate (0 when no date filter is applied). */
   previousBalance: number;
 }
 

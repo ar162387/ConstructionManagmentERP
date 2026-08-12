@@ -18,7 +18,9 @@ export function useEmployeeLedger(
   employeeId: string | undefined,
   month: string,
   ledgerPage: number = 1,
-  ledgerPageSize: number = DEFAULT_LEDGER_PAGE_SIZE
+  ledgerPageSize: number = DEFAULT_LEDGER_PAGE_SIZE,
+  startDate?: string,
+  endDate?: string
 ) {
   const [employee, setEmployee] = useState<ApiEmployee | null>(null);
   const [ledger, setLedger] = useState<ApiEmployeeLedger | null>(null);
@@ -35,6 +37,8 @@ export function useEmployeeLedger(
       const data = await getEmployeeLedger(employeeId, {
         page: ledgerPage,
         pageSize: ledgerPageSize,
+        startDate,
+        endDate,
       });
       setLedger((prev) => ({ ...data, snapshot: prev?.snapshot }));
     } catch (err) {
@@ -42,7 +46,7 @@ export function useEmployeeLedger(
     } finally {
       setLedgerLoading(false);
     }
-  }, [employeeId, ledgerPage, ledgerPageSize]);
+  }, [employeeId, ledgerPage, ledgerPageSize, startDate ?? "", endDate ?? ""]);
 
   const refetchAttendance = useCallback(async () => {
     if (!employeeId) return;
@@ -55,6 +59,12 @@ export function useEmployeeLedger(
     } finally {
       setAttendanceLoading(false);
     }
+  }, [employeeId, month]);
+
+  const refetchSnapshot = useCallback(async () => {
+    if (!employeeId || !month) return;
+    const data = await getEmployeeLedgerSnapshot(employeeId, month);
+    setLedger((prev) => (prev ? { ...prev, snapshot: data.snapshot ?? undefined } : { payments: [], total: 0, snapshot: data.snapshot ?? undefined }));
   }, [employeeId, month]);
 
   const refetchEmployee = useCallback(async () => {
@@ -139,6 +149,7 @@ export function useEmployeeLedger(
     dataLoading,
     error,
     refetchLedger,
+    refetchSnapshot,
     refetchAttendance,
     refetchEmployee,
     saveAttendance,

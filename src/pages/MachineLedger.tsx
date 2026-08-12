@@ -293,12 +293,11 @@ export default function MachineLedger() {
             <thead>
               <tr className="border-b-2 border-border bg-primary text-primary-foreground">
                 <th className="px-4 py-2.5 text-left text-sm font-bold uppercase tracking-wider">Date</th>
+                <th className="px-4 py-2.5 text-left text-sm font-bold uppercase tracking-wider">Remarks</th>
                 <th className="px-4 py-2.5 text-right text-sm font-bold uppercase tracking-wider">Hours</th>
-                <th className="px-4 py-2.5 text-left text-sm font-bold uppercase tracking-wider">Used By</th>
                 <th className="px-4 py-2.5 text-right text-sm font-bold uppercase tracking-wider">Total Cost</th>
                 <th className="px-4 py-2.5 text-right text-sm font-bold uppercase tracking-wider">Paid</th>
                 <th className="px-4 py-2.5 text-right text-sm font-bold uppercase tracking-wider">Total</th>
-                <th className="px-4 py-2.5 text-left text-sm font-bold uppercase tracking-wider">Remarks</th>
                 {canDeleteEntry && (
                   <th className="px-4 py-2.5 text-right text-sm font-bold uppercase tracking-wider print-hidden">Actions</th>
                 )}
@@ -307,19 +306,19 @@ export default function MachineLedger() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={canDeleteEntry ? 8 : 7} className="px-4 py-8 text-center text-muted-foreground">
+                  <td colSpan={canDeleteEntry ? 7 : 6} className="px-4 py-8 text-center text-muted-foreground">
                     Loading…
                   </td>
                 </tr>
               ) : error ? (
                 <tr>
-                  <td colSpan={canDeleteEntry ? 8 : 7} className="px-4 py-8 text-center text-destructive">
+                  <td colSpan={canDeleteEntry ? 7 : 6} className="px-4 py-8 text-center text-destructive">
                     {error}
                   </td>
                 </tr>
               ) : rows.length === 0 ? (
                 <tr>
-                  <td colSpan={canDeleteEntry ? 8 : 7} className="px-4 py-8 text-center text-muted-foreground">
+                  <td colSpan={canDeleteEntry ? 7 : 6} className="px-4 py-8 text-center text-muted-foreground">
                     No ledger entries yet.
                   </td>
                 </tr>
@@ -328,12 +327,11 @@ export default function MachineLedger() {
                   row.type === "entry" ? (
                     <tr key={`entry-${row.id}`} className="border-b border-border hover:bg-accent/50 transition-colors">
                       <td className="px-4 py-3 text-sm">{row.date}</td>
+                      <td className="px-4 py-3 text-sm text-muted-foreground">{row.remarks || "—"}</td>
                       <td className="px-4 py-3 text-right font-mono text-sm">{row.hoursWorked}</td>
-                      <td className="px-4 py-3 text-sm">{row.usedBy || "—"}</td>
                       <td className="px-4 py-3 text-right font-mono text-sm font-bold">{formatCurrency(row.totalCost)}</td>
                       <td className="px-4 py-3 text-right font-mono text-sm text-muted-foreground">—</td>
                       <td className="px-4 py-3 text-right font-mono text-sm font-bold">{formatCurrency(row.runningTotal)}</td>
-                      <td className="px-4 py-3 text-sm text-muted-foreground">{row.remarks || "—"}</td>
                       {canDeleteEntry && (
                         <td className="px-4 py-3 text-right print-hidden">
                           <Button
@@ -351,12 +349,13 @@ export default function MachineLedger() {
                   ) : (
                     <tr key={`payment-${row.id}`} className="border-b border-border hover:bg-accent/50 transition-colors bg-muted/30">
                       <td className="px-4 py-3 text-sm">{row.date}</td>
+                      <td className="px-4 py-3 text-sm text-muted-foreground">
+                        Payment{row.paymentMethod ? ` (${row.paymentMethod})` : ""}{row.referenceId ? ` — ${row.referenceId}` : ""}
+                      </td>
                       <td className="px-4 py-3 text-right font-mono text-sm">—</td>
-                      <td className="px-4 py-3 text-sm font-medium">Payment{row.paymentMethod ? ` (${row.paymentMethod})` : ""}</td>
                       <td className="px-4 py-3 text-right font-mono text-sm">—</td>
                       <td className="px-4 py-3 text-right font-mono text-sm text-success">{formatCurrency(row.amount)}</td>
                       <td className="px-4 py-3 text-right font-mono text-sm font-bold">{formatCurrency(row.runningTotal)}</td>
-                      <td className="px-4 py-3 text-sm text-muted-foreground">{row.referenceId || "—"}</td>
                       {canDeleteEntry && (
                         <td className="px-4 py-3 text-right print-hidden">
                           <Button

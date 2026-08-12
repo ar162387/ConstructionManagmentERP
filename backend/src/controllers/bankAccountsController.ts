@@ -50,7 +50,7 @@ export async function update(req: AuthRequest, res: Response) {
     const message = err instanceof Error ? err.message : "Failed to update bank account";
     const status =
       message === "Account not found" ? 404
-        : message.includes("required") || message.includes("Invalid") ? 400
+        : message.includes("required") || message.includes("Invalid") || message.includes("Opening balance") ? 400
         : 500;
     res.status(status).json({ error: message });
   }

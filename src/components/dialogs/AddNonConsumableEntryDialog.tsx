@@ -82,7 +82,7 @@ export function AddNonConsumableEntryDialog({
         setQuantity(String(editEntry.quantity));
         setTotalCost(editEntry.totalCost != null ? String(editEntry.totalCost) : "");
         setRemarks(editEntry.remarks ?? "");
-        setSelectedProjectId(editEntry.projectTo ?? editEntry.projectFrom ?? "");
+        setSelectedProjectId(editEntry.expenseProjectId ?? editEntry.projectTo ?? editEntry.projectFrom ?? "");
       } else {
         setDate(new Date().toISOString().slice(0, 10));
         setEventType("Purchase");
@@ -146,6 +146,7 @@ export function AddNonConsumableEntryDialog({
         eventType,
         quantity: qty,
         totalCost: needsCost ? (cost ?? 0) : undefined,
+        expenseProjectId: needsCost ? selectedProjectId : undefined,
         projectTo: eventType === "AssignToProject" ? selectedProjectId : undefined,
         projectFrom:
           eventType === "ReturnToCompany" ||
@@ -164,7 +165,6 @@ export function AddNonConsumableEntryDialog({
         toast.success("Entry added");
       }
       onSuccess();
-      onOpenChange(false);
       setQuantity("");
       setTotalCost("");
       setRemarks("");
@@ -177,6 +177,7 @@ export function AddNonConsumableEntryDialog({
 
   const needsCost = eventType === "Purchase" || eventType === "Repair";
   const needsProject =
+    eventType === "Purchase" ||
     eventType === "AssignToProject" ||
     eventType === "ReturnToCompany" ||
     eventType === "Repair" ||
@@ -218,7 +219,7 @@ export function AddNonConsumableEntryDialog({
           </div>
           {needsProject && (
             <div>
-              <Label>Project *</Label>
+              <Label>{needsCost ? "Expense Project *" : "Project *"}</Label>
               <Select
                 value={selectedProjectId}
                 onValueChange={setSelectedProjectId}

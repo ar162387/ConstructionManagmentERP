@@ -16,6 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Plus } from "lucide-react";
 import {
   listNonConsumableCategories,
   createNonConsumableCategory,
@@ -37,8 +38,10 @@ export function AddNonConsumableItemDialog({
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
   const [categoriesLoading, setCategoriesLoading] = useState(true);
   const [name, setName] = useState("");
-  const [category, setCategory] = useState("Tools");
+  const [category, setCategory] = useState("");
   const [newCategoryName, setNewCategoryName] = useState("");
+  const [addingCategory, setAddingCategory] = useState(false);
+  const [creatingCategory, setCreatingCategory] = useState(false);
   const [unit, setUnit] = useState("piece");
   const [loading, setLoading] = useState(false);
 
@@ -48,9 +51,9 @@ export function AddNonConsumableItemDialog({
       listNonConsumableCategories()
         .then((list) => {
           setCategories(list);
-          if (list.length > 0 && !list.some((c) => c.name === category)) {
-            setCategory(list[0].name);
-          }
+          setCategory((current) =>
+            list.some((c) => c.name === current) ? current : (list[0]?.name ?? "")
+          );
         })
         .catch(() => toast.error("Failed to load categories"))
         .finally(() => setCategoriesLoading(false));
@@ -63,40 +66,49 @@ export function AddNonConsumableItemDialog({
       toast.error("Item name is required");
       return;
     }
-    let effectiveCategory = category;
-    if (category === "Other" && newCategoryName.trim()) {
-      try {
-        const created = await createNonConsumableCategory({ name: newCategoryName.trim() });
-        effectiveCategory = created.name;
-        setCategories((prev) => [...prev, { id: created.id, name: created.name }]);
-        setCategory(created.name);
-        setNewCategoryName("");
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Failed to create category");
-        return;
-      }
-    } else if (category === "Other") {
-      toast.error("Enter a name for the new category when selecting Other");
+    if (!category) {
+      toast.error("Select or add a category");
       return;
     }
     setLoading(true);
     try {
       await createNonConsumableItem({
         name: name.trim(),
-        category: effectiveCategory,
+        category,
         unit: unit.trim() || "piece",
       });
       toast.success("Asset added");
       onSuccess();
-      onOpenChange(false);
       setName("");
-      setCategory("Tools");
+      setCategory(categories[0]?.name ?? "");
       setUnit("piece");
       setNewCategoryName("");
+      setAddingCategory(false);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to add asset");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleCreateCategory = async () => {
+    const name = newCategoryName.trim();
+    if (!name) {
+      toast.error("Enter a category name");
+      return;
+    }
+    setCreatingCategory(true);
+    try {
+      const created = await createNonConsumableCategory({ name });
+      setCategories((current) => [...current, created].sort((a, b) => a.name.localeCompare(b.name)));
+      setCategory(created.name);
+      setNewCategoryName("");
+      setAddingCategory(false);
+      toast.success("Category added");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to create category");
+    } finally {
+      setCreatingCategory(false);
     }
   };
 
@@ -118,32 +130,37 @@ export function AddNonConsumableItemDialog({
           </div>
           <div>
             <Label>Category</Label>
-            <Select
-              value={category}
-              onValueChange={setCategory}
-              disabled={categoriesLoading}
-            >
-              <SelectTrigger className="mt-1">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {categories.map((c) => (
-                  <SelectItem key={c.id} value={c.name}>
-                    {c.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="mt-1 flex gap-2">
+              <Select value={category} onValueChange={setCategory} disabled={categoriesLoading || categories.length === 0}>
+                <SelectTrigger>
+                  <SelectValue placeholder={categoriesLoading ? "Loading categories…" : "Select category"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {categories.map((c) => (
+                    <SelectItem key={c.id} value={c.name}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button type="button" variant="outline" size="icon" onClick={() => setAddingCategory((open) => !open)} aria-label="Add category">
+                <Plus className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
-          {category === "Other" && (
-            <div>
+          {addingCategory && (
+            <div className="rounded-md border border-border p-3">
               <Label>New Category Name *</Label>
-              <Input
-                value={newCategoryName}
-                onChange={(e) => setNewCategoryName(e.target.value)}
-                placeholder="e.g. Electrical Equipment"
-                className="mt-1"
-              />
+              <div className="mt-1 flex gap-2">
+                <Input
+                  value={newCategoryName}
+                  onChange={(e) => setNewCategoryName(e.target.value)}
+                  placeholder="e.g. Electrical Equipment"
+                />
+                <Button type="button" variant="outline" onClick={handleCreateCategory} disabled={creatingCategory}>
+                  {creatingCategory ? "Adding…" : "Add"}
+                </Button>
+              </div>
             </div>
           )}
           <div>

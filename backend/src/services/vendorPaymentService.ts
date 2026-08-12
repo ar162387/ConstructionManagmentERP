@@ -6,7 +6,6 @@ import { Vendor } from "../models/Vendor.js";
 import { User } from "../models/User.js";
 import { logAudit } from "./auditService.js";
 import { roleDisplay } from "./authService.js";
-import { getFifoAllocationForVendor } from "./fifoAllocation.js";
 
 export interface VendorPaymentPayload {
   id: string;
@@ -45,6 +44,7 @@ export interface VendorLedgerRow {
   itemName?: string;
   /** For purchase rows */
   quantity?: number;
+  unitPrice?: number;
   totalPrice?: number;
   paidAmount?: number;
   remaining?: number;
@@ -57,7 +57,7 @@ export interface VendorLedgerRow {
   paymentMethod: "Cash" | "Bank" | "Online";
   referenceId?: string;
   remarks?: string;
-  /** Cumulative cash disbursed to the vendor as of this row's date (previousBalance + net cash paid/advance-applied up to and including this row). */
+  /** Running amount owed to the vendor. Purchases add debit; cash payments add credit. */
   runningTotal: number;
 }
 
@@ -109,7 +109,7 @@ export async function getVendorLedger(
   /** Vendor's current advance balance — stored/incremental (see Vendor.advanceBalance), not
    *  recomputed from raw rows like the other totals here. */
   advanceBalance: number;
-  /** Cumulative cash disbursed carried in from before startDate (0 when no startDate filter is applied). */
+  /** Signed opening balance carried in from before startDate (0 when no startDate filter is applied). */
   previousBalance: number;
   total: number;
 }> {
@@ -120,7 +120,7 @@ export async function getVendorLedger(
   const startDate = options?.startDate?.trim() || undefined;
   const endDate = options?.endDate?.trim() || undefined;
 
-  // Stats (totalBilled/totalPaid/remaining/advanceBalance) always reflect the vendor's full
+  // Stats always reflect the vendor's full
   // history — only the displayed rows and the running balance react to the date range, exactly
   // like the Machinery ledger (getMachineTotals is all-time; only rows are range-filtered).
   const [vendor, ledgerEntries, payments] = await Promise.all([
@@ -138,13 +138,14 @@ export async function getVendorLedger(
 
   const purchaseRows: VendorLedgerRow[] = ledgerEntries.map((e) => {
     totalBilled += e.totalPrice;
-    totalPaidFromLedger += e.paidAmount;
+    totalPaidFromLedger += e.paidAmount + (e.advanceGenerated ?? 0);
     return {
       type: "purchase",
       id: e._id.toString(),
       date: e.date,
       itemName: itemMap.get(e.itemId.toString()) ?? "Unknown",
       quantity: e.quantity,
+      unitPrice: e.unitPrice,
       totalPrice: e.totalPrice,
       paidAmount: e.paidAmount,
       remaining: e.remaining,
@@ -156,27 +157,14 @@ export async function getVendorLedger(
     };
   });
 
-  const fifoMap = await getFifoAllocationForVendor(vendorId);
-  for (const row of purchaseRows) {
-    if (row.type === "purchase" && row.id) {
-      const alloc = fifoMap.get(row.id);
-      if (alloc) {
-        row.paidAmount = alloc.allocatedPaid;
-        row.remaining = alloc.allocatedRemaining;
-      }
-    }
-  }
-
   // `totalPaid` (display stat) counts every dollar ever handed to the vendor, including the
   // portion of an overpayment that became advance instead of settling a due. `remaining`
   // must NOT be reduced by that advance-generating portion — only by whatever actually applied
   // against an outstanding due — so the two are tracked separately.
   let totalPaidFromPayments = 0;
-  let totalAppliedToRemainingFromPayments = 0;
   const paymentRows: VendorLedgerRow[] = payments.map((p) => {
     const isAdvance = p.source === "advance";
     if (!isAdvance) totalPaidFromPayments += p.amount;
-    totalAppliedToRemainingFromPayments += isAdvance ? p.amount : p.amount - (p.advancePortion ?? 0);
     return {
       type: "payment",
       id: p._id.toString(),
@@ -191,28 +179,25 @@ export async function getVendorLedger(
   });
 
   const totalPaid = totalPaidFromLedger + totalPaidFromPayments;
-  const remaining = Math.max(0, totalBilled - totalPaidFromLedger - totalAppliedToRemainingFromPayments);
+  // Signed balance is the source of truth: debit (purchase cost) minus credit (cash paid).
+  // It intentionally remains negative when the vendor has been paid in advance.
+  const remaining = totalBilled - totalPaid;
 
-  // Running "Balance" (cumulative cash disbursed to the vendor): walk every row chronologically
-  // (ascending), from raw stored fields — not the FIFO-redistributed display values above. Each
-  // purchase adds whatever cash actually changed hands for it (its bill-settling portion plus
-  // whatever became advance — i.e. exactly what was typed in as paidAmount, capped/overflowed
-  // into paidAmount+advanceGenerated, which always sums back to the raw amount paid). A fresh
-  // external payment adds more cash out. An advance-applied payment isn't new cash paid, nor is
-  // it a refund — it's an existing credit (already counted as cash out when it was generated)
-  // being spent on a bill instead of sitting unused, so it leaves the running total untouched.
+  // Debit/credit running balance: purchase cost is a debit (+); payment is a credit (-).
+  // Legacy "advance applied" rows are a reallocation of an earlier payment, not fresh cash,
+  // and therefore remain zero-impact.
   const ascendingRaw = [
     ...ledgerEntries.map((e) => ({
       key: `purchase:${e._id.toString()}`,
       id: e._id.toString(),
       date: e.date,
-      delta: e.paidAmount + (e.advanceGenerated ?? 0),
+      delta: e.totalPrice - e.paidAmount - (e.advanceGenerated ?? 0),
     })),
     ...payments.map((p) => ({
       key: `payment:${p._id.toString()}`,
       id: p._id.toString(),
       date: p.date,
-      delta: p.source === "advance" ? 0 : p.amount,
+      delta: p.source === "advance" ? 0 : -p.amount,
     })),
   ].sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
 
@@ -232,16 +217,15 @@ export async function getVendorLedger(
   const allRows = [...purchaseRows, ...paymentRows]
     .filter((r) => (!startDate || r.date >= startDate) && (!endDate || r.date <= endDate))
     .map((r) => ({ ...r, runningTotal: runningByKey.get(`${r.type}:${r.id}`) ?? previousBalance }))
-    // Newest first; same-day rows tie-break on Mongo ObjectId (its hex prefix is a creation
-    // timestamp), so same-date entries still land newest-created-first deterministically.
-    .sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
+    // Oldest first. ObjectId preserves a consistent creation-order tie-break on the same date.
+    .sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
   const total = allRows.length;
   const pageSize = Math.min(Math.max(1, options?.pageSize ?? DEFAULT_PAGE_SIZE), 100);
   const page = Math.max(1, options?.page ?? 1);
   const start = (page - 1) * pageSize;
   const rows = allRows.slice(start, start + pageSize);
 
-  return { rows, totalBilled, totalPaid, remaining, advanceBalance: vendor?.advanceBalance ?? 0, previousBalance, total };
+  return { rows, totalBilled, totalPaid, remaining, advanceBalance: Math.max(0, -remaining), previousBalance, total };
 }
 
 export async function createVendorPayment(
@@ -268,25 +252,12 @@ export async function createVendorPayment(
   }
 
   const source = input.source ?? "external";
-  const { remaining } = await getVendorLedger(vendorId);
-
-  let advancePortion = 0;
   if (source === "advance") {
-    if (input.amount > vendor.advanceBalance) {
-      throw new Error(
-        `Amount ${input.amount.toLocaleString()} exceeds vendor advance balance of ${vendor.advanceBalance.toLocaleString()}`
-      );
-    }
-    if (input.amount > remaining) {
-      throw new Error(
-        `Amount ${input.amount.toLocaleString()} exceeds vendor remaining balance of ${remaining.toLocaleString()} — there's nothing outstanding to apply it to`
-      );
-    }
-  } else {
-    // External payment: whatever exceeds the current remaining becomes a new advance
-    // instead of being blocked.
-    advancePortion = Math.max(0, input.amount - remaining);
+    throw new Error("Applying advance is no longer supported; record a payment credit instead");
   }
+
+  // A payment is simply a credit. It may make the signed vendor balance negative.
+  const advancePortion = 0;
 
   const session = await mongoose.startSession();
   let result: VendorPaymentPayload;
@@ -309,31 +280,11 @@ export async function createVendorPayment(
         { session }
       );
 
-      if (source === "advance") {
-        await Vendor.findByIdAndUpdate(
-          vendorId,
-          {
-            $inc: {
-              remaining: -input.amount,
-              advanceBalance: -input.amount,
-            },
-          },
-          { session }
-        );
-      } else {
-        const appliedToRemaining = input.amount - advancePortion;
-        await Vendor.findByIdAndUpdate(
-          vendorId,
-          {
-            $inc: {
-              totalPaid: input.amount,
-              remaining: -appliedToRemaining,
-              advanceBalance: advancePortion,
-            },
-          },
-          { session }
-        );
-      }
+      await Vendor.findByIdAndUpdate(
+        vendorId,
+        { $inc: { totalPaid: input.amount, remaining: -input.amount } },
+        { session }
+      );
 
       result = toPayload(payment);
     });
@@ -396,18 +347,35 @@ export async function deleteVendorPayment(
           { session }
         );
       } else {
-        const appliedToRemaining = existing.amount - (existing.advancePortion ?? 0);
         await Vendor.findByIdAndUpdate(
           existing.vendorId,
           {
             $inc: {
               totalPaid: -existing.amount,
-              remaining: appliedToRemaining,
+              remaining: existing.amount,
               advanceBalance: -(existing.advancePortion ?? 0),
             },
           },
           { session }
         );
+      }
+
+      // Invoice-originated payments are their own ledger row. Reversing one restores the
+      // linked consumable bill's paid/pending summary as well as the vendor balance.
+      if (source !== "advance" && existing.targetEntryId) {
+        const entry = await ItemLedgerEntry.findById(existing.targetEntryId).session(session).lean();
+        if (entry) {
+          await ConsumableItem.findByIdAndUpdate(
+            entry.itemId,
+            {
+              $inc: {
+                totalPaid: -existing.amount,
+                totalPending: entry.totalPrice,
+              },
+            },
+            { session }
+          );
+        }
       }
       await VendorPayment.findByIdAndDelete(id, { session });
     });

@@ -24,7 +24,6 @@ export interface CreateBankAccountInput {
 export interface UpdateBankAccountInput {
   name?: string;
   accountNumber?: string;
-  openingBalance?: number;
 }
 
 function toPayload(doc: {
@@ -112,20 +111,7 @@ export async function updateBankAccount(
     updates.name = name;
   }
   if (input.accountNumber !== undefined) updates.accountNumber = (input.accountNumber ?? "").trim();
-  if (input.openingBalance != null) {
-    const ob = Number(input.openingBalance);
-    if (isNaN(ob) || ob < 0) throw new Error("Valid opening balance is required");
-    // Recompute currentBalance: opening + inflow - outflow
-    const newCurrentBalance = ob + (target.totalInflow ?? 0) - (target.totalOutflow ?? 0);
-    if (newCurrentBalance < 0) {
-      throw new Error(
-        `Cannot set opening balance to ${ob.toLocaleString()}: resulting balance would be negative (${newCurrentBalance.toLocaleString()}). ` +
-        `Current inflow: ${(target.totalInflow ?? 0).toLocaleString()}, outflow: ${(target.totalOutflow ?? 0).toLocaleString()}.`
-      );
-    }
-    updates.openingBalance = ob;
-    updates.currentBalance = newCurrentBalance;
-  }
+  if (Object.prototype.hasOwnProperty.call(input, "openingBalance")) throw new Error("Opening balance can only be set when creating an account");
 
   const updated = await BankAccount.findByIdAndUpdate(id, updates, { new: true }).lean();
   if (!updated) {

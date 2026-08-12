@@ -68,7 +68,7 @@ export function VendorPaymentDialog({ open, onOpenChange, vendor, onSuccess }: V
           <DialogTitle>Record Payment — {vendor.name}</DialogTitle>
         </DialogHeader>
         <p className="text-sm text-muted-foreground">
-          Pending dues: <span className="font-bold text-destructive">{formatAmount(vendor.remaining)} PKR</span>
+          Current balance: <span className={`font-bold ${vendor.remaining > 0 ? "text-destructive" : "text-success"}`}>{formatAmount(vendor.remaining)} PKR</span>
         </p>
         <form onSubmit={handleSubmit} className="space-y-4 mt-4">
           <div>
@@ -85,15 +85,7 @@ export function VendorPaymentDialog({ open, onOpenChange, vendor, onSuccess }: V
               onChange={(e) => setAmount(e.target.value)}
               className="mt-1"
             />
-            {(() => {
-              const amt = parseFloat(amount);
-              const excess = !isNaN(amt) ? amt - vendor.remaining : 0;
-              return excess > 0 ? (
-                <p className="text-xs text-warning mt-1">
-                  Exceeds pending dues by {excess.toLocaleString()} PKR — will be recorded as vendor advance.
-                </p>
-              ) : null;
-            })()}
+            <p className="text-xs text-muted-foreground mt-1">Payments are recorded as credit and may take the balance below zero.</p>
           </div>
           <div>
             <Label>Payment Mode</Label>

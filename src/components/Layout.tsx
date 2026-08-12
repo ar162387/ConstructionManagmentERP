@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, FolderKanban, Package, Wrench, Users, Building2,
-  Receipt, Truck, HardHat, ClipboardList, BarChart3, Menu, X, ChevronDown, ChevronRight, UserCog, LogOut, Zap, Banknote
+  Receipt, Truck, HardHat, ClipboardList, BarChart3, Menu, X, ChevronDown, ChevronRight, UserCog, LogOut, Zap, Banknote, ContactRound
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,7 @@ interface NavItem {
 const companyNavItems: NavItem[] = [
   { label: "Dashboard", path: "/", icon: <LayoutDashboard className="h-4 w-4" /> },
   { label: "Bank & Accounts", path: "/bank-accounts", icon: <Building2 className="h-4 w-4" />, minRole: "Admin" },
+  { label: "Clients", path: "/clients", icon: <ContactRound className="h-4 w-4" />, minRole: "Admin" },
   { label: "User Management", path: "/users", icon: <UserCog className="h-4 w-4" />, minRole: "Admin" },
   { label: "Audit Logs", path: "/audit-logs", icon: <ClipboardList className="h-4 w-4" />, minRole: "Super Admin" },
 ];

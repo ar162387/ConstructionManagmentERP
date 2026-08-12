@@ -13,8 +13,12 @@ export interface ApiBankTransaction {
   amount: number;
   source: string;
   destination: string;
+  clientId?: string;
+  clientName?: string;
   projectId?: string;
   projectName?: string;
+  customHeadId?: string;
+  customHeadName?: string;
   mode: "Cash" | "Bank" | "Online";
   referenceId?: string;
   remarks?: string;
@@ -40,7 +44,10 @@ export interface CreateBankTransactionInput {
   amount: number;
   source: string;
   destination: string;
+  clientId?: string;
   projectId?: string;
+  customHeadId?: string;
+  customHeadName?: string;
   mode?: "Cash" | "Bank" | "Online";
   referenceId?: string;
   remarks?: string;
@@ -51,7 +58,10 @@ export interface UpdateBankTransactionInput {
   amount?: number;
   source?: string;
   destination?: string;
+  clientId?: string;
   projectId?: string;
+  customHeadId?: string;
+  customHeadName?: string;
   mode?: "Cash" | "Bank" | "Online";
   referenceId?: string;
   remarks?: string;
@@ -90,4 +100,14 @@ export async function deleteBankTransaction(id: string): Promise<void> {
   return api<void>(`/api/bank-transactions/${id}`, {
     method: "DELETE",
   });
+}
+
+export interface BankAccountLedgerResult {
+  accountName: string; accountNumber: string; openingBalance: number;
+  columns: { key: string; label: string; kind: "project" | "head" }[];
+  rows: { id: string; date: string; particulars: string; received?: number; outflows: Record<string, number>; balance: number }[];
+}
+export async function getBankAccountLedger(accountId: string, params: { startDate?: string; endDate?: string } = {}): Promise<BankAccountLedgerResult> {
+  const q = new URLSearchParams(); if (params.startDate) q.set("startDate", params.startDate); if (params.endDate) q.set("endDate", params.endDate);
+  return api<BankAccountLedgerResult>(`/api/bank-transactions/account/${accountId}/ledger${q.size ? `?${q}` : ""}`);
 }

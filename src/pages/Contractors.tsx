@@ -15,6 +15,7 @@ import { EditContractorDialog } from "@/components/dialogs/EditContractorDialog"
 import { ContractorPaymentDialog } from "@/components/dialogs/ContractorPaymentDialog";
 import { Combobox } from "@/components/ui/combobox";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -72,6 +73,7 @@ function nextMonth(ym: string): string {
 function getContractorStatusLabel(c: ApiContractorWithTotals): string {
   if (c.totalAmount === 0 && c.totalPaid === 0) return "N/A";
   if (c.remaining > 0) return "Remaining";
+  if (c.remaining < 0) return "Advance";
   return "Paid";
 }
 
@@ -93,6 +95,8 @@ export default function Contractors() {
   const [selectedContractorId, setSelectedContractorIdState] = useState<string>(ALL_CONTRACTORS);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(12);
+  const [ledgerStartDate, setLedgerStartDate] = useState("");
+  const [ledgerEndDate, setLedgerEndDate] = useState("");
 
   const setSelectedContractorId = (id: string) => {
     setSelectedContractorIdState(id);
@@ -111,7 +115,9 @@ export default function Contractors() {
     currentMonth,
     selectedContractorId === ALL_CONTRACTORS ? null : selectedContractorId,
     page,
-    pageSize
+    pageSize,
+    ledgerStartDate || undefined,
+    ledgerEndDate || undefined,
   );
 
   const [addContractorOpen, setAddContractorOpen] = useState(false);
@@ -159,6 +165,8 @@ export default function Contractors() {
 
   const totalPages = ledger ? Math.max(1, Math.ceil(ledger.total / pageSize)) : 1;
   const canGoNext = currentMonth < getLocalMonthKey();
+  const displayedBillTotal = ledger?.rows.reduce((sum, row) => sum + (row.type === "entry" ? row.amount : 0), 0) ?? 0;
+  const displayedPaymentTotal = ledger?.rows.reduce((sum, row) => sum + (row.type === "payment" ? row.amount : 0), 0) ?? 0;
 
   const kpiTotal = isAllTimeMode && selectedContractor
     ? formatCurrency(selectedContractor.totalAmount)
@@ -180,8 +188,8 @@ export default function Contractors() {
   };
 
   const handleDeleteContractorClick = (c: ApiContractorWithTotals) => {
-    if (c.remaining > 0) {
-      toast.error(`Cannot delete "${c.name}" — they have remaining amount of ${formatCurrency(c.remaining)}. Clear the outstanding balance first.`);
+    if (c.remaining !== 0) {
+      toast.error(`Cannot delete "${c.name}" — their balance is ${formatCurrency(Math.abs(c.remaining))} ${c.remaining > 0 ? "payable" : "in advance"}. Clear the balance first.`);
       return;
     }
     setDeleteContractorState(c);
@@ -252,11 +260,16 @@ export default function Contractors() {
               <Plus className="h-4 w-4 mr-1" /> Add Entry
             </Button>
             {selectedContractor && (
-              <Button variant="default" size="sm" onClick={() => setPaymentOpen(true)} disabled={selectedContractor.remaining <= 0}>
+              <Button variant="default" size="sm" onClick={() => setPaymentOpen(true)}>
                 <Banknote className="h-4 w-4 mr-1" /> Record Payment
               </Button>
             )}
-            <PrintExportButton title="Contractors" printProjectName={selectedProjectName} printTargetId="contractors-content" />
+            <PrintExportButton
+              title="Contractors"
+              printProjectName={selectedProjectName}
+              printTargetId="contractors-content"
+              additionalPrintCss="tr.contractor-ledger-totals { display: table-row !important; font-weight: bold; }"
+            />
           </div>
         }
       />
@@ -396,8 +409,8 @@ export default function Contractors() {
                   size="icon"
                   className="h-9 w-9 text-destructive hover:text-destructive"
                   onClick={() => handleDeleteContractorClick(selectedContractor)}
-                  disabled={selectedContractor.remaining > 0}
-                  title={selectedContractor.remaining > 0 ? "Clear balance before deleting" : "Delete contractor"}
+                  disabled={selectedContractor.remaining !== 0}
+                  title={selectedContractor.remaining !== 0 ? "Clear balance before deleting" : "Delete contractor"}
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>
@@ -431,6 +444,34 @@ export default function Contractors() {
                   <ChevronRight className="h-4 w-4" />
                 </Button>
               </div>
+            </div>
+          )}
+          {selectedContractor && (
+            <div className="flex flex-wrap items-end gap-2 print-hidden">
+              <div>
+                <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">From</Label>
+                <Input
+                  type="date"
+                  value={ledgerStartDate}
+                  onChange={(e) => { setLedgerStartDate(e.target.value); setPage(1); }}
+                  className="mt-1 h-10 w-[155px]"
+                />
+              </div>
+              <div>
+                <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">To</Label>
+                <Input
+                  type="date"
+                  min={ledgerStartDate || undefined}
+                  value={ledgerEndDate}
+                  onChange={(e) => { setLedgerEndDate(e.target.value); setPage(1); }}
+                  className="mt-1 h-10 w-[155px]"
+                />
+              </div>
+              {(ledgerStartDate || ledgerEndDate) && (
+                <Button type="button" variant="outline" size="sm" onClick={() => { setLedgerStartDate(""); setLedgerEndDate(""); setPage(1); }}>
+                  Clear range
+                </Button>
+              )}
             </div>
           )}
         </div>
@@ -474,9 +515,10 @@ export default function Contractors() {
                           <th className="px-4 py-2.5 text-left text-sm font-bold uppercase tracking-wider">Month</th>
                         )}
                         <th className="px-4 py-2.5 text-left text-sm font-bold uppercase tracking-wider">Date</th>
-                        <th className="px-4 py-2.5 text-left text-sm font-bold uppercase tracking-wider">Type</th>
-                        <th className="px-4 py-2.5 text-right text-sm font-bold uppercase tracking-wider">Amount</th>
                         <th className="px-4 py-2.5 text-left text-sm font-bold uppercase tracking-wider">Remarks / Ref</th>
+                        <th className="px-4 py-2.5 text-right text-sm font-bold uppercase tracking-wider">Bill Amount</th>
+                        <th className="px-4 py-2.5 text-right text-sm font-bold uppercase tracking-wider">Payment Given</th>
+                        <th className="px-4 py-2.5 text-right text-sm font-bold uppercase tracking-wider">Running Total</th>
                         {canEditDelete && (
                           <th className="px-4 py-2.5 text-right text-sm font-bold uppercase tracking-wider print-hidden">Actions</th>
                         )}
@@ -486,7 +528,7 @@ export default function Contractors() {
                       {!ledger || ledger.rows.length === 0 ? (
                         <tr>
                           <td
-                            colSpan={canEditDelete ? 6 : 5}
+                            colSpan={6 + (canEditDelete ? 1 : 0)}
                             className="px-4 py-8 text-center text-muted-foreground"
                           >
                             {selectedContractor
@@ -508,21 +550,16 @@ export default function Contractors() {
                               </td>
                             )}
                             {selectedContractorId !== ALL_CONTRACTORS && (
-                              <td className="px-4 py-3 text-sm">{getMonthLabelFromDate(row.date)}</td>
+                              <td className="px-4 py-3 text-sm">{row.type === "previous" ? "—" : getMonthLabelFromDate(row.date)}</td>
                             )}
-                            <td className="px-4 py-3 text-sm">{row.date}</td>
-                            <td className="px-4 py-3">
-                              <span
-                                className={`text-xs font-bold uppercase px-1.5 py-0.5 rounded ${
-                                  row.type === "payment" ? "bg-success/20 text-success" : "bg-primary/10"
-                                }`}
-                              >
-                                {row.type === "payment" ? "Payment" : "Entry"}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3 text-right font-mono text-sm">{formatCurrency(row.amount)}</td>
+                            <td className="px-4 py-3 text-sm">{row.date || "—"}</td>
                             <td className="px-4 py-3 text-sm text-muted-foreground">
                               {row.type === "payment" ? (row.referenceId ?? "—") : (row.remarks ?? "—")}
+                            </td>
+                            <td className="px-4 py-3 text-right font-mono text-sm">{row.type === "entry" ? formatCurrency(row.amount) : "—"}</td>
+                            <td className="px-4 py-3 text-right font-mono text-sm">{row.type === "payment" ? formatCurrency(row.amount) : "—"}</td>
+                            <td className={`px-4 py-3 text-right font-mono text-sm font-semibold ${(row.runningTotal ?? 0) < 0 ? "text-success" : ""}`}>
+                              {formatCurrency(row.runningTotal ?? 0)}
                             </td>
                             {canEditDelete && (
                               <td className="px-4 py-3 text-right print-hidden" onClick={(e) => e.stopPropagation()}>
@@ -552,6 +589,17 @@ export default function Contractors() {
                         ))
                       )}
                     </tbody>
+                    {ledger && ledger.rows.length > 0 && (
+                      <tfoot>
+                        <tr className="contractor-ledger-totals hidden border-t-2 border-border bg-secondary">
+                          <td colSpan={3} className="px-4 py-3 text-right text-sm font-bold uppercase tracking-wider">Totals</td>
+                          <td className="px-4 py-3 text-right font-mono text-sm font-bold">{formatCurrency(displayedBillTotal)}</td>
+                          <td className="px-4 py-3 text-right font-mono text-sm font-bold">{formatCurrency(displayedPaymentTotal)}</td>
+                          <td className="px-4 py-3" />
+                          {canEditDelete && <td className="print-hidden" />}
+                        </tr>
+                      </tfoot>
+                    )}
                   </table>
                 )}
               </div>

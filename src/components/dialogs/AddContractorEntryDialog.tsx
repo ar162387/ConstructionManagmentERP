@@ -73,7 +73,6 @@ export function AddContractorEntryDialog({
         remarks: remarks.trim(),
       });
       toast.success("Entry added");
-      onOpenChange(false);
       setAmount("");
       setRemarks("");
       onSuccess?.();

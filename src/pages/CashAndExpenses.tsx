@@ -46,7 +46,14 @@ const CASH_REPORT_PRINT_CSS = `
     border-bottom: 2px solid #000;
   }
   .cash-expenses-sheet { font-size: 11px; }
-  .cash-expenses-sheet table { margin-top: 0 !important; margin-bottom: 0 !important; }
+  .cash-expenses-sheet table { width: 100%; table-layout: fixed; margin-top: 0 !important; margin-bottom: 0 !important; }
+  .cash-expenses-sheet .cash-col-label { width: 18%; }
+  .cash-expenses-sheet .cash-col-type { width: 15%; }
+  .cash-expenses-sheet .cash-col-amount { width: 17%; }
+  .cash-expenses-sheet .cash-col-remarks { width: 16%; }
+  .cash-expenses-sheet th, .cash-expenses-sheet td { padding: 6px 8px !important; }
+  .cash-expenses-sheet .cash-number { white-space: nowrap; }
+  .cash-expenses-sheet .cash-text { overflow-wrap: anywhere; }
   .cash-expenses-sheet .cash-section td {
     background: #e8e8e8 !important;
     font-weight: bold;
@@ -176,10 +183,10 @@ export default function CashAndExpenses() {
   const closingBalance = report?.closingBalance ?? 0;
 
   const thBase =
-    "border border-border/60 bg-muted/20 px-3 py-2.5 text-left text-xs font-medium text-muted-foreground print:bg-neutral-200 print:text-black";
-  const thNum = `${thBase} text-right`;
-  const tdBase = "border border-border/60 px-3 py-2.5 text-sm";
-  const tdNum = `${tdBase} text-right font-mono text-sm`;
+    "border border-border/60 bg-muted/20 px-2 py-2 text-left text-xs font-medium text-muted-foreground print:bg-neutral-200 print:text-black";
+  const thNum = `${thBase} text-right cash-number`;
+  const tdBase = "border border-border/60 px-2 py-2 text-sm cash-text";
+  const tdNum = `${tdBase} text-right font-mono text-sm cash-number`;
 
   return (
     <Layout>
@@ -271,7 +278,15 @@ export default function CashAndExpenses() {
           >
             {/* `hidden`: hidden on screen (Tailwind). Print popup has no Tailwind — line shows via .cash-print-project-name in print CSS. */}
             <div className="cash-print-project-name hidden">{selectedProjectName}</div>
-            <table className="w-full border-collapse text-base">
+            <table className="w-full table-fixed border-collapse text-base">
+              <colgroup>
+                <col className="cash-col-label w-[18%]" />
+                <col className="cash-col-type w-[15%]" />
+                <col className="cash-col-amount w-[17%]" />
+                <col className="cash-col-amount w-[17%]" />
+                <col className="cash-col-amount w-[17%]" />
+                <col className="cash-col-remarks w-[16%]" />
+              </colgroup>
               <tbody>
                 {report?.openingBalances ? (
                   <>

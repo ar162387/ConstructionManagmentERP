@@ -43,7 +43,6 @@ export function AddBankAccountDialog({ open, onOpenChange, onSuccess }: AddBankA
         openingBalance: ob,
       });
       toast.success("Account added");
-      onOpenChange(false);
       setAccountName("");
       setAccountNumber("");
       setOpeningBalance("0");
