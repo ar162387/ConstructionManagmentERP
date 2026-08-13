@@ -4,7 +4,7 @@ import { ItemLedgerEntry } from "../models/ItemLedgerEntry.js";
 import { ConsumableItem } from "../models/ConsumableItem.js";
 import { Vendor } from "../models/Vendor.js";
 import { User } from "../models/User.js";
-import { logAudit } from "./auditService.js";
+import { logAudit, getProjectName } from "./auditService.js";
 import { roleDisplay } from "./authService.js";
 
 export interface VendorPaymentPayload {
@@ -302,6 +302,8 @@ export async function createVendorPayment(
     action: "create",
     module: "vendor_payments",
     entityId: result!.id,
+    projectId: vendor.projectId?.toString(),
+    projectName: await getProjectName(vendor.projectId?.toString()),
     description: `Recorded payment: ${vendor.name} — ${input.amount.toLocaleString()} PKR`,
     newValue: { amount: input.amount, vendorId, date: input.date },
   });
@@ -393,6 +395,8 @@ export async function deleteVendorPayment(
     action: "delete",
     module: "vendor_payments",
     entityId: id,
+    projectId: vendor?.projectId?.toString(),
+    projectName: await getProjectName(vendor?.projectId?.toString()),
     description: `Deleted payment: ${existing.amount.toLocaleString()} PKR`,
     oldValue: { amount: existing.amount, date: existing.date },
   });

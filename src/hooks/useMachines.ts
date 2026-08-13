@@ -10,7 +10,9 @@ const DEFAULT_PAGE_SIZE = 12;
 export function useMachines(
   projectId?: string | null,
   page?: number,
-  pageSize?: number
+  pageSize?: number,
+  startDate?: string | null,
+  endDate?: string | null
 ) {
   const [result, setResult] = useState<ListMachinesResult>({ items: [], total: 0 });
   const [loading, setLoading] = useState(true);
@@ -27,6 +29,8 @@ export function useMachines(
         projectId: projectId ?? undefined,
         page: effectivePage,
         pageSize: effectivePageSize,
+        startDate: startDate ?? undefined,
+        endDate: endDate ?? undefined,
       });
       setResult(data);
     } catch (err) {
@@ -34,7 +38,7 @@ export function useMachines(
     } finally {
       setLoading(false);
     }
-  }, [projectId, effectivePage, effectivePageSize]);
+  }, [projectId, effectivePage, effectivePageSize, startDate, endDate]);
 
   useEffect(() => {
     refetch();

@@ -24,6 +24,7 @@ export type CashExpensesEntityType =
   | "Vendor"
   | "Contractor"
   | "Salary"
+  | "Wages"
   | "Expense"
   | "Machinery";
 
@@ -173,6 +174,7 @@ async function fetchAllPriorPaymentTotals(
     vendorAdvanceRows,
     contractorRows,
     salaryRows,
+    wageRows,
     expenseRows,
     machineRows,
     nonConsumableRows,
@@ -214,7 +216,18 @@ async function fetchAllPriorPaymentTotals(
       { $match: { "c.projectId": projectObj } },
       { $group: { _id: "$contractorId", sum: { $sum: "$amount" }, name: { $first: "$c.name" } } },
     ]),
-    Employee.find({ projectId: projectObj })
+    // Machinery-category employees' payments are already counted via MachinePayment
+    // (see createEmployeePayment), so exclude them here to avoid double counting.
+    // Fixed employees are salaried; Daily employees are waged — kept as separate buckets.
+    Employee.find({ projectId: projectObj, category: { $ne: "Machinery" }, type: "Fixed" })
+      .distinct("_id")
+      .then((employeeIds) =>
+        EmployeePayment.aggregate<{ sum: number }>([
+          { $match: { employeeId: { $in: employeeIds }, date: beforeStart } },
+          { $group: { _id: null, sum: { $sum: "$amount" } } },
+        ])
+      ),
+    Employee.find({ projectId: projectObj, category: { $ne: "Machinery" }, type: "Daily" })
       .distinct("_id")
       .then((employeeIds) =>
         EmployeePayment.aggregate<{ sum: number }>([
@@ -269,6 +282,8 @@ async function fetchAllPriorPaymentTotals(
   }
   const salaryPrior = salaryRows[0]?.sum ?? 0;
   if (salaryPrior > 0) add("Salary:ALL", salaryPrior, "Employees");
+  const wagePrior = wageRows[0]?.sum ?? 0;
+  if (wagePrior > 0) add("Wages:ALL", wagePrior, "Employees");
 
   return out;
 }
@@ -414,10 +429,19 @@ export async function getCashExpensesReport(
       .populate<{ contractorId: { projectId: mongoose.Types.ObjectId; name: string } }>("contractorId", "projectId name")
       .lean()
       .then((rows) => rows.filter((r) => r.contractorId?.projectId?.toString() === projectId)),
+    // Machinery-category employees' payments are already counted via MachinePayment
+    // (see createEmployeePayment), so exclude them here to avoid double counting.
     EmployeePayment.find({ date: inRange })
-      .populate<{ employeeId: { projectId: mongoose.Types.ObjectId; name: string } }>("employeeId", "projectId name")
+      .populate<{ employeeId: { projectId: mongoose.Types.ObjectId; name: string; category: string; type: string } }>(
+        "employeeId",
+        "projectId name category type"
+      )
       .lean()
-      .then((rows) => rows.filter((r) => r.employeeId?.projectId?.toString() === projectId)),
+      .then((rows) =>
+        rows.filter(
+          (r) => r.employeeId?.projectId?.toString() === projectId && r.employeeId?.category !== "Machinery"
+        )
+      ),
     Expense.find({ projectId: projectObj, date: inRange }).lean(),
     MachinePayment.find({ date: inRange })
       .populate<{ machineId: { projectId: mongoose.Types.ObjectId; name: string } }>("machineId", "projectId name")
@@ -465,15 +489,29 @@ export async function getCashExpensesReport(
     "Contractor"
   );
 
-  if (employeePayments.length > 0) {
-    const totalEmployeeAmount = employeePayments.reduce((s, r) => s + r.amount, 0);
+  // Fixed employees are salaried; Daily employees are waged — kept as separate buckets.
+  const salaryPayments = employeePayments.filter((r) => r.employeeId?.type === "Fixed");
+  const wagePayments = employeePayments.filter((r) => r.employeeId?.type === "Daily");
+
+  if (salaryPayments.length > 0) {
     internal.push({
       entityName: "Employees",
       entityType: "Salary",
-      amount: totalEmployeeAmount,
+      amount: salaryPayments.reduce((s, r) => s + r.amount, 0),
       remarks: "",
       sourceId: "salary-all",
       entityKey: "Salary:ALL",
+    });
+  }
+
+  if (wagePayments.length > 0) {
+    internal.push({
+      entityName: "Employees",
+      entityType: "Wages",
+      amount: wagePayments.reduce((s, r) => s + r.amount, 0),
+      remarks: "",
+      sourceId: "wages-all",
+      entityKey: "Wages:ALL",
     });
   }
 
@@ -868,8 +906,16 @@ export async function getCashExpensesEntityLedger(
     };
   }
 
-  if (entityType === "Salary") {
-    const allProjectEmployeeIds = await Employee.find({ projectId: projectObj }).distinct("_id");
+  if (entityType === "Salary" || entityType === "Wages") {
+    // Machinery-category employees' payments are already counted via MachinePayment
+    // (see createEmployeePayment), so exclude them here to avoid double counting.
+    // Fixed employees are salaried; Daily employees are waged — kept as separate buckets.
+    const employeeType = entityType === "Salary" ? "Fixed" : "Daily";
+    const allProjectEmployeeIds = await Employee.find({
+      projectId: projectObj,
+      category: { $ne: "Machinery" },
+      type: employeeType,
+    }).distinct("_id");
     const [docs, prevAgg] = await Promise.all([
       EmployeePayment.find({ employeeId: { $in: allProjectEmployeeIds }, date: inRange })
         .populate<{ employeeId: { name: string } }>("employeeId", "name")

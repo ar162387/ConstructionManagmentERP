@@ -24,6 +24,7 @@ import {
   type ApiNonConsumableLedgerEntry,
 } from "@/services/nonConsumableLedgerService";
 import { toast } from "sonner";
+import { todayPKT } from "@/lib/pktDate";
 
 const EVENT_TYPE_OPTIONS: { value: NonConsumableEventType; label: string }[] = [
   { value: "Purchase", label: "Purchase (Add to Company Store)" },
@@ -66,7 +67,7 @@ export function AddNonConsumableEntryDialog({
   onSuccess,
 }: AddNonConsumableEntryDialogProps) {
   const isEdit = !!editEntry;
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(todayPKT());
   const [eventType, setEventType] = useState<NonConsumableEventType>("Purchase");
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
   const [quantity, setQuantity] = useState("");
@@ -84,7 +85,7 @@ export function AddNonConsumableEntryDialog({
         setRemarks(editEntry.remarks ?? "");
         setSelectedProjectId(editEntry.expenseProjectId ?? editEntry.projectTo ?? editEntry.projectFrom ?? "");
       } else {
-        setDate(new Date().toISOString().slice(0, 10));
+        setDate(todayPKT());
         setEventType("Purchase");
         setSelectedProjectId("");
         setQuantity("");

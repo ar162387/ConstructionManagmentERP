@@ -10,6 +10,7 @@ import { useProjects } from "@/hooks/useProjects";
 import { useEmployees } from "@/hooks/useEmployees";
 import { useMachines } from "@/hooks/useMachines";
 import { AddEmployeeDialog } from "@/components/dialogs/AddEmployeeDialog";
+import { GenerateSalarySlipDialog } from "@/components/dialogs/GenerateSalarySlipDialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -21,7 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ChevronLeft, ChevronRight, Loader2, Plus } from "lucide-react";
+import { ChevronLeft, ChevronRight, FileText, Loader2, Plus } from "lucide-react";
 import {
   buildMonthOptionsUpToCurrent,
   getDaysInMonth,
@@ -53,11 +54,21 @@ function thisMonthLabel(employee: ApiEmployeeWithSnapshot, snapshot: ApiEmployee
 }
 
 /**
- * Any amount already paid against this employee's selected-month salary is an advance
- * on the final salary sheet, whether the payment was entered as Advance, Salary, or Wage.
+ * Any amount already paid against this employee's selected-month salary — Advance, Salary, or
+ * Wage alike — counts as "Advance Amount" on the final salary sheet.
+ * Daily (wage) employees additionally carry forward any advance given in an EARLIER month that
+ * hasn't yet been worked off by payable earned since (snapshot.outstandingAdvance), so an advance
+ * given ahead of time still reduces Net Payable once wages are finally calculated for it.
  */
-function salaryAdvanceAmount(snapshot: ApiEmployeeWithSnapshot["snapshot"] | undefined): number {
-  return snapshot?.paid ?? 0;
+function salaryAdvanceAmount(
+  employee: ApiEmployeeWithSnapshot,
+  snapshot: ApiEmployeeWithSnapshot["snapshot"] | undefined
+): number {
+  const paidThisMonth = snapshot?.paid ?? 0;
+  if (employee.type === "Daily") {
+    return paidThisMonth + (snapshot?.outstandingAdvance ?? 0);
+  }
+  return paidThisMonth;
 }
 
 function salaryBasicAmount(employee: ApiEmployeeWithSnapshot): number {
@@ -78,9 +89,12 @@ function salaryWorkingDays(
   return att.workedDays;
 }
 
-function salaryNetPayable(snapshot: ApiEmployeeWithSnapshot["snapshot"] | undefined): number | null {
+function salaryNetPayable(
+  employee: ApiEmployeeWithSnapshot,
+  snapshot: ApiEmployeeWithSnapshot["snapshot"] | undefined
+): number | null {
   if (!snapshot) return null;
-  return Math.max(0, snapshot.payable - salaryAdvanceAmount(snapshot));
+  return Math.max(0, snapshot.payable - salaryAdvanceAmount(employee, snapshot));
 }
 
 const EMPLOYEES_PRINT_CSS = `
@@ -138,8 +152,8 @@ function EmployeesSalaryPrintSheet({
       const isBefore = firstMonth ? selectedMonth < firstMonth : false;
       const snapshot = isBefore ? undefined : employee.snapshot;
       const wd = salaryWorkingDays(employee, snapshot, selectedMonth, isBefore);
-      const adv = salaryAdvanceAmount(snapshot);
-      const net = salaryNetPayable(snapshot);
+      const adv = salaryAdvanceAmount(employee, snapshot);
+      const net = salaryNetPayable(employee, snapshot);
 
       if (!isBefore && snapshot && wd != null) {
         sb += salaryBasicAmount(employee);
@@ -332,6 +346,7 @@ export default function Employees() {
   const [searchQuery, setSearchQuery] = useState("");
   const [paymentFilter, setPaymentFilter] = useState<PaymentStatusFilter>("All");
   const [addOpen, setAddOpen] = useState(false);
+  const [salarySlipOpen, setSalarySlipOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<EmployeeTab>("Fixed");
   useEffect(() => {
     if (machineryMode) setActiveTab("Fixed");
@@ -413,12 +428,22 @@ export default function Employees() {
           additionalPrintCss: EMPLOYEES_PRINT_CSS,
         }}
         actions={
-          <Button variant="warning" size="sm" onClick={() => setAddOpen(true)} disabled={machineryMode && !isSiteManager && !selectedProjectId}>
-            <Plus className="h-4 w-4 mr-1" />
-            Add {machineryMode ? "Machinery Employee" : "Employee"}
-          </Button>
+          <div className="flex gap-2">
+            {!machineryMode && (
+              <Button variant="outline" size="sm" onClick={() => setSalarySlipOpen(true)}>
+                <FileText className="h-4 w-4 mr-1" />
+                Generate Salary Slip
+              </Button>
+            )}
+            <Button variant="warning" size="sm" onClick={() => setAddOpen(true)} disabled={machineryMode && !isSiteManager && !selectedProjectId}>
+              <Plus className="h-4 w-4 mr-1" />
+              Add {machineryMode ? "Machinery Employee" : "Employee"}
+            </Button>
+          </div>
         }
       />
+
+      <GenerateSalarySlipDialog open={salarySlipOpen} onOpenChange={setSalarySlipOpen} />
 
       <AddEmployeeDialog
         open={addOpen}

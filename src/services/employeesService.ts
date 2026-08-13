@@ -72,21 +72,28 @@ export interface ApiEmployeeWithSnapshot extends ApiEmployee {
     paid: number;
     remaining: number;
     advancePaid?: number;
+    /** Daily (wage) employees only: cumulative advance not yet worked off through this month. */
+    outstandingAdvance?: number;
     paymentStatus: "Paid" | "Partial" | "Due" | "Late";
     attendance?: AttendanceSnapshot;
   };
 }
 
-/** projectId: filter by project. month: optional, for per-month snapshot in list. */
+/** projectId: filter by project. month: optional, for per-month snapshot in list.
+ *  startDate/endDate: optional inclusive date range — when both set, totalPaid/totalDue reflect that period. */
 export async function listEmployees(
   projectId?: string | null,
-  month?: string | null
-  , category?: ApiEmployeeCategory
+  month?: string | null,
+  category?: ApiEmployeeCategory,
+  startDate?: string | null,
+  endDate?: string | null
 ): Promise<ApiEmployeeWithSnapshot[]> {
   const params = new URLSearchParams();
   if (projectId) params.set("projectId", projectId);
   if (month) params.set("month", month);
   if (category) params.set("category", category);
+  if (startDate) params.set("startDate", startDate);
+  if (endDate) params.set("endDate", endDate);
   const q = params.toString();
   return api<ApiEmployeeWithSnapshot[]>(`/api/employees${q ? `?${q}` : ""}`);
 }

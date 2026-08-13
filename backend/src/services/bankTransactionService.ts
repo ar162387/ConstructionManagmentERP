@@ -5,7 +5,7 @@ import { Project } from "../models/Project.js";
 import { Client } from "../models/Client.js";
 import { findOrCreateCustomHead } from "./customHeadService.js";
 import { User } from "../models/User.js";
-import { logAudit } from "./auditService.js";
+import { logAudit, getProjectName } from "./auditService.js";
 import { roleDisplay } from "./authService.js";
 import type { BankTransactionType, BankTransactionMode } from "../models/BankTransaction.js";
 
@@ -345,6 +345,8 @@ export async function createBankTransaction(
       action: "create",
       module: "bank_transactions",
       entityId: tx._id.toString(),
+      projectId: input.projectId,
+      projectName: await getProjectName(input.projectId),
       description: `${input.type}: ${amount} — ${input.source} → ${input.destination}`,
       newValue: { type: input.type, amount, accountId: input.accountId, projectId: input.projectId },
     });
@@ -509,6 +511,8 @@ export async function updateBankTransaction(
       action: "update",
       module: "bank_transactions",
       entityId: id,
+      projectId: newProjectId?.toString(),
+      projectName: await getProjectName(newProjectId?.toString()),
       description: `Updated ${newType} transaction: ${newAmount}`,
       oldValue: { amount: existing.amount, source: existing.source, destination: existing.destination },
       newValue: { amount: newAmount, source: updated.source, destination: updated.destination },
@@ -607,6 +611,8 @@ export async function deleteBankTransaction(
       action: "delete",
       module: "bank_transactions",
       entityId: id,
+      projectId: existing.projectId?.toString(),
+      projectName: await getProjectName(existing.projectId?.toString()),
       description: `Deleted ${existing.type} transaction: ${existing.amount} — ${existing.source} → ${existing.destination}`,
       oldValue: { type: existing.type, amount: existing.amount },
     });

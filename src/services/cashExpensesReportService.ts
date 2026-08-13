@@ -10,6 +10,7 @@ export type CashExpensesEntityType =
   | "Vendor"
   | "Contractor"
   | "Salary"
+  | "Wages"
   | "Expense"
   | "Machinery";
 

@@ -21,6 +21,8 @@ import { createVendorPayment } from "@/services/vendorPaymentService";
 import { createItemLedgerEntry } from "@/services/itemLedgerService";
 import { useConsumableItems } from "@/hooks/useConsumableItems";
 import type { ApiVendor } from "@/services/vendorsService";
+import { formatCurrency } from "@/lib/mock-data";
+import { todayPKT } from "@/lib/pktDate";
 
 const NONE_ITEM = "__none__";
 
@@ -37,7 +39,7 @@ interface ApplyAdvanceDialogProps {
 export function ApplyAdvanceDialog({ open, onOpenChange, vendor, onSuccess }: ApplyAdvanceDialogProps) {
   const { items } = useConsumableItems(vendor.projectId);
 
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(todayPKT());
   const [itemId, setItemId] = useState<string>(NONE_ITEM);
   const [quantity, setQuantity] = useState("");
   const [unitPrice, setUnitPrice] = useState("");
@@ -48,7 +50,7 @@ export function ApplyAdvanceDialog({ open, onOpenChange, vendor, onSuccess }: Ap
 
   useEffect(() => {
     if (open) {
-      setDate(new Date().toISOString().slice(0, 10));
+      setDate(todayPKT());
       setItemId(NONE_ITEM);
       setQuantity("");
       setUnitPrice("");
@@ -89,7 +91,7 @@ export function ApplyAdvanceDialog({ open, onOpenChange, vendor, onSuccess }: Ap
     if (!date) { toast.error("Date is required"); return; }
     if (isNaN(amt) || amt <= 0) { toast.error("Amount must be positive"); return; }
     if (amt > maxApplicable) {
-      toast.error(`Amount ${amt.toLocaleString()} exceeds the applicable advance of ${maxApplicable.toLocaleString()} PKR`);
+      toast.error(`Amount ${formatCurrency(amt)} exceeds the applicable advance of ${formatCurrency(maxApplicable)} PKR`);
       return;
     }
     const hasItem = itemId !== NONE_ITEM;
@@ -147,8 +149,8 @@ export function ApplyAdvanceDialog({ open, onOpenChange, vendor, onSuccess }: Ap
           <DialogTitle>Apply Advance — {vendor.name}</DialogTitle>
         </DialogHeader>
         <p className="text-sm text-muted-foreground">
-          Available advance: <span className="font-bold text-success">{vendor.advanceBalance.toLocaleString()} PKR</span>
-          {" · "}Pending dues: <span className="font-bold text-destructive">{vendor.remaining.toLocaleString()} PKR</span>
+          Available advance: <span className="font-bold text-success">{formatCurrency(vendor.advanceBalance)} PKR</span>
+          {" · "}Pending dues: <span className="font-bold text-destructive">{formatCurrency(vendor.remaining)} PKR</span>
         </p>
         <form onSubmit={handleSubmit} className="space-y-4 mt-4">
           <div>
@@ -183,7 +185,7 @@ export function ApplyAdvanceDialog({ open, onOpenChange, vendor, onSuccess }: Ap
           )}
           {totalPrice !== null && (
             <p className="text-sm text-muted-foreground">
-              Bill total: <span className="font-bold">{totalPrice.toLocaleString()} PKR</span>
+              Bill total: <span className="font-bold">{formatCurrency(totalPrice)} PKR</span>
             </p>
           )}
           <div>
@@ -198,7 +200,7 @@ export function ApplyAdvanceDialog({ open, onOpenChange, vendor, onSuccess }: Ap
               className="mt-1"
             />
             <p className="text-xs text-muted-foreground mt-1">
-              Max applicable: {maxApplicable.toLocaleString()} PKR
+              Max applicable: {formatCurrency(maxApplicable)} PKR
               {totalPrice !== null && totalPrice > maxApplicable && " — the rest of this bill will remain due"}
             </p>
           </div>

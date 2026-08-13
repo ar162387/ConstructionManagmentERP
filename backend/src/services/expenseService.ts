@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 import { Expense } from "../models/Expense.js";
 import { User } from "../models/User.js";
-import { logAudit } from "./auditService.js";
+import { logAudit, getProjectName } from "./auditService.js";
 import { roleDisplay } from "./authService.js";
 
 export type PaymentMode = "Cash" | "Bank" | "Online";
@@ -205,6 +205,8 @@ export async function createExpense(
     action: "create",
     module: "expenses",
     entityId: expense._id.toString(),
+    projectId: expense.projectId?.toString(),
+    projectName: await getProjectName(expense.projectId?.toString()),
     description: `Expense: ${expense.description} — ${expense.amount}`,
     newValue: { description: expense.description, amount: expense.amount },
   });
@@ -251,6 +253,8 @@ export async function updateExpense(
     action: "update",
     module: "expenses",
     entityId: id,
+    projectId: target.projectId?.toString(),
+    projectName: await getProjectName(target.projectId?.toString()),
     description: `Updated expense: ${target.description}`,
     oldValue: { description: target.description },
     newValue: { description: updated.description },
@@ -284,6 +288,8 @@ export async function deleteExpense(
     action: "delete",
     module: "expenses",
     entityId: id,
+    projectId: target.projectId?.toString(),
+    projectName: await getProjectName(target.projectId?.toString()),
     description: `Deleted expense: ${target.description}`,
     oldValue: { description: target.description },
   });

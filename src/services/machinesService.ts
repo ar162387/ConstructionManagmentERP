@@ -23,6 +23,9 @@ export interface ListMachinesParams {
   projectId?: string | null;
   page?: number;
   pageSize?: number;
+  /** Optional inclusive date range — when both set, totals reflect that period instead of all-time. */
+  startDate?: string | null;
+  endDate?: string | null;
 }
 
 export interface ListMachinesResult {
@@ -87,6 +90,8 @@ export async function listMachines(params: ListMachinesParams): Promise<ListMach
   if (params.projectId != null && params.projectId !== "") search.set("projectId", params.projectId);
   if (params.page != null) search.set("page", String(params.page));
   if (params.pageSize != null) search.set("pageSize", String(params.pageSize));
+  if (params.startDate) search.set("startDate", params.startDate);
+  if (params.endDate) search.set("endDate", params.endDate);
   const q = search.toString();
   return api<ListMachinesResult>(`/api/machines${q ? `?${q}` : ""}`);
 }

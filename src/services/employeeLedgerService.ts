@@ -21,6 +21,8 @@ export interface ApiMonthlySnapshot {
   remaining: number;
   /** Sum of Advance payments for the month; omit on older API responses */
   advancePaid?: number;
+  /** Daily (wage) employees only: cumulative advance not yet worked off through this month. */
+  outstandingAdvance?: number;
   paymentStatus: "Paid" | "Partial" | "Due" | "Late";
 }
 

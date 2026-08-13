@@ -57,19 +57,24 @@ export default function Liabilities() {
   const effectiveProjectId = isSiteManager ? assignedProjectId : (selectedProjectId || null);
   const projectIdForApi = effectiveProjectId ?? undefined;
 
-  const { vendors, loading: vendorsLoading, refetch: refetchVendors } = useVendors(projectIdForApi);
-  const { employees, loading: employeesLoading, refetch: refetchEmployees } = useEmployees(projectIdForApi);
-  const { machines, loading: machinesLoading, refetch: refetchMachines } = useMachines(projectIdForApi, 1, 500);
-  const { contractors, loading: contractorsLoading, refetch: refetchContractors } = useContractors(projectIdForApi);
+  const [entityFilter, setEntityFilter] = useState<string>("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+
+  // Only apply the date filter server-side once both ends are set (or leave it open-ended if the
+  // caller wants a from-only/to-only range) — an empty string must not turn into "" !== undefined.
+  const dateFromForApi = dateFrom || undefined;
+  const dateToForApi = dateTo || undefined;
+
+  const { vendors, loading: vendorsLoading, refetch: refetchVendors } = useVendors(projectIdForApi, dateFromForApi, dateToForApi);
+  const { employees, loading: employeesLoading, refetch: refetchEmployees } = useEmployees(projectIdForApi, undefined, "Regular", dateFromForApi, dateToForApi);
+  const { machines, loading: machinesLoading, refetch: refetchMachines } = useMachines(projectIdForApi, 1, 500, dateFromForApi, dateToForApi);
+  const { contractors, loading: contractorsLoading, refetch: refetchContractors } = useContractors(projectIdForApi, dateFromForApi, dateToForApi);
 
   const projectsForSelector = useMemo(
     () => projects.filter((p) => p.status === "Active" || p.status === "On Hold" || p.status === "Completed"),
     [projects]
   );
-
-  const [entityFilter, setEntityFilter] = useState<string>("all");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
 
   // Payment dialog state
   const [vendorPaymentVendor, setVendorPaymentVendor] = useState<ApiVendor | null>(null);
@@ -77,10 +82,15 @@ export default function Liabilities() {
   const [machinePaymentMachine, setMachinePaymentMachine] = useState<ApiMachineWithTotals | null>(null);
   const [employeePaymentEmployee, setEmployeePaymentEmployee] = useState<ApiEmployeeWithSnapshot | null>(null);
 
-  const vendorDues = useMemo(() => vendors.reduce((s, v) => s + v.remaining, 0), [vendors]);
-  const contractorDues = useMemo(() => contractors.reduce((s, c) => s + c.remaining, 0), [contractors]);
-  const salaryDues = useMemo(() => employees.reduce((s, e) => s + (e.totalDue ?? 0), 0), [employees]);
-  const machineryDues = useMemo(() => machines.reduce((s, m) => s + m.totalPending, 0), [machines]);
+  const showVendors = entityFilter === "all" || entityFilter === "vendor";
+  const showContractors = entityFilter === "all" || entityFilter === "contractor";
+  const showEmployees = entityFilter === "all" || entityFilter === "employee";
+  const showMachines = entityFilter === "all" || entityFilter === "machinery";
+
+  const vendorDues = useMemo(() => (showVendors ? vendors.reduce((s, v) => s + v.remaining, 0) : 0), [vendors, showVendors]);
+  const contractorDues = useMemo(() => (showContractors ? contractors.reduce((s, c) => s + c.remaining, 0) : 0), [contractors, showContractors]);
+  const salaryDues = useMemo(() => (showEmployees ? employees.reduce((s, e) => s + (e.totalDue ?? 0), 0) : 0), [employees, showEmployees]);
+  const machineryDues = useMemo(() => (showMachines ? machines.reduce((s, m) => s + m.totalPending, 0) : 0), [machines, showMachines]);
   const totalLiabilities = vendorDues + contractorDues + salaryDues + machineryDues;
 
   const liabilityBreakdownData = useMemo(() => {
@@ -95,25 +105,33 @@ export default function Liabilities() {
 
   const topEntitiesData = useMemo(() => {
     const items: { name: string; pending: number; type: string }[] = [];
-    vendors
-      .filter((v) => v.remaining > 0)
-      .forEach((v) => items.push({ name: v.name.length > 18 ? v.name.slice(0, 16) + "…" : v.name, pending: v.remaining, type: "Vendor" }));
-    contractors
-      .filter((c) => c.remaining > 0)
-      .forEach((c) => items.push({ name: c.name.length > 18 ? c.name.slice(0, 16) + "…" : c.name, pending: c.remaining, type: "Contractor" }));
-    employees
-      .filter((e) => (e.totalDue ?? 0) > 0)
-      .forEach((e) => items.push({ name: e.name.length > 18 ? e.name.slice(0, 16) + "…" : e.name, pending: e.totalDue ?? 0, type: "Employee" }));
-    machines
-      .filter((m) => m.totalPending > 0)
-      .forEach((m) => items.push({ name: m.name.length > 18 ? m.name.slice(0, 16) + "…" : m.name, pending: m.totalPending, type: "Machinery" }));
+    if (showVendors) {
+      vendors
+        .filter((v) => v.remaining > 0)
+        .forEach((v) => items.push({ name: v.name.length > 18 ? v.name.slice(0, 16) + "…" : v.name, pending: v.remaining, type: "Vendor" }));
+    }
+    if (showContractors) {
+      contractors
+        .filter((c) => c.remaining > 0)
+        .forEach((c) => items.push({ name: c.name.length > 18 ? c.name.slice(0, 16) + "…" : c.name, pending: c.remaining, type: "Contractor" }));
+    }
+    if (showEmployees) {
+      employees
+        .filter((e) => (e.totalDue ?? 0) > 0)
+        .forEach((e) => items.push({ name: e.name.length > 18 ? e.name.slice(0, 16) + "…" : e.name, pending: e.totalDue ?? 0, type: "Employee" }));
+    }
+    if (showMachines) {
+      machines
+        .filter((m) => m.totalPending > 0)
+        .forEach((m) => items.push({ name: m.name.length > 18 ? m.name.slice(0, 16) + "…" : m.name, pending: m.totalPending, type: "Machinery" }));
+    }
     return items.sort((a, b) => b.pending - a.pending).slice(0, 10);
-  }, [vendors, contractors, employees, machines]);
+  }, [vendors, contractors, employees, machines, showVendors, showContractors, showEmployees, showMachines]);
 
-  const filteredVendors = entityFilter === "all" || entityFilter === "vendor" ? vendors.filter((v) => v.remaining > 0) : [];
-  const filteredContractors = entityFilter === "all" || entityFilter === "contractor" ? contractors.filter((c) => c.remaining > 0) : [];
-  const filteredEmployees = entityFilter === "all" || entityFilter === "employee" ? employees.filter((e) => (e.totalDue ?? 0) > 0) : [];
-  const filteredMachines = entityFilter === "all" || entityFilter === "machinery" ? machines.filter((m) => m.totalPending > 0) : [];
+  const filteredVendors = showVendors ? vendors.filter((v) => v.remaining > 0) : [];
+  const filteredContractors = showContractors ? contractors.filter((c) => c.remaining > 0) : [];
+  const filteredEmployees = showEmployees ? employees.filter((e) => (e.totalDue ?? 0) > 0) : [];
+  const filteredMachines = showMachines ? machines.filter((m) => m.totalPending > 0) : [];
 
   const selectedProjectName = projects.find((p) => p.id === effectiveProjectId)?.name ?? "Project";
 

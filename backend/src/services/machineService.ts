@@ -4,7 +4,7 @@ import { MachineLedgerEntry } from "../models/MachineLedgerEntry.js";
 import { MachinePayment } from "../models/MachinePayment.js";
 import { MachinePaymentAllocation } from "../models/MachinePaymentAllocation.js";
 import { User } from "../models/User.js";
-import { logAudit } from "./auditService.js";
+import { logAudit, getProjectName } from "./auditService.js";
 import { roleDisplay } from "./authService.js";
 
 export interface MachinePayload {
@@ -72,18 +72,34 @@ async function resolveProjectId(
   return projectIdParam;
 }
 
-/** Compute machine totals from ledger entries and payments. */
-export async function getMachineTotals(machineId: string): Promise<MachineTotals> {
+export interface MachineTotalsOptions {
+  /** Inclusive "YYYY-MM-DD" range. When provided, totals are computed only from ledger entries and
+   *  payments dated within the range instead of the machine's all-time history. */
+  startDate?: string;
+  endDate?: string;
+}
+
+/** Compute machine totals from ledger entries and payments (all-time, or within a date range). */
+export async function getMachineTotals(machineId: string, options?: MachineTotalsOptions): Promise<MachineTotals> {
   if (!mongoose.Types.ObjectId.isValid(machineId)) {
     return { totalHours: 0, totalCost: 0, totalPaid: 0, remaining: 0 };
   }
   const machineObjId = new mongoose.Types.ObjectId(machineId);
+  const startDate = options?.startDate?.trim() || undefined;
+  const endDate = options?.endDate?.trim() || undefined;
+  const dateMatch: Record<string, unknown> = {};
+  if (startDate || endDate) {
+    dateMatch.date = {
+      ...(startDate && { $gte: startDate }),
+      ...(endDate && { $lte: endDate }),
+    };
+  }
   const [entryAgg, paymentSum] = await Promise.all([
     MachineLedgerEntry.aggregate<{ totalHours: number; totalCost: number }>([
-      { $match: { machineId: machineObjId } },
+      { $match: { machineId: machineObjId, ...dateMatch } },
       { $group: { _id: null, totalHours: { $sum: "$hoursWorked" }, totalCost: { $sum: "$totalCost" } } },
     ]).then((r) => r[0] ?? { totalHours: 0, totalCost: 0 }),
-    MachinePayment.aggregate([{ $match: { machineId: machineObjId } }, { $group: { _id: null, total: { $sum: "$amount" } } }]).then(
+    MachinePayment.aggregate([{ $match: { machineId: machineObjId, ...dateMatch } }, { $group: { _id: null, total: { $sum: "$amount" } } }]).then(
       (r) => r[0]?.total ?? 0
     ),
   ]);
@@ -388,10 +404,11 @@ export async function listMachinesRunningBill(
   return { items, total, periodStart, periodEnd, summary };
 }
 
-/** List machines for a project with server-side pagination. Site Manager: uses assigned project. */
+/** List machines for a project with server-side pagination. Site Manager: uses assigned project.
+ *  Pass startDate/endDate to compute totals within that inclusive date range instead of all-time. */
 export async function listMachines(
   actor: { userId: string; role: string },
-  params: { projectId?: string; page?: number; pageSize?: number }
+  params: { projectId?: string; page?: number; pageSize?: number; startDate?: string; endDate?: string }
 ): Promise<ListMachinesResult> {
   const projectId = await resolveProjectId(actor, params.projectId);
   if (actor.role === "site_manager" && !projectId) return { items: [], total: 0 };
@@ -412,7 +429,7 @@ export async function listMachines(
 
   const items: MachineWithTotals[] = [];
   for (const doc of docs) {
-    const totals = await getMachineTotals(doc._id.toString());
+    const totals = await getMachineTotals(doc._id.toString(), { startDate: params.startDate, endDate: params.endDate });
     items.push({
       ...toPayload(doc),
       totalHours: totals.totalHours,
@@ -476,6 +493,8 @@ export async function createMachine(
     action: "create",
     module: "machinery",
     entityId: doc._id.toString(),
+    projectId: projectId,
+    projectName: await getProjectName(projectId),
     description: `Added machine: ${doc.name}`,
     newValue: { name: doc.name, hourlyRate: doc.hourlyRate },
   });
@@ -519,6 +538,8 @@ export async function updateMachine(
     action: "update",
     module: "machinery",
     entityId: id,
+    projectId: target.projectId?.toString(),
+    projectName: await getProjectName(target.projectId?.toString()),
     description: `Updated machine: ${updated.name}`,
     oldValue: { name: target.name, hourlyRate: target.hourlyRate },
     newValue: { name: updated.name, hourlyRate: updated.hourlyRate },
@@ -559,6 +580,8 @@ export async function deleteMachine(
     action: "delete",
     module: "machinery",
     entityId: id,
+    projectId: target.projectId?.toString(),
+    projectName: await getProjectName(target.projectId?.toString()),
     description: `Deleted machine: ${target.name}`,
     oldValue: { name: target.name },
   });

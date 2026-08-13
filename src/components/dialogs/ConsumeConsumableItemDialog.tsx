@@ -9,6 +9,7 @@ import { createStockConsumption } from "@/services/stockConsumptionService";
 import { createConsumableUnit, listConsumableUnits, type ApiConsumableUnit } from "@/services/consumableUnitService";
 import { Plus } from "lucide-react";
 import { toast } from "sonner";
+import { todayPKT } from "@/lib/pktDate";
 
 interface Props {
   open: boolean;
@@ -18,7 +19,7 @@ interface Props {
 }
 
 export function ConsumeConsumableItemDialog({ open, onOpenChange, item, onSuccess }: Props) {
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(todayPKT());
   const [quantity, setQuantity] = useState("");
   const [unit, setUnit] = useState("");
   const [units, setUnits] = useState<ApiConsumableUnit[]>([]);
@@ -29,7 +30,7 @@ export function ConsumeConsumableItemDialog({ open, onOpenChange, item, onSucces
 
   useEffect(() => {
     if (!open) return;
-    setDate(new Date().toISOString().slice(0, 10)); setQuantity(""); setUnit(""); setRemarks("");
+    setDate(todayPKT()); setQuantity(""); setUnit(""); setRemarks("");
     listConsumableUnits().then(setUnits).catch(() => toast.error("Failed to load units"));
   }, [open]);
 

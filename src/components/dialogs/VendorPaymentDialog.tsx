@@ -19,6 +19,7 @@ import {
 import { toast } from "sonner";
 import { createVendorPayment } from "@/services/vendorPaymentService";
 import type { ApiVendor } from "@/services/vendorsService";
+import { todayPKT } from "@/lib/pktDate";
 
 interface VendorPaymentDialogProps {
   open: boolean;
@@ -28,7 +29,7 @@ interface VendorPaymentDialogProps {
 }
 
 export function VendorPaymentDialog({ open, onOpenChange, vendor, onSuccess }: VendorPaymentDialogProps) {
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(todayPKT());
   const [amount, setAmount] = useState("");
   const [paymentMode, setPaymentMode] = useState<"Cash" | "Bank" | "Online">("Bank");
   const [referenceId, setReferenceId] = useState("");
@@ -123,5 +124,5 @@ export function VendorPaymentDialog({ open, onOpenChange, vendor, onSuccess }: V
 }
 
 function formatAmount(n: number): string {
-  return n.toLocaleString();
+  return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }

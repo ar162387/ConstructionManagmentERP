@@ -48,6 +48,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { todayPKT } from "@/lib/pktDate";
 
 const PAGE_SIZE_OPTIONS = [12, 24, 50, 100];
 const PRINT_FETCH_PAGE_SIZE = 100;
@@ -65,7 +66,7 @@ function formatDateForPrint(date: string) {
 }
 
 function formatAmount(value: number) {
-  return new Intl.NumberFormat("en-US").format(value);
+  return new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
 }
 
 export default function BankAccounts() {
@@ -75,7 +76,7 @@ export default function BankAccounts() {
 
   const { accounts, loading: accountsLoading, error: accountsError, refetch: refetchAccounts } = useBankAccounts();
   const { projects } = useProjects();
-  const { clients, refetch: refetchClients } = useClients();
+  const { clients, loading: clientsLoading, refetch: refetchClients } = useClients();
   const [customHeads, setCustomHeads] = useState<ApiCustomHead[]>([]);
 
   useEffect(() => { void listCustomHeads().then(setCustomHeads).catch(() => setCustomHeads([])); }, []);
@@ -103,8 +104,8 @@ export default function BankAccounts() {
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [printDialogOpen, setPrintDialogOpen] = useState(false);
   const [printAccountId, setPrintAccountId] = useState<string | null>(null);
-  const [printStartDate, setPrintStartDate] = useState(new Date().toISOString().slice(0, 10));
-  const [printEndDate, setPrintEndDate] = useState(new Date().toISOString().slice(0, 10));
+  const [printStartDate, setPrintStartDate] = useState(todayPKT());
+  const [printEndDate, setPrintEndDate] = useState(todayPKT());
   const [printLoading, setPrintLoading] = useState(false);
 
   useEffect(() => {
@@ -158,7 +159,7 @@ export default function BankAccounts() {
   };
 
   const handleOpenPrintDialog = () => {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayPKT();
     setPrintStartDate(today);
     setPrintEndDate(today);
     setPrintAccountId(accounts[0]?.id ?? null);
@@ -211,7 +212,7 @@ export default function BankAccounts() {
         .sort((a, b) => (a.date === b.date ? 0 : a.date < b.date ? -1 : 1));
 
       const projectColumns = projects.map((project) => ({ id: project.id, name: project.name }));
-      const today = new Date().toISOString().slice(0, 10);
+      const today = todayPKT();
       const openingRowCells = projectColumns.map(() => `<td class="text-center">-</td>`).join("");
 
       const txRowsHtml = accountRows
@@ -352,6 +353,7 @@ export default function BankAccounts() {
         accounts={accounts}
         projects={projects}
         clients={clients}
+        clientsLoading={clientsLoading}
         customHeads={customHeads}
         onSuccess={handleSuccess}
       />

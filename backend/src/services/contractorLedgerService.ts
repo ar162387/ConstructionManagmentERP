@@ -3,7 +3,7 @@ import { Contractor } from "../models/Contractor.js";
 import { ContractorEntry } from "../models/ContractorEntry.js";
 import { ContractorPayment } from "../models/ContractorPayment.js";
 import { User } from "../models/User.js";
-import { logAudit } from "./auditService.js";
+import { logAudit, getProjectName } from "./auditService.js";
 import { roleDisplay } from "./authService.js";
 import { getContractorTotals } from "./contractorService.js";
 import { rebuildContractorPaymentAllocations } from "./contractorPaymentAllocationService.js";
@@ -267,6 +267,8 @@ export async function createContractorEntry(
     action: "create",
     module: "contractor_entries",
     entityId: entry._id.toString(),
+    projectId: input.projectId,
+    projectName: await getProjectName(input.projectId),
     description: `Added contractor entry: ${contractor.name} — ${input.amount.toLocaleString()} PKR`,
     newValue: { amount: input.amount, contractorId: input.contractorId, date: input.date },
   });
@@ -339,6 +341,8 @@ export async function createContractorPayment(
     action: "create",
     module: "contractor_payments",
     entityId: payment._id.toString(),
+    projectId: contractor.projectId?.toString(),
+    projectName: await getProjectName(contractor.projectId?.toString()),
     description: `Recorded ${paymentType === "advance" ? "advance" : "payment"}: ${contractor.name} — ${input.amount.toLocaleString()} PKR`,
     newValue: { amount: input.amount, paymentType, contractorId, date: input.date },
   });
@@ -371,7 +375,7 @@ export async function deleteContractorEntry(
     );
   }
 
-  const contractor = await Contractor.findById(entry.contractorId).select("name").lean();
+  const contractor = await Contractor.findById(entry.contractorId).select("name projectId").lean();
   await ContractorEntry.findByIdAndDelete(entryId);
 
   await rebuildContractorPaymentAllocations(entry.contractorId.toString());
@@ -386,6 +390,8 @@ export async function deleteContractorEntry(
     action: "delete",
     module: "contractor_entries",
     entityId: entryId,
+    projectId: contractor?.projectId?.toString(),
+    projectName: await getProjectName(contractor?.projectId?.toString()),
     description: `Deleted contractor entry: ${contractor?.name ?? "Unknown"} — ${entry.amount.toLocaleString()} PKR`,
     oldValue: { amount: entry.amount, date: entry.date },
   });
@@ -401,7 +407,7 @@ export async function deleteContractorPayment(
   const payment = await ContractorPayment.findById(paymentId).lean();
   if (!payment) throw new Error("Payment not found");
 
-  const contractor = await Contractor.findById(payment.contractorId).select("name").lean();
+  const contractor = await Contractor.findById(payment.contractorId).select("name projectId").lean();
   await ContractorPayment.findByIdAndDelete(paymentId);
 
   await rebuildContractorPaymentAllocations(payment.contractorId.toString());
@@ -416,6 +422,8 @@ export async function deleteContractorPayment(
     action: "delete",
     module: "contractor_payments",
     entityId: paymentId,
+    projectId: contractor?.projectId?.toString(),
+    projectName: await getProjectName(contractor?.projectId?.toString()),
     description: `Deleted contractor payment: ${contractor?.name ?? "Unknown"} — ${payment.amount.toLocaleString()} PKR`,
     oldValue: { amount: payment.amount, date: payment.date },
   });

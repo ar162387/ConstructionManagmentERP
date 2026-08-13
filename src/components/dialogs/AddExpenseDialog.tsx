@@ -20,6 +20,7 @@ import { useExpenseCategories } from "@/hooks/useExpenses";
 import { createExpense } from "@/services/expensesService";
 import { toast } from "sonner";
 import { Plus } from "lucide-react";
+import { todayPKT } from "@/lib/pktDate";
 
 interface AddExpenseDialogProps {
   open: boolean;
@@ -32,7 +33,7 @@ interface AddExpenseDialogProps {
 
 export function AddExpenseDialog({ open, onOpenChange, projectId, categoriesRefreshKey, onSuccess }: AddExpenseDialogProps) {
   const categories = useExpenseCategories(projectId, categoriesRefreshKey);
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(todayPKT());
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("");
   const [newCategory, setNewCategory] = useState("");

@@ -5,9 +5,10 @@ import {
   type CashExpensesEntityType,
 } from "../services/cashExpensesReportService.js";
 import type { AuthRequest } from "../middleware/auth.js";
+import { todayPKT } from "../lib/pktDate.js";
 
 const VALID_ENTITY_TYPES: CashExpensesEntityType[] = [
-  "Consumable", "NonConsumable", "Vendor", "Contractor", "Salary", "Expense", "Machinery",
+  "Consumable", "NonConsumable", "Vendor", "Contractor", "Salary", "Wages", "Expense", "Machinery",
 ];
 
 export async function getReport(req: AuthRequest, res: Response) {
@@ -17,7 +18,7 @@ export async function getReport(req: AuthRequest, res: Response) {
     const startDate =
       typeof req.query.startDate === "string" ? req.query.startDate.trim() : "";
     const endDate = typeof req.query.endDate === "string" ? req.query.endDate.trim() : "";
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayPKT();
 
     const effectiveStart = startDate || today;
     const effectiveEnd = endDate || today;
@@ -51,7 +52,7 @@ export async function getEntityLedger(req: AuthRequest, res: Response) {
     const entityId = typeof req.query.entityId === "string" ? req.query.entityId.trim() : "";
     const startDate = typeof req.query.startDate === "string" ? req.query.startDate.trim() : "";
     const endDate = typeof req.query.endDate === "string" ? req.query.endDate.trim() : "";
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayPKT();
 
     if (!VALID_ENTITY_TYPES.includes(entityType as CashExpensesEntityType)) {
       res.status(400).json({ error: "Invalid entity type" });

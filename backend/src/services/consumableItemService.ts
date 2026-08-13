@@ -3,7 +3,7 @@ import { ConsumableItem } from "../models/ConsumableItem.js";
 import { ItemLedgerEntry } from "../models/ItemLedgerEntry.js";
 import { StockConsumptionEntry } from "../models/StockConsumptionEntry.js";
 import { User } from "../models/User.js";
-import { logAudit } from "./auditService.js";
+import { logAudit, getProjectName } from "./auditService.js";
 import { roleDisplay } from "./authService.js";
 import { getFifoAllocationForVendorsBulk } from "./fifoAllocation.js";
 
@@ -169,6 +169,8 @@ export async function createConsumableItem(
     action: "create",
     module: "consumable_items",
     entityId: item._id.toString(),
+    projectId: item.projectId?.toString(),
+    projectName: await getProjectName(item.projectId?.toString()),
     description: `Created consumable item: ${item.name}`,
     newValue: { name: item.name },
   });
@@ -213,6 +215,8 @@ export async function updateConsumableItem(
     action: "update",
     module: "consumable_items",
     entityId: id,
+    projectId: target.projectId?.toString(),
+    projectName: await getProjectName(target.projectId?.toString()),
     description: `Updated consumable item: ${target.name}`,
     oldValue: { name: target.name },
     newValue: { name: updated.name },
@@ -254,6 +258,8 @@ export async function deleteConsumableItem(
     action: "delete",
     module: "consumable_items",
     entityId: id,
+    projectId: target.projectId?.toString(),
+    projectName: await getProjectName(target.projectId?.toString()),
     description: `Deleted consumable item: ${target.name}`,
     oldValue: { name: target.name },
   });

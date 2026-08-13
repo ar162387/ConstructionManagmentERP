@@ -4,7 +4,7 @@ import { ContractorEntry } from "../models/ContractorEntry.js";
 import { ContractorPayment } from "../models/ContractorPayment.js";
 import { ContractorPaymentAllocation } from "../models/ContractorPaymentAllocation.js";
 import { User } from "../models/User.js";
-import { logAudit } from "./auditService.js";
+import { logAudit, getProjectName } from "./auditService.js";
 import { roleDisplay } from "./authService.js";
 
 export interface ContractorPayload {
@@ -56,14 +56,31 @@ export interface ContractorTotals {
   remaining: number;
 }
 
-/** Compute contractor totals from entries and payments (all-time). */
-export async function getContractorTotals(contractorId: string): Promise<ContractorTotals> {
+export interface ContractorTotalsOptions {
+  /** Inclusive "YYYY-MM-DD" range. When provided, totals are computed only from entries/payments
+   *  dated within the range instead of the contractor's all-time history. */
+  startDate?: string;
+  endDate?: string;
+}
+
+/** Compute contractor totals from entries and payments (all-time, or within a date range). */
+export async function getContractorTotals(contractorId: string, options?: ContractorTotalsOptions): Promise<ContractorTotals> {
   if (!mongoose.Types.ObjectId.isValid(contractorId)) {
     return { totalAmount: 0, totalPaid: 0, remaining: 0 };
   }
+  const startDate = options?.startDate?.trim() || undefined;
+  const endDate = options?.endDate?.trim() || undefined;
+  const dateMatch: Record<string, unknown> = {};
+  if (startDate || endDate) {
+    dateMatch.date = {
+      ...(startDate && { $gte: startDate }),
+      ...(endDate && { $lte: endDate }),
+    };
+  }
+  const cid = new mongoose.Types.ObjectId(contractorId);
   const [entrySum, paymentSum] = await Promise.all([
-    ContractorEntry.aggregate([{ $match: { contractorId: new mongoose.Types.ObjectId(contractorId) } }, { $group: { _id: null, total: { $sum: "$amount" } } }]).then((r) => r[0]?.total ?? 0),
-    ContractorPayment.aggregate([{ $match: { contractorId: new mongoose.Types.ObjectId(contractorId) } }, { $group: { _id: null, total: { $sum: "$amount" } } }]).then((r) => r[0]?.total ?? 0),
+    ContractorEntry.aggregate([{ $match: { contractorId: cid, ...dateMatch } }, { $group: { _id: null, total: { $sum: "$amount" } } }]).then((r) => r[0]?.total ?? 0),
+    ContractorPayment.aggregate([{ $match: { contractorId: cid, ...dateMatch } }, { $group: { _id: null, total: { $sum: "$amount" } } }]).then((r) => r[0]?.total ?? 0),
   ]);
   const totalAmount = entrySum;
   const totalPaid = paymentSum;
@@ -73,10 +90,12 @@ export async function getContractorTotals(contractorId: string): Promise<Contrac
   return { totalAmount, totalPaid, remaining };
 }
 
-/** List contractors for a project. Site Manager: uses assigned project. Admin/Super Admin: uses projectId param. */
+/** List contractors for a project. Site Manager: uses assigned project. Admin/Super Admin: uses projectId param.
+ *  Pass startDate/endDate to compute totals within that inclusive date range instead of all-time. */
 export async function listContractors(
   actor: { userId: string; role: string },
-  projectIdParam?: string
+  projectIdParam?: string,
+  options?: ContractorTotalsOptions
 ): Promise<ContractorWithTotals[]> {
   let projectId: string | undefined;
   if (actor.role === "site_manager") {
@@ -90,7 +109,7 @@ export async function listContractors(
   const docs = await Contractor.find(query).lean();
   const result: ContractorWithTotals[] = [];
   for (const doc of docs) {
-    const totals = await getContractorTotals(doc._id.toString());
+    const totals = await getContractorTotals(doc._id.toString(), options);
     result.push({
       ...toPayload(doc),
       totalAmount: totals.totalAmount,
@@ -145,6 +164,8 @@ export async function createContractor(
     action: "create",
     module: "contractors",
     entityId: contractor._id.toString(),
+    projectId: contractor.projectId?.toString(),
+    projectName: await getProjectName(contractor.projectId?.toString()),
     description: `Created contractor: ${contractor.name}`,
     newValue: { name: contractor.name },
   });
@@ -184,6 +205,8 @@ export async function updateContractor(
     action: "update",
     module: "contractors",
     entityId: id,
+    projectId: target.projectId?.toString(),
+    projectName: await getProjectName(target.projectId?.toString()),
     description: `Updated contractor: ${target.name}`,
     oldValue: { name: target.name },
     newValue: { name: updated.name },
@@ -228,6 +251,8 @@ export async function deleteContractor(
     action: "delete",
     module: "contractors",
     entityId: id,
+    projectId: target.projectId?.toString(),
+    projectName: await getProjectName(target.projectId?.toString()),
     description: `Deleted contractor: ${target.name}`,
     oldValue: { name: target.name },
   });

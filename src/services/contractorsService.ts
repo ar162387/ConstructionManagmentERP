@@ -31,10 +31,19 @@ export interface UpdateContractorInput {
   description?: string;
 }
 
-/** projectId: filter by project. Omit for all contractors (Admin/Super Admin) or Site Manager uses assigned project. */
-export async function listContractors(projectId?: string | null): Promise<ApiContractorWithTotals[]> {
-  const url = projectId ? `/api/contractors?${new URLSearchParams({ projectId })}` : "/api/contractors";
-  return api<ApiContractorWithTotals[]>(url);
+/** projectId: filter by project. Omit for all contractors (Admin/Super Admin) or Site Manager uses assigned project.
+ *  startDate/endDate: optional inclusive date range — when both set, totals reflect that period. */
+export async function listContractors(
+  projectId?: string | null,
+  startDate?: string | null,
+  endDate?: string | null
+): Promise<ApiContractorWithTotals[]> {
+  const params = new URLSearchParams();
+  if (projectId) params.set("projectId", projectId);
+  if (startDate) params.set("startDate", startDate);
+  if (endDate) params.set("endDate", endDate);
+  const q = params.toString();
+  return api<ApiContractorWithTotals[]>(`/api/contractors${q ? `?${q}` : ""}`);
 }
 
 export async function getContractor(id: string): Promise<ApiContractor> {

@@ -22,6 +22,7 @@ import { getEmployeeLedger, createEmployeePayment } from "@/services/employeeLed
 import type { ApiEmployeeWithSnapshot } from "@/services/employeesService";
 import type { ApiMonthlySnapshot } from "@/services/employeeLedgerService";
 import { toast } from "sonner";
+import { todayPKT } from "@/lib/pktDate";
 
 interface EmployeeLiabilityPaymentDialogProps {
   open: boolean;
@@ -39,7 +40,7 @@ export function EmployeeLiabilityPaymentDialog({
   employee,
   onSuccess,
 }: EmployeeLiabilityPaymentDialogProps) {
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(todayPKT());
   const [amount, setAmount] = useState("");
   const [month, setMonth] = useState(getLocalMonthKey());
   const [paymentMode, setPaymentMode] = useState<"Cash" | "Bank" | "Online">("Bank");

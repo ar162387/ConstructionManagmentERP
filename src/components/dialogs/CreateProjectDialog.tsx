@@ -19,6 +19,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { createProject } from "@/services/projectsService";
 import { toast } from "sonner";
+import { todayPKT } from "@/lib/pktDate";
 
 type Status = "Active" | "On Hold" | "Completed";
 
@@ -56,7 +57,7 @@ export function CreateProjectDialog({ open, onOpenChange, onCreated }: CreatePro
         description: description.trim(),
         allocatedBudget: budget,
         status,
-        startDate: startDate || new Date().toISOString().slice(0, 10),
+        startDate: startDate || todayPKT(),
         endDate: endDate || "",
       });
       toast.success("Project created");

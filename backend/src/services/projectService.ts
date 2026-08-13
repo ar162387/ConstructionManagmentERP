@@ -118,6 +118,8 @@ export async function createProject(actor: { userId: string; email: string; role
     action: "create",
     module: "projects",
     entityId: project._id.toString(),
+    projectId: project._id.toString(),
+    projectName: project.name,
     description: `Created project: ${project.name}`,
     newValue: { name: project.name, status: statusDisplay[project.status], allocatedBudget: project.allocatedBudget },
   });
@@ -171,6 +173,8 @@ export async function updateProject(
     action: "update",
     module: "projects",
     entityId: id,
+    projectId: id,
+    projectName: updated.name,
     description: `Updated project: ${target.name}`,
     oldValue: { name: target.name, status: statusDisplay[target.status], allocatedBudget: target.allocatedBudget },
     newValue: { name: updated.name, status: statusDisplay[updated.status], allocatedBudget: updated.allocatedBudget },
@@ -234,6 +238,8 @@ export async function deleteProject(actor: { userId: string; email: string; role
     action: "delete",
     module: "projects",
     entityId: id,
+    projectId: id,
+    projectName: target.name,
     description: `Deleted project: ${target.name}`,
     oldValue: { name: target.name, status: statusDisplay[target.status] },
   });

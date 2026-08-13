@@ -19,6 +19,8 @@ import {
 import { createContractorPayment } from "@/services/contractorLedgerService";
 import type { ApiContractorWithTotals } from "@/services/contractorsService";
 import { toast } from "sonner";
+import { formatCurrency } from "@/lib/mock-data";
+import { todayPKT } from "@/lib/pktDate";
 
 interface ContractorPaymentDialogProps {
   open: boolean;
@@ -36,7 +38,7 @@ export function ContractorPaymentDialog({
   remainingBalance = 0,
   onSuccess,
 }: ContractorPaymentDialogProps) {
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(todayPKT());
   const [amount, setAmount] = useState("");
   const [paymentMode, setPaymentMode] = useState<"Cash" | "Bank" | "Online">("Bank");
   const [paymentType, setPaymentType] = useState<"settlement" | "advance">("settlement");
@@ -52,7 +54,7 @@ export function ContractorPaymentDialog({
       return;
     }
     if (paymentType === "settlement" && amt > remainingBalance) {
-      toast.error(`Amount exceeds remaining balance of ${remainingBalance.toLocaleString()} PKR`);
+      toast.error(`Amount exceeds remaining balance of ${formatCurrency(remainingBalance)} PKR`);
       return;
     }
     setSubmitting(true);
@@ -85,8 +87,8 @@ export function ContractorPaymentDialog({
           <DialogTitle>Record Payment — {contractor.name}</DialogTitle>
           <p className="text-sm text-muted-foreground">
             {remainingBalance < 0
-              ? `Advance credit: ${Math.abs(remainingBalance).toLocaleString()} PKR`
-              : `Remaining balance: ${remainingBalance.toLocaleString()} PKR`}
+              ? `Advance credit: ${formatCurrency(Math.abs(remainingBalance))} PKR`
+              : `Remaining balance: ${formatCurrency(remainingBalance)} PKR`}
           </p>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">

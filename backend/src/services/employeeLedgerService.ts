@@ -5,11 +5,12 @@ import { EmployeeAttendance } from "../models/EmployeeAttendance.js";
 import { MachinePayment } from "../models/MachinePayment.js";
 import { rebuildMachinePaymentAllocations } from "./machinePaymentAllocationService.js";
 import { User } from "../models/User.js";
-import { logAudit } from "./auditService.js";
+import { logAudit, getProjectName } from "./auditService.js";
 import { roleDisplay } from "./authService.js";
 import type { IEmployee } from "../models/Employee.js";
 import type { IEmployeePayment } from "../models/EmployeePayment.js";
 import type { IEmployeeAttendance } from "../models/EmployeeAttendance.js";
+import { monthKeyPKT } from "../lib/pktDate.js";
 
 export const GLOBAL_ALLOWED_LEAVES_DEFAULT = 4;
 
@@ -18,8 +19,9 @@ function getDaysInMonth(month: string): number {
   return new Date(year, monthNum, 0).getDate();
 }
 
+/** Round to 2 decimal places (paisa) — not to whole rupees, so fractional rates/proration aren't lost. */
 function roundAmount(value: number): number {
-  return Math.round(value);
+  return Math.round(value * 100) / 100;
 }
 
 function monthEndDate(month: string): string {
@@ -37,7 +39,7 @@ function nextMonth(month: string): string {
  * Prefers the user-specified joiningDate over the DB-insert createdAt timestamp. */
 function effectiveFirstMonth(employee: { joiningDate?: string; createdAt?: Date }): string | null {
   if (employee.joiningDate?.trim()) return employee.joiningDate.trim().slice(0, 7);
-  return employee.createdAt ? new Date(employee.createdAt).toISOString().slice(0, 7) : null;
+  return employee.createdAt ? monthKeyPKT(new Date(employee.createdAt)) : null;
 }
 
 /** Build day -> status map from fixed entries */
@@ -237,7 +239,8 @@ export async function getEmployeeSnapshotForMonth(
   employeeId: string,
   month: string,
   employeeCreatedAt?: Date,
-  employeeJoiningDate?: string
+  employeeJoiningDate?: string,
+  employeeType?: "Fixed" | "Daily"
 ): Promise<MonthlySnapshot | undefined> {
   let firstMonth: string | null = null;
   if (employeeCreatedAt != null || employeeJoiningDate != null) {
@@ -264,11 +267,19 @@ export async function getEmployeeSnapshotForMonth(
   const remaining = Math.max(0, payable - paid);
   const monthEnd = monthEndDate(month);
   const settlementDate = lastNonAdvance?.date ?? null;
+  const outstandingAdvance =
+    employeeType === "Daily"
+      ? await getOutstandingAdvanceThroughMonth(employeeId, month, {
+          createdAt: employeeCreatedAt,
+          joiningDate: employeeJoiningDate,
+        })
+      : undefined;
   return {
     payable,
     paid,
     remaining,
     advancePaid,
+    ...(outstandingAdvance !== undefined && { outstandingAdvance }),
     paymentStatus: paymentStatus(payable, paid, remaining, settlementDate, monthEnd),
     ...(attendance && { attendance }),
   };
@@ -301,31 +312,88 @@ function monthsFromTo(firstMonth: string, currentMonth: string): string[] {
   return out;
 }
 
+export interface EmployeeTotalsOptions {
+  /** Inclusive "YYYY-MM-DD" range. When provided, totals reflect only that period — see the
+   *  semantics note on getEmployeeTotals below. */
+  startDate?: string;
+  endDate?: string;
+}
+
 /** Aggregate totalPaid (sum of all payments) and totalDue (sum of remaining per month) for an employee.
- * Includes the current month in totalDue so pending salary for the current month is reflected. */
-export async function getEmployeeTotals(employeeId: string): Promise<{ totalPaid: number; totalDue: number }> {
+ * Includes the current month in totalDue so pending salary for the current month is reflected.
+ *
+ * Date-range semantics (when options.startDate/endDate are supplied): payroll doesn't have a single
+ * "occurred on" date per liability — a month's salary accrues across the whole month. We treat a
+ * month's payable amount as "occurring within the range" if that calendar month (YYYY-MM) overlaps
+ * the [startDate, endDate] range at all, i.e. the month string falls between startDate's and
+ * endDate's month. Payments are attributed to their own `date` field (when it falls within the
+ * range), same as vendors/contractors/machines. This mirrors how a real payroll ledger would report
+ * "salary liability for period X" — the accrual is monthly, not daily, but everything else in the
+ * range filter is date-precise. */
+export async function getEmployeeTotals(
+  employeeId: string,
+  options?: EmployeeTotalsOptions
+): Promise<{ totalPaid: number; totalDue: number }> {
   if (!mongoose.Types.ObjectId.isValid(employeeId)) {
     return { totalPaid: 0, totalDue: 0 };
   }
   const oid = new mongoose.Types.ObjectId(employeeId);
+  const startDate = options?.startDate?.trim() || undefined;
+  const endDate = options?.endDate?.trim() || undefined;
   const currentMonth = getCurrentMonth();
-  const [employee, paidAgg, paymentMonths, attendanceMonths] = await Promise.all([
-    Employee.findById(employeeId).select("createdAt joiningDate").lean(),
-    EmployeePayment.aggregate([{ $match: { employeeId: oid } }, { $group: { _id: null, total: { $sum: "$amount" } } }]),
-    EmployeePayment.distinct("month", { employeeId: oid }),
-    EmployeeAttendance.distinct("month", { employeeId: oid }),
+
+  if (!startDate && !endDate) {
+    const [employee, paidAgg, paymentMonths, attendanceMonths] = await Promise.all([
+      Employee.findById(employeeId).select("createdAt joiningDate").lean(),
+      EmployeePayment.aggregate([{ $match: { employeeId: oid } }, { $group: { _id: null, total: { $sum: "$amount" } } }]),
+      EmployeePayment.distinct("month", { employeeId: oid }),
+      EmployeeAttendance.distinct("month", { employeeId: oid }),
+    ]);
+    const totalPaid = paidAgg[0]?.total ?? 0;
+    const firstMonth = employee ? effectiveFirstMonth(employee) ?? "1970-01" : "1970-01";
+    const monthsUpToCurrent = monthsFromTo(firstMonth, currentMonth);
+    const months = [...new Set([...paymentMonths, ...attendanceMonths, ...monthsUpToCurrent])].filter(
+      (m) => m >= firstMonth && m <= currentMonth
+    );
+    let totalDue = 0;
+    for (const month of months) {
+      const payable = await computePayableForMonth(employeeId, month);
+      const paid = await getMonthPaid(employeeId, month);
+      totalDue += Math.max(0, payable - paid);
+    }
+    return { totalPaid, totalDue };
+  }
+
+  // Date-ranged: payable is summed over the months overlapping the range (see semantics note
+  // above), minus payments dated within the range for those same months. totalPaid (display stat)
+  // is every payment dated within the range, regardless of which month it settles.
+  const employee = await Employee.findById(employeeId).select("createdAt joiningDate").lean();
+  const firstMonth = employee ? effectiveFirstMonth(employee) ?? "1970-01" : "1970-01";
+  const rangeStartMonth = startDate ? startDate.slice(0, 7) : firstMonth;
+  const rangeEndMonth = endDate ? endDate.slice(0, 7) : currentMonth;
+  const loMonth = rangeStartMonth > firstMonth ? rangeStartMonth : firstMonth;
+  const hiMonth = rangeEndMonth < currentMonth ? rangeEndMonth : currentMonth;
+  const months = monthsFromTo(loMonth, hiMonth);
+
+  const dateMatch: Record<string, unknown> = {
+    ...(startDate && { $gte: startDate }),
+    ...(endDate && { $lte: endDate }),
+  };
+  const paidAgg = await EmployeePayment.aggregate([
+    { $match: { employeeId: oid, date: dateMatch } },
+    { $group: { _id: null, total: { $sum: "$amount" } } },
   ]);
   const totalPaid = paidAgg[0]?.total ?? 0;
-  const firstMonth = employee ? effectiveFirstMonth(employee) ?? "1970-01" : "1970-01";
-  const monthsUpToCurrent = monthsFromTo(firstMonth, currentMonth);
-  const months = [...new Set([...paymentMonths, ...attendanceMonths, ...monthsUpToCurrent])].filter(
-    (m) => m >= firstMonth && m <= currentMonth
-  );
+
   let totalDue = 0;
   for (const month of months) {
     const payable = await computePayableForMonth(employeeId, month);
-    const paid = await getMonthPaid(employeeId, month);
-    totalDue += Math.max(0, payable - paid);
+    // Payments toward that month's due, restricted to the date range.
+    const monthPaid = await EmployeePayment.aggregate([
+      { $match: { employeeId: oid, month, date: dateMatch } },
+      { $group: { _id: null, total: { $sum: "$amount" } } },
+    ]).then((r) => r[0]?.total ?? 0);
+    totalDue += Math.max(0, payable - monthPaid);
   }
   return { totalPaid, totalDue };
 }
@@ -354,15 +422,67 @@ export async function getMonthAdvancePaid(employeeId: string, month: string): Pr
   return result[0]?.total ?? 0;
 }
 
-/** Validation: can we add this payment? Amount > 0 and currentPaid + amount <= payable. */
+/** Month (YYYY-MM) strictly before the given month. */
+function prevMonth(month: string): string {
+  const [year, monthNumber] = month.split("-").map(Number);
+  const date = new Date(year, monthNumber - 2, 1);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+/**
+ * Daily/wage employees only: advances are given ahead of any specific month's payable, so track
+ * how much advance given BEFORE month M has NOT yet been "worked off" by payable earned in prior
+ * months. carriedIn(M) = max(0, sum(Advance payments dated before M) - sum(payable for every
+ * month before M)). Deliberately excludes advances dated IN month M itself — those are already
+ * reflected in that month's own `paid` total (which sums every payment type for the month), so
+ * the salary sheet combines this carried-in figure with `paid` rather than double counting.
+ */
+export async function getOutstandingAdvanceThroughMonth(
+  employeeId: string,
+  month: string,
+  employee: { joiningDate?: string; createdAt?: Date }
+): Promise<number> {
+  const monthStart = `${month}-01`;
+  const advanceAgg = await EmployeePayment.aggregate([
+    {
+      $match: {
+        employeeId: new mongoose.Types.ObjectId(employeeId),
+        type: "Advance",
+        date: { $lt: monthStart },
+      },
+    },
+    { $group: { _id: null, total: { $sum: "$amount" } } },
+  ]);
+  const advanceTotal = advanceAgg[0]?.total ?? 0;
+
+  const firstMonth = effectiveFirstMonth(employee);
+  if (!firstMonth || firstMonth >= month) {
+    return Math.max(0, roundAmount(advanceTotal));
+  }
+  const priorMonths = monthsFromTo(firstMonth, prevMonth(month));
+  let payableBefore = 0;
+  for (const m of priorMonths) {
+    payableBefore += await computePayableForMonth(employeeId, m);
+  }
+  return Math.max(0, roundAmount(advanceTotal - payableBefore));
+}
+
+/** Validation: can we add this payment? Amount > 0 and currentPaid + amount <= payable.
+ * Daily (wage) employees' Advance-type payments skip this entirely — they aren't tied to a
+ * specific month's payable, since advances are typically given ahead of marked attendance. */
 async function validateAddPayment(
   employeeId: string,
   month: string,
   amount: number,
-  globalAllowedLeaves: number
+  globalAllowedLeaves: number,
+  employeeType: "Fixed" | "Daily",
+  paymentType: "Advance" | "Salary" | "Wage"
 ): Promise<void> {
   if (!Number.isFinite(amount) || amount <= 0) {
     throw new Error("Amount must be greater than zero.");
+  }
+  if (employeeType === "Daily" && paymentType === "Advance") {
+    return;
   }
   const payable = await computePayableForMonth(employeeId, month, globalAllowedLeaves);
   if (payable <= 0) {
@@ -372,23 +492,29 @@ async function validateAddPayment(
   }
   const currentPaid = await getMonthPaid(employeeId, month);
   if (currentPaid + amount > payable) {
-    const maxAllowed = Math.max(0, Math.round(payable - currentPaid));
+    const maxAllowed = Math.max(0, Math.round((payable - currentPaid) * 100) / 100);
     throw new Error(
       `Total paid for this month would exceed payable (${payable.toLocaleString()}). Maximum allowed: ${maxAllowed.toLocaleString()}.`
     );
   }
 }
 
-/** Validation: can we apply this edit? Same logic as frontend canEditPayment. */
+/** Validation: can we apply this edit? Same logic as frontend canEditPayment.
+ * Daily (wage) employees' Advance-type payments skip this entirely (see validateAddPayment). */
 async function validateEditPayment(
   payment: IEmployeePayment,
   employeeId: string,
   newAmount: number,
   newMonth: string,
-  globalAllowedLeaves: number
+  globalAllowedLeaves: number,
+  employeeType: "Fixed" | "Daily",
+  newType: "Advance" | "Salary" | "Wage"
 ): Promise<void> {
   if (!Number.isFinite(newAmount) || newAmount <= 0) {
     throw new Error("Amount must be greater than zero.");
+  }
+  if (employeeType === "Daily" && newType === "Advance") {
+    return;
   }
   const oldMonth = payment.month;
   const oldAmount = payment.amount;
@@ -398,7 +524,7 @@ async function validateEditPayment(
     const currentPaid = await getMonthPaid(employeeId, oldMonth);
     const paidAfterEdit = currentPaid - oldAmount + newAmount;
     if (paidAfterEdit > payable) {
-      const maxAllowed = Math.max(0, Math.round(payable - (currentPaid - oldAmount)));
+      const maxAllowed = Math.max(0, Math.round((payable - (currentPaid - oldAmount)) * 100) / 100);
       throw new Error(
         `Total paid for this month would exceed payable (${payable.toLocaleString()}). Maximum allowed: ${maxAllowed.toLocaleString()}.`
       );
@@ -417,7 +543,7 @@ async function validateEditPayment(
     throw new Error("After moving this payment, total paid for the original month would exceed payable.");
   }
   if (paidNewAfterEdit > payableNew) {
-    const maxAllowed = Math.max(0, Math.round(payableNew - paidNew));
+    const maxAllowed = Math.max(0, Math.round((payableNew - paidNew) * 100) / 100);
     throw new Error(
       `Total paid for the new month would exceed payable (${payableNew.toLocaleString()}). Maximum allowed: ${maxAllowed.toLocaleString()}.`
     );
@@ -461,6 +587,8 @@ export interface MonthlySnapshot {
   remaining: number;
   /** Sum of Advance payments recorded for this month (for salary sheet net). */
   advancePaid: number;
+  /** Daily (wage) employees only: cumulative advance not yet worked off through this month. */
+  outstandingAdvance?: number;
   paymentStatus: "Paid" | "Partial" | "Due" | "Late";
   attendance?: AttendanceSnapshot;
 }
@@ -514,7 +642,14 @@ export async function createEmployeePayment(
   if (!["Advance", "Salary", "Wage"].includes(input.type)) throw new Error("Invalid payment type");
   if (!["Cash", "Bank", "Online"].includes(input.paymentMethod)) throw new Error("Invalid payment method");
 
-  await validateAddPayment(employeeId, input.month, input.amount, GLOBAL_ALLOWED_LEAVES_DEFAULT);
+  await validateAddPayment(
+    employeeId,
+    input.month,
+    input.amount,
+    GLOBAL_ALLOWED_LEAVES_DEFAULT,
+    employee.type,
+    input.type
+  );
 
   const payment = await EmployeePayment.create({
     employeeId: new mongoose.Types.ObjectId(employeeId),
@@ -552,6 +687,8 @@ export async function createEmployeePayment(
     action: "create",
     module: "employees",
     entityId: payment._id.toString(),
+    projectId: employee.projectId?.toString(),
+    projectName: await getProjectName(employee.projectId?.toString()),
     description: `Payment recorded: ${employeeName?.name ?? "Employee"} - ${payment.type} ${payment.amount.toLocaleString()} (${payment.month})`,
     newValue: { amount: payment.amount, type: payment.type, month: payment.month },
   });
@@ -573,8 +710,17 @@ export async function updateEmployeePayment(
 
   const newAmount = input.amount ?? payment.amount;
   const newMonth = (input.month ?? payment.month).trim();
+  const newType = input.type ?? payment.type;
 
-  await validateEditPayment(payment, payment.employeeId.toString(), newAmount, newMonth, GLOBAL_ALLOWED_LEAVES_DEFAULT);
+  await validateEditPayment(
+    payment,
+    payment.employeeId.toString(),
+    newAmount,
+    newMonth,
+    GLOBAL_ALLOWED_LEAVES_DEFAULT,
+    employee.type,
+    newType
+  );
 
   const updates: Record<string, unknown> = {};
   if (input.month != null) updates.month = input.month.trim();
@@ -597,6 +743,8 @@ export async function updateEmployeePayment(
     action: "update",
     module: "employees",
     entityId: paymentId,
+    projectId: employee.projectId?.toString(),
+    projectName: await getProjectName(employee.projectId?.toString()),
     description: `Updated payment: ${updated.amount} (${updated.month})`,
     oldValue: { amount: payment.amount, month: payment.month },
     newValue: { amount: updated.amount, month: updated.month },
@@ -632,6 +780,8 @@ export async function deleteEmployeePayment(
     action: "delete",
     module: "employees",
     entityId: paymentId,
+    projectId: employee.projectId?.toString(),
+    projectName: await getProjectName(employee.projectId?.toString()),
     description: `Deleted payment: ${payment.amount} (${payment.month})`,
     oldValue: { amount: payment.amount, month: payment.month },
   });
@@ -711,18 +861,26 @@ export async function getEmployeeLedger(
       .select("date")
       .lean();
     const settlementDate = lastNonAdvance?.date ?? null;
+    const outstandingAdvance =
+      employee?.type === "Daily"
+        ? await getOutstandingAdvanceThroughMonth(employeeId, month, {
+            createdAt: employee.createdAt,
+            joiningDate: employee.joiningDate,
+          })
+        : undefined;
     snapshot = {
       payable,
       paid,
       remaining,
       advancePaid,
+      ...(outstandingAdvance !== undefined && { outstandingAdvance }),
       paymentStatus: paymentStatus(payable, paid, remaining, settlementDate, monthEnd),
     };
   }
 
   const allPaymentDocs = await EmployeePayment.find(baseMatch).sort({ date: 1, _id: 1 }).lean();
   const firstMonth = employee ? effectiveFirstMonth(employee) : null;
-  const currentMonth = new Date().toISOString().slice(0, 7);
+  const currentMonth = monthKeyPKT();
   const payableRows: Omit<EmployeeLedgerRow, "runningTotal">[] = [];
   if (firstMonth) {
     for (let cursor = firstMonth; cursor <= currentMonth; cursor = nextMonth(cursor)) {
@@ -736,11 +894,21 @@ export async function getEmployeeLedger(
     ...payableRows,
     ...allPaymentDocs.map((payment) => ({ type: "payment" as const, id: payment._id.toString(), date: payment.date, month: payment.month, amount: payment.amount, remarks: payment.remarks, paymentMethod: payment.paymentMethod, paymentType: payment.type })),
   ].sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
+  // Daily (wage) employees: an Advance is money given ahead of earned wages, so track it as an
+  // accumulating amount the employee still owes back via future work, instead of subtracting it
+  // like a normal salary/wage settlement. Fixed employees are unaffected — every payment subtracts.
+  const isDailyEmployee = employee?.type === "Daily";
   let balance = 0;
   let previousBalance = 0;
   const rows: EmployeeLedgerRow[] = [];
   for (const row of allRows) {
-    balance += row.type === "payable" ? row.amount : -row.amount;
+    if (row.type === "payable") {
+      balance += row.amount;
+    } else if (isDailyEmployee && row.paymentType === "Advance") {
+      balance += row.amount;
+    } else {
+      balance -= row.amount;
+    }
     if (options?.startDate && row.date < options.startDate) {
       previousBalance = balance;
       continue;
@@ -761,7 +929,7 @@ export async function getEmployeeLedgerSnapshot(
   if (!mongoose.Types.ObjectId.isValid(employeeId) || !month?.trim()) {
     return { snapshot: null };
   }
-  await ensureEmployeeAccess(actor, employeeId);
+  const employee = await ensureEmployeeAccess(actor, employeeId);
   const m = month.trim();
   const payable = await computePayableForMonth(employeeId, m);
   const paid = await getMonthPaid(employeeId, m);
@@ -775,11 +943,19 @@ export async function getEmployeeLedgerSnapshot(
     .select("date")
     .lean();
   const settlementDate = lastNonAdvance?.date ?? null;
+  const outstandingAdvance =
+    employee.type === "Daily"
+      ? await getOutstandingAdvanceThroughMonth(employeeId, m, {
+          createdAt: employee.createdAt,
+          joiningDate: employee.joiningDate,
+        })
+      : undefined;
   const snapshot: MonthlySnapshot = {
     payable,
     paid,
     remaining,
     advancePaid,
+    ...(outstandingAdvance !== undefined && { outstandingAdvance }),
     paymentStatus: paymentStatus(payable, paid, remaining, settlementDate, monthEnd),
   };
   return { snapshot };

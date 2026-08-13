@@ -22,6 +22,8 @@ import { toast } from "sonner";
 import { createItemLedgerEntry, updateItemLedgerEntry, type ApiItemLedgerEntry } from "@/services/itemLedgerService";
 import { createConsumableUnit, listConsumableUnits, type ApiConsumableUnit } from "@/services/consumableUnitService";
 import { Plus } from "lucide-react";
+import { formatCurrency } from "@/lib/mock-data";
+import { todayPKT } from "@/lib/pktDate";
 
 interface AddLedgerEntryDialogProps {
   open: boolean;
@@ -47,7 +49,7 @@ export function AddLedgerEntryDialog({
   const isEdit = !!editEntry;
   const { vendors } = useVendors(projectId);
 
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(todayPKT());
   const [quantity, setQuantity] = useState("");
   const [unit, setUnit] = useState("");
   const [units, setUnits] = useState<ApiConsumableUnit[]>([]);
@@ -64,7 +66,7 @@ export function AddLedgerEntryDialog({
   const [loading, setLoading] = useState(false);
 
   const resetCreateForm = () => {
-    setDate(new Date().toISOString().slice(0, 10));
+    setDate(todayPKT());
     setQuantity("");
     setUnit("");
     setUnitPrice("");
@@ -93,7 +95,7 @@ export function AddLedgerEntryDialog({
         setReferenceId(editEntry.referenceId ?? "");
         setRemarks(editEntry.remarks ?? "");
       } else {
-        setDate(new Date().toISOString().slice(0, 10));
+        setDate(todayPKT());
         setQuantity("");
         setUnit("");
         setUnitPrice("");
@@ -228,7 +230,7 @@ export function AddLedgerEntryDialog({
           )}
           {totalPrice !== null && (
             <p className="text-sm text-muted-foreground">
-              Total: <span className="font-bold">{totalPrice.toLocaleString()} PKR</span>
+              Total: <span className="font-bold">{formatCurrency(totalPrice)} PKR</span>
             </p>
           )}
           <div>
@@ -249,10 +251,10 @@ export function AddLedgerEntryDialog({
                 const paidNum = parseFloat(paidAmount) || 0;
                 const excess = paidNum - totalPrice;
                 return excess > 0 ? (
-                  <p className="text-xs text-success mt-1">Advance after this invoice: {excess.toLocaleString()} PKR.</p>
+                  <p className="text-xs text-success mt-1">Advance after this invoice: {formatCurrency(excess)} PKR.</p>
                 ) : (
                   <p className="text-xs text-muted-foreground mt-1">
-                    Balance after this invoice: {Math.max(0, totalPrice - paidNum).toLocaleString()} PKR
+                    Balance after this invoice: {formatCurrency(Math.max(0, totalPrice - paidNum))} PKR
                   </p>
                 );
               })()

@@ -3,7 +3,7 @@ import { useParams, useSearchParams, Link } from "react-router-dom";
 import Layout from "@/components/Layout";
 import PageHeader from "@/components/PageHeader";
 import StatCard from "@/components/StatCard";
-import { formatCurrency } from "@/lib/mock-data";
+import { formatCurrencyDecimal } from "@/lib/mock-data";
 import { getMachine } from "@/services/machinesService";
 import { useMachineLedger } from "@/hooks/useMachineLedger";
 import { AddMachineLedgerEntryDialog } from "@/components/dialogs/AddMachineLedgerEntryDialog";
@@ -177,7 +177,7 @@ export default function MachineLedger() {
 
       <PageHeader
         title={`${machine.name} — Ledger`}
-        subtitle={`${machine.ownership} | Rate: ${formatCurrency(machine.hourlyRate)}/hr`}
+        subtitle={`${machine.ownership} | Rate: ${formatCurrencyDecimal(machine.hourlyRate)}/hr`}
         printTargetId="machine-ledger"
         actions={
           <div className="flex gap-2">
@@ -209,7 +209,7 @@ export default function MachineLedger() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete ledger entry?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will remove the entry ({deleteEntryState?.date}, {deleteEntryState?.hoursWorked} hrs, {formatCurrency(deleteEntryState?.totalCost ?? 0)}). Balances will be recalculated. This action cannot be undone.
+              This will remove the entry ({deleteEntryState?.date}, {deleteEntryState?.hoursWorked} hrs, {formatCurrencyDecimal(deleteEntryState?.totalCost ?? 0)}). Balances will be recalculated. This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -225,7 +225,7 @@ export default function MachineLedger() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete payment?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will remove the payment record ({deletePaymentState?.date}, {formatCurrency(deletePaymentState?.amount ?? 0)}). Balances will be recalculated. This action cannot be undone.
+              This will remove the payment record ({deletePaymentState?.date}, {formatCurrencyDecimal(deletePaymentState?.amount ?? 0)}). Balances will be recalculated. This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -275,15 +275,15 @@ export default function MachineLedger() {
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-5 mb-6 print-hidden">
         <StatCard label="Total Hours" value={totalHours.toString()} variant="info" />
-        <StatCard label="Total Cost" value={formatCurrency(totalCost)} />
-        <StatCard label="Total Paid" value={formatCurrency(totalPaid)} variant="success" />
+        <StatCard label="Total Cost" value={formatCurrencyDecimal(totalCost)} />
+        <StatCard label="Total Paid" value={formatCurrencyDecimal(totalPaid)} variant="success" />
         {advance > 0 ? (
-          <StatCard label="Advance" value={formatCurrency(advance)} variant="success" />
+          <StatCard label="Advance" value={formatCurrencyDecimal(advance)} variant="success" />
         ) : (
-          <StatCard label="Pending" value={formatCurrency(remaining)} variant={remaining > 0 ? "destructive" : "default"} />
+          <StatCard label="Pending" value={formatCurrencyDecimal(remaining)} variant={remaining > 0 ? "destructive" : "default"} />
         )}
         {startDate && (
-          <StatCard label="Previous Balance" value={formatCurrency(previousBalance)} variant="default" />
+          <StatCard label="Previous Balance" value={formatCurrencyDecimal(previousBalance)} variant="default" />
         )}
       </div>
 
@@ -329,9 +329,9 @@ export default function MachineLedger() {
                       <td className="px-4 py-3 text-sm">{row.date}</td>
                       <td className="px-4 py-3 text-sm text-muted-foreground">{row.remarks || "—"}</td>
                       <td className="px-4 py-3 text-right font-mono text-sm">{row.hoursWorked}</td>
-                      <td className="px-4 py-3 text-right font-mono text-sm font-bold">{formatCurrency(row.totalCost)}</td>
+                      <td className="px-4 py-3 text-right font-mono text-sm font-bold">{formatCurrencyDecimal(row.totalCost)}</td>
                       <td className="px-4 py-3 text-right font-mono text-sm text-muted-foreground">—</td>
-                      <td className="px-4 py-3 text-right font-mono text-sm font-bold">{formatCurrency(row.runningTotal)}</td>
+                      <td className="px-4 py-3 text-right font-mono text-sm font-bold">{formatCurrencyDecimal(row.runningTotal)}</td>
                       {canDeleteEntry && (
                         <td className="px-4 py-3 text-right print-hidden">
                           <Button
@@ -354,8 +354,8 @@ export default function MachineLedger() {
                       </td>
                       <td className="px-4 py-3 text-right font-mono text-sm">—</td>
                       <td className="px-4 py-3 text-right font-mono text-sm">—</td>
-                      <td className="px-4 py-3 text-right font-mono text-sm text-success">{formatCurrency(row.amount)}</td>
-                      <td className="px-4 py-3 text-right font-mono text-sm font-bold">{formatCurrency(row.runningTotal)}</td>
+                      <td className="px-4 py-3 text-right font-mono text-sm text-success">{formatCurrencyDecimal(row.amount)}</td>
+                      <td className="px-4 py-3 text-right font-mono text-sm font-bold">{formatCurrencyDecimal(row.runningTotal)}</td>
                       {canDeleteEntry && (
                         <td className="px-4 py-3 text-right print-hidden">
                           <Button
@@ -379,8 +379,8 @@ export default function MachineLedger() {
                 <tr className="border-t-2 border-border bg-muted/30 font-bold">
                   <td colSpan={2} className="px-4 py-3 text-right text-sm uppercase tracking-wider">Total</td>
                   <td className="px-4 py-3 text-right font-mono text-sm">{totalHours}</td>
-                  <td className="px-4 py-3 text-right font-mono text-sm">{formatCurrency(totalCost)}</td>
-                  <td className="px-4 py-3 text-right font-mono text-sm text-success">{formatCurrency(totalPaid)}</td>
+                  <td className="px-4 py-3 text-right font-mono text-sm">{formatCurrencyDecimal(totalCost)}</td>
+                  <td className="px-4 py-3 text-right font-mono text-sm text-success">{formatCurrencyDecimal(totalPaid)}</td>
                   <td className="px-4 py-3" />
                   {canDeleteEntry && <td className="print-hidden" />}
                 </tr>

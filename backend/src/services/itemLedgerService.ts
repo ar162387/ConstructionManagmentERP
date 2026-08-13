@@ -5,7 +5,7 @@ import { StockConsumptionEntry } from "../models/StockConsumptionEntry.js";
 import { ConsumableItem } from "../models/ConsumableItem.js";
 import { Vendor } from "../models/Vendor.js";
 import { User } from "../models/User.js";
-import { logAudit } from "./auditService.js";
+import { logAudit, getProjectName } from "./auditService.js";
 import { roleDisplay } from "./authService.js";
 import { getFifoAllocationForVendor } from "./fifoAllocation.js";
 
@@ -298,6 +298,8 @@ export async function createItemLedgerEntry(
     action: "create",
     module: "item_ledger",
     entityId: result!.id,
+    projectId: item.projectId?.toString(),
+    projectName: await getProjectName(item.projectId?.toString()),
     description: `Added ledger entry: ${item.name} — qty ${input.quantity} @ ${input.unitPrice}`,
     newValue: { quantity: input.quantity, totalPrice, paidAmount: rawPaid, remaining: totalPrice - rawPaid },
   });
@@ -447,6 +449,8 @@ export async function updateItemLedgerEntry(
     action: "update",
     module: "item_ledger",
     entityId: id,
+    projectId: existing.projectId?.toString(),
+    projectName: await getProjectName(existing.projectId?.toString()),
     description: `Updated ledger entry`,
     oldValue: { quantity: existing.quantity, totalPrice: existing.totalPrice, paidAmount: existing.paidAmount },
     newValue: { quantity: newQuantity, totalPrice: newTotalPrice, paidAmount: newPaidAmount },
@@ -528,6 +532,8 @@ export async function deleteItemLedgerEntry(
     action: "delete",
     module: "item_ledger",
     entityId: id,
+    projectId: existing.projectId?.toString(),
+    projectName: await getProjectName(existing.projectId?.toString()),
     description: `Deleted ledger entry`,
     oldValue: { quantity: existing.quantity, totalPrice: existing.totalPrice },
   });

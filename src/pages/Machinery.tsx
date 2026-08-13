@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import Layout from "@/components/Layout";
 import PageHeader from "@/components/PageHeader";
 import StatusBadge from "@/components/StatusBadge";
-import { formatCurrency } from "@/lib/mock-data";
+import { formatCurrencyDecimal } from "@/lib/mock-data";
 import { useAuth } from "@/context/AuthContext";
 import { useSelectedProject } from "@/context/SelectedProjectContext";
 import { useProjects } from "@/hooks/useProjects";
@@ -53,13 +53,14 @@ function defaultPeriodBounds(): { start: string; end: string } {
   return { start, end };
 }
 
-/** Table cells: grouped digits only (PKR stated once above the table). */
+/** Table cells: grouped digits only (PKR stated once above the table). Always shows 2 decimal places, matching the hours columns. */
 function formatRunningBillAmount(amount: number): string {
   const abs = Math.abs(amount);
-  const formatted = new Intl.NumberFormat("en-PK", { maximumFractionDigits: 0 }).format(abs);
+  const formatted = new Intl.NumberFormat("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(abs);
   if (amount < 0) return `(${formatted})`;
   return formatted;
 }
+
 
 function formatHoursCell(n: number): string {
   return n.toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -661,15 +662,15 @@ export default function Machinery() {
                         <td className="px-4 py-3">
                           <StatusBadge status={m.ownership} />
                         </td>
-                        <td className="px-4 py-3 text-right font-mono text-sm">{formatCurrency(m.hourlyRate)}</td>
+                        <td className="px-4 py-3 text-right font-mono text-sm">{formatCurrencyDecimal(m.hourlyRate)}</td>
                         <td className="px-4 py-3 text-right font-mono text-sm">{m.totalHours}</td>
-                        <td className="px-4 py-3 text-right font-mono text-sm font-bold">{formatCurrency(m.totalCost)}</td>
-                        <td className="px-4 py-3 text-right font-mono text-sm text-success">{formatCurrency(m.totalPaid)}</td>
+                        <td className="px-4 py-3 text-right font-mono text-sm font-bold">{formatCurrencyDecimal(m.totalCost)}</td>
+                        <td className="px-4 py-3 text-right font-mono text-sm text-success">{formatCurrencyDecimal(m.totalPaid)}</td>
                         <td className="px-4 py-3 text-right font-mono text-sm">
                           {m.totalPending > 0 ? (
-                            <span className="text-destructive">{formatCurrency(m.totalPending)}</span>
+                            <span className="text-destructive">{formatCurrencyDecimal(m.totalPending)}</span>
                           ) : m.totalPaid > m.totalCost ? (
-                            <span className="text-success">+{formatCurrency(m.totalPaid - m.totalCost)} adv</span>
+                            <span className="text-success">+{formatCurrencyDecimal(m.totalPaid - m.totalCost)} adv</span>
                           ) : (
                             "—"
                           )}

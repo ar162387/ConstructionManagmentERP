@@ -22,6 +22,7 @@ const ENTITY_TYPE_LABELS: Record<CashExpensesEntityType, string> = {
   Vendor: "Vendor",
   Contractor: "Contractor",
   Salary: "Salary",
+  Wages: "Wages",
   Expense: "Expense",
   Machinery: "Machinery",
 };
@@ -68,7 +69,7 @@ export function CashExpensesLedgerDialog({
     return ledger.entries.map((e) => { acc += e.amount; return acc; });
   }, [ledger]);
 
-  const showNameCol = entityType === "Salary" || entityType === "NonConsumable";
+  const showNameCol = entityType === "Salary" || entityType === "Wages" || entityType === "NonConsumable";
   const periodLabel = startDate === endDate ? startDate : `${startDate} to ${endDate}`;
 
   const handlePrint = () => {

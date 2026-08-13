@@ -12,6 +12,8 @@ export interface IAuditLog {
   action: AuditAction;
   module: string;
   entityId?: string;
+  projectId?: string;
+  projectName?: string;
   description: string;
   oldValue?: string;
   newValue?: string;
@@ -32,6 +34,8 @@ const auditLogSchema = new mongoose.Schema<IAuditLog>(
     },
     module: { type: String, required: true },
     entityId: { type: String },
+    projectId: { type: String },
+    projectName: { type: String },
     description: { type: String, required: true },
     oldValue: { type: String },
     newValue: { type: String },
@@ -44,5 +48,6 @@ auditLogSchema.index({ timestamp: -1 });
 auditLogSchema.index({ module: 1 });
 auditLogSchema.index({ action: 1 });
 auditLogSchema.index({ userId: 1 });
+auditLogSchema.index({ projectId: 1 });
 
 export const AuditLog = mongoose.model<IAuditLog>("AuditLog", auditLogSchema);

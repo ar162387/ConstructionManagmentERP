@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import type { ApiVendor } from "@/services/vendorsService";
+import { formatCurrency } from "@/lib/mock-data";
 
 interface SelectVendorDialogProps {
   open: boolean;
@@ -63,7 +64,7 @@ export function SelectVendorDialog({
                 {vendors.map((v) => (
                   <SelectItem key={v.id} value={v.id}>
                     {v.name}
-                    {v.remaining != null && v.remaining > 0 ? ` (${v.remaining.toLocaleString()} due)` : ""}
+                    {v.remaining != null && v.remaining > 0 ? ` (${formatCurrency(v.remaining)} due)` : ""}
                   </SelectItem>
                 ))}
               </SelectContent>

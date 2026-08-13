@@ -204,6 +204,21 @@ export default function ItemLedger() {
                 ))
               )}
             </tbody>
+            {!ledgerLoading && entries.length > 0 && (
+              <tfoot>
+                <tr className="border-t-2 border-border bg-muted/50 font-bold">
+                  <td className="px-3 py-3 text-sm" colSpan={6}>Total</td>
+                  <td className="px-3 py-3 text-right font-mono text-sm text-success">
+                    {entries.reduce((sum, entry) => sum + (entry.type === "purchase" ? entry.quantity : 0), 0)}
+                  </td>
+                  <td className="px-3 py-3 text-right font-mono text-sm text-destructive">
+                    {entries.reduce((sum, entry) => sum + (entry.type === "consumption" ? entry.quantityUsed : 0), 0)}
+                  </td>
+                  <td className="px-3 py-3"></td>
+                  {canEditDelete && <td className="px-3 py-3 print-hidden"></td>}
+                </tr>
+              </tfoot>
+            )}
           </table>
         </div>
         {!ledgerLoading && entries.length > 0 && (

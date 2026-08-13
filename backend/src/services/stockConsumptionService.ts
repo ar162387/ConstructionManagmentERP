@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 import { StockConsumptionEntry } from "../models/StockConsumptionEntry.js";
 import { ConsumableItem } from "../models/ConsumableItem.js";
 import { User } from "../models/User.js";
-import { logAudit } from "./auditService.js";
+import { logAudit, getProjectName } from "./auditService.js";
 import { roleDisplay } from "./authService.js";
 
 export interface ConsumptionItemPayload {
@@ -164,6 +164,8 @@ export async function createStockConsumption(
     action: "create",
     module: "stock_consumption",
     entityId: result!.id,
+    projectId: projectId,
+    projectName: await getProjectName(projectId),
     description: `Recorded stock consumption: ${input.items.length} item(s)`,
     newValue: { items: input.items.length },
   });
@@ -248,6 +250,8 @@ export async function updateStockConsumption(
     action: "update",
     module: "stock_consumption",
     entityId: id,
+    projectId: existing.projectId?.toString(),
+    projectName: await getProjectName(existing.projectId?.toString()),
     description: `Updated stock consumption entry`,
   });
 
@@ -289,6 +293,8 @@ export async function deleteStockConsumption(
     action: "delete",
     module: "stock_consumption",
     entityId: id,
+    projectId: existing.projectId?.toString(),
+    projectName: await getProjectName(existing.projectId?.toString()),
     description: `Deleted stock consumption entry`,
     oldValue: { date: existing.date, itemCount: existing.items.length },
   });

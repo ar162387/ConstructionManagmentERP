@@ -41,6 +41,7 @@ import { TablePagination } from "@/components/TablePagination";
 import { useVendors } from "@/hooks/useVendors";
 import { getConsumableRunningBill, type ApiConsumableRunningBill } from "@/services/consumableRunningBillService";
 import PrintExportButton from "@/components/PrintExportButton";
+import { todayPKT } from "@/lib/pktDate";
 
 export default function ConsumableInventory() {
   const { user } = useAuth();
@@ -73,8 +74,8 @@ export default function ConsumableInventory() {
   const [editConsumption, setEditConsumption] = useState<ApiStockConsumption | null>(null);
   const [deleteConsumptionState, setDeleteConsumptionState] = useState<ApiStockConsumption | null>(null);
   const [billVendorId, setBillVendorId] = useState("");
-  const [billStart, setBillStart] = useState(new Date().toISOString().slice(0, 10));
-  const [billEnd, setBillEnd] = useState(new Date().toISOString().slice(0, 10));
+  const [billStart, setBillStart] = useState(todayPKT());
+  const [billEnd, setBillEnd] = useState(todayPKT());
   const [billLabel, setBillLabel] = useState("");
   const [runningBill, setRunningBill] = useState<ApiConsumableRunningBill | null>(null);
   const [billLoading, setBillLoading] = useState(false);

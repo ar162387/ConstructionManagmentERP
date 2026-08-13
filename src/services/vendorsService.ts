@@ -29,10 +29,19 @@ export interface UpdateVendorInput {
   description?: string;
 }
 
-/** projectId: filter by project. Omit for all vendors (Admin/Super Admin only, for dashboards). */
-export async function listVendors(projectId?: string | null): Promise<ApiVendor[]> {
-  const url = projectId ? `/api/vendors?${new URLSearchParams({ projectId })}` : "/api/vendors";
-  return api<ApiVendor[]>(url);
+/** projectId: filter by project. Omit for all vendors (Admin/Super Admin only, for dashboards).
+ *  startDate/endDate: optional inclusive date range — when both set, totals reflect that period. */
+export async function listVendors(
+  projectId?: string | null,
+  startDate?: string | null,
+  endDate?: string | null
+): Promise<ApiVendor[]> {
+  const params = new URLSearchParams();
+  if (projectId) params.set("projectId", projectId);
+  if (startDate) params.set("startDate", startDate);
+  if (endDate) params.set("endDate", endDate);
+  const q = params.toString();
+  return api<ApiVendor[]>(`/api/vendors${q ? `?${q}` : ""}`);
 }
 
 export async function getVendor(id: string): Promise<ApiVendor> {

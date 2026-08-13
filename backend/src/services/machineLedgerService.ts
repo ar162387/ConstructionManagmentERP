@@ -4,7 +4,7 @@ import { MachineLedgerEntry } from "../models/MachineLedgerEntry.js";
 import { MachinePayment } from "../models/MachinePayment.js";
 import { MachinePaymentAllocation } from "../models/MachinePaymentAllocation.js";
 import { User } from "../models/User.js";
-import { logAudit } from "./auditService.js";
+import { logAudit, getProjectName } from "./auditService.js";
 import { roleDisplay } from "./authService.js";
 import { getMachineTotals } from "./machineService.js";
 import { rebuildMachinePaymentAllocations } from "./machinePaymentAllocationService.js";
@@ -227,6 +227,8 @@ export async function createMachineEntry(
     action: "create",
     module: "machinery_ledger",
     entityId: entry._id.toString(),
+    projectId: machine.projectId?.toString(),
+    projectName: await getProjectName(machine.projectId?.toString()),
     description: `Machine ledger entry: ${machine.name} — ${hours} hrs`,
     newValue: { hoursWorked: hours, totalCost, date: entry.date },
   });
@@ -292,6 +294,8 @@ export async function createMachinePayment(
     action: "create",
     module: "machinery_payments",
     entityId: payment._id.toString(),
+    projectId: machine.projectId?.toString(),
+    projectName: await getProjectName(machine.projectId?.toString()),
     description: `Machine payment: ${machine.name} — ${amount.toLocaleString()} PKR`,
     newValue: { amount, machineId, date: payment.date },
   });
@@ -316,7 +320,7 @@ export async function deleteMachineEntry(
   const entry = await MachineLedgerEntry.findById(entryId).lean();
   if (!entry) throw new Error("Entry not found");
 
-  const machine = await Machine.findById(entry.machineId).select("name").lean();
+  const machine = await Machine.findById(entry.machineId).select("name projectId").lean();
 
   await MachineLedgerEntry.findByIdAndDelete(entryId);
   await MachinePaymentAllocation.deleteMany({ entryId: new mongoose.Types.ObjectId(entryId) });
@@ -333,6 +337,8 @@ export async function deleteMachineEntry(
     action: "delete",
     module: "machinery_ledger",
     entityId: entryId,
+    projectId: machine?.projectId?.toString(),
+    projectName: await getProjectName(machine?.projectId?.toString()),
     description: `Deleted machine ledger entry: ${machine?.name ?? "Unknown"} — ${entry.hoursWorked} hrs, ${entry.totalCost.toLocaleString()} PKR`,
     oldValue: { totalCost: entry.totalCost, date: entry.date },
   });
@@ -348,7 +354,7 @@ export async function deleteMachinePayment(
   const payment = await MachinePayment.findById(paymentId).lean();
   if (!payment) throw new Error("Payment not found");
 
-  const machine = await Machine.findById(payment.machineId).select("name").lean();
+  const machine = await Machine.findById(payment.machineId).select("name projectId").lean();
 
   await MachinePayment.findByIdAndDelete(paymentId);
   await MachinePaymentAllocation.deleteMany({ paymentId: new mongoose.Types.ObjectId(paymentId) });
@@ -365,6 +371,8 @@ export async function deleteMachinePayment(
     action: "delete",
     module: "machinery_payments",
     entityId: paymentId,
+    projectId: machine?.projectId?.toString(),
+    projectName: await getProjectName(machine?.projectId?.toString()),
     description: `Deleted machine payment: ${machine?.name ?? "Unknown"} — ${payment.amount.toLocaleString()} PKR`,
     oldValue: { amount: payment.amount, date: payment.date },
   });

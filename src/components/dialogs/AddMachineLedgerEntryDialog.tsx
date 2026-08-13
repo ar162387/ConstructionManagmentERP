@@ -13,6 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { createMachineEntry } from "@/services/machinesService";
 import { toast } from "sonner";
 import type { ApiMachineWithTotals } from "@/services/machinesService";
+import { todayPKT } from "@/lib/pktDate";
 
 interface AddMachineLedgerEntryDialogProps {
   open: boolean;
@@ -27,7 +28,7 @@ export function AddMachineLedgerEntryDialog({
   machine,
   onSuccess,
 }: AddMachineLedgerEntryDialogProps) {
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(todayPKT());
   const [hoursWorked, setHoursWorked] = useState("");
   const [usedBy, setUsedBy] = useState("");
   const [remarks, setRemarks] = useState("");

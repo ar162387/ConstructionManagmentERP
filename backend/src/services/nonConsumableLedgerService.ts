@@ -376,6 +376,8 @@ export async function createNonConsumableLedgerEntry(
     action: "create",
     module: "non_consumable_ledger",
     entityId: entry._id.toString(),
+    projectId: projectIds[0],
+    projectName: projectIds[0] ? projectNames.get(projectIds[0]) : undefined,
     description: `Added ledger entry: ${input.eventType} — ${item.name} x ${input.quantity}`,
     newValue: { eventType: input.eventType, quantity: input.quantity },
   });
@@ -561,6 +563,8 @@ export async function updateNonConsumableLedgerEntry(
     action: "update",
     module: "non_consumable_ledger",
     entityId: id,
+    projectId: projectIds[0],
+    projectName: projectIds[0] ? projectNames.get(projectIds[0]) : undefined,
     description: `Updated ledger entry: ${item.name}`,
     oldValue: { eventType: existing.eventType, quantity: existing.quantity },
     newValue: { eventType: newEventType, quantity: newQuantity },
@@ -592,6 +596,11 @@ export async function deleteNonConsumableLedgerEntry(
   await NonConsumableLedgerEntry.findByIdAndDelete(id);
   await syncItemBalances(existing.itemId);
 
+  const deletedProjectIds = [existing.projectTo?.toString(), existing.projectFrom?.toString(), existing.expenseProjectId?.toString()].filter(
+    (pid): pid is string => !!pid
+  );
+  const deletedProject = deletedProjectIds.length > 0 ? await Project.findById(deletedProjectIds[0]).select("name").lean() : null;
+
   const actorUser = await User.findById(actor.userId).lean();
   const role = roleDisplay[actor.role as keyof typeof roleDisplay] ?? actor.role;
   await logAudit({
@@ -602,6 +611,8 @@ export async function deleteNonConsumableLedgerEntry(
     action: "delete",
     module: "non_consumable_ledger",
     entityId: id,
+    projectId: deletedProjectIds[0],
+    projectName: deletedProject?.name,
     description: `Deleted ledger entry: ${item.name} — ${existing.eventType} x ${existing.quantity}`,
     oldValue: { eventType: existing.eventType, quantity: existing.quantity },
   });

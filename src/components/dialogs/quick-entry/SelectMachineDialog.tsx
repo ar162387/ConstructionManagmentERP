@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import type { ApiMachineWithTotals } from "@/services/machinesService";
+import { formatCurrency } from "@/lib/mock-data";
 
 interface SelectMachineDialogProps {
   open: boolean;
@@ -72,7 +73,7 @@ export function SelectMachineDialog({
                 {machines.map((m) => (
                   <SelectItem key={m.id} value={m.id}>
                     {m.name}
-                    {m.totalPending != null && m.totalPending > 0 ? ` (${m.totalPending.toLocaleString()} due)` : ""}
+                    {m.totalPending != null && m.totalPending > 0 ? ` (${formatCurrency(m.totalPending)} due)` : ""}
                   </SelectItem>
                 ))}
               </SelectContent>

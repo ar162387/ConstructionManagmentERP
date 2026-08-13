@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import type { ApiContractorWithTotals } from "@/services/contractorsService";
+import { formatCurrency } from "@/lib/mock-data";
 
 interface SelectContractorDialogProps {
   open: boolean;
@@ -72,7 +73,7 @@ export function SelectContractorDialog({
                 {contractors.map((c) => (
                   <SelectItem key={c.id} value={c.id}>
                     {c.name}
-                    {c.remaining != null && c.remaining > 0 ? ` (${c.remaining.toLocaleString()} due)` : ""}
+                    {c.remaining != null && c.remaining > 0 ? ` (${formatCurrency(c.remaining)} due)` : ""}
                   </SelectItem>
                 ))}
               </SelectContent>

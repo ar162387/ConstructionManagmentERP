@@ -67,6 +67,7 @@ import {
 import { deleteEmployee, type ApiEmployee } from "@/services/employeesService";
 import { EditEmployeeDialog } from "@/components/dialogs/EditEmployeeDialog";
 import { TablePagination } from "@/components/TablePagination";
+import { todayPKT } from "@/lib/pktDate";
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const PAYMENT_PAGE_SIZE_OPTIONS = [12, 24, 50, 100];
@@ -446,7 +447,7 @@ export default function EmployeeLedger() {
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [paymentQuickMode, setPaymentQuickMode] = useState<PaymentQuickMode>("partial");
   const [paymentMonthForAdvance, setPaymentMonthForAdvance] = useState(shiftMonth(currentMonth, 1));
-  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().slice(0, 10));
+  const [paymentDate, setPaymentDate] = useState(todayPKT());
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("Cash");
   const [paymentRemarks, setPaymentRemarks] = useState("");
@@ -801,12 +802,16 @@ export default function EmployeeLedger() {
 
   const openPaymentDialog = (mode: PaymentQuickMode) => {
     setPaymentQuickMode(mode);
-    setPaymentDate(new Date().toISOString().slice(0, 10));
+    setPaymentDate(todayPKT());
     setPaymentMethod("Cash");
     setPaymentRemarks("");
     setPaymentMonthForAdvance(shiftMonth(currentMonth, 1));
     if (mode === "full" && snapshot) {
-      setPaymentAmount(String(Math.round(snapshot.remaining)));
+      setPaymentAmount(String(Math.round(snapshot.remaining * 100) / 100));
+    } else if (mode === "partial" && snapshot && snapshot.remaining > 0) {
+      // Prefill (not just placeholder) so the field never looks filled while actually being
+      // empty — the remaining amount is still fully editable, unlike in "full" mode.
+      setPaymentAmount(String(Math.round(snapshot.remaining * 100) / 100));
     } else {
       setPaymentAmount("");
     }
@@ -842,13 +847,14 @@ export default function EmployeeLedger() {
     event.preventDefault();
     const rawAmount = paymentAmount.replace(/,/g, "").trim();
     const amountValue = paymentQuickMode === "full" && snapshot
-      ? Math.round(snapshot.remaining)
+      ? Math.round(snapshot.remaining * 100) / 100
       : parseFloat(rawAmount);
     if (!paymentDate || !Number.isFinite(amountValue) || amountValue <= 0) {
       toast.error("Valid payment date and amount are required");
       return;
     }
-    const monthForPayment = paymentQuickMode === "advance" ? paymentMonthForAdvance : selectedMonth;
+    const monthForPayment =
+      paymentQuickMode === "advance" && employee.type === "Fixed" ? paymentMonthForAdvance : selectedMonth;
     setSavingPayment(true);
     try {
       await createEmployeePayment(employeeId, {
@@ -1279,7 +1285,7 @@ export default function EmployeeLedger() {
                   disabled={!snapshot || snapshot.remaining <= 0}
                   onClick={() => {
                     setPaymentQuickMode("full");
-                    if (snapshot) setPaymentAmount(String(Math.round(snapshot.remaining)));
+                    if (snapshot) setPaymentAmount(String(Math.round(snapshot.remaining * 100) / 100));
                   }}
                 >
                   Full
@@ -1287,7 +1293,7 @@ export default function EmployeeLedger() {
               </div>
             </div>
 
-            {paymentQuickMode === "advance" && (
+            {paymentQuickMode === "advance" && employee.type === "Fixed" && (
               <div>
                 <Label>Month for advance *</Label>
                 <Select value={paymentMonthForAdvance} onValueChange={setPaymentMonthForAdvance}>
@@ -1327,6 +1333,12 @@ export default function EmployeeLedger() {
               />
               {paymentQuickMode === "partial" && snapshot?.remaining != null && (
                 <p className="text-xs text-muted-foreground mt-1">Remaining for {monthLabel(selectedMonth)}: {formatCurrency(snapshot.remaining)}</p>
+              )}
+              {paymentQuickMode === "advance" && employee.type === "Daily" && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Recorded for {monthLabel(selectedMonth)}. This advance will reduce this employee's Net Payable on
+                  future salary sheets until it's earned back.
+                </p>
               )}
               {paymentQuickMode === "full" && (
                 <p className="text-xs text-muted-foreground mt-1">

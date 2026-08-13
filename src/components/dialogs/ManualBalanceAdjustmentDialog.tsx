@@ -16,6 +16,8 @@ import {
   type ProjectLedgerRow,
 } from "@/services/projectLedgerService";
 import { toast } from "sonner";
+import { formatCurrency } from "@/lib/mock-data";
+import { todayPKT } from "@/lib/pktDate";
 
 interface ManualBalanceAdjustmentDialogProps {
   open: boolean;
@@ -37,7 +39,7 @@ export function ManualBalanceAdjustmentDialog({
   onSuccess,
 }: ManualBalanceAdjustmentDialogProps) {
   const isEdit = !!adjustment && adjustment.type === "manual_adjustment";
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(todayPKT());
   const [amount, setAmount] = useState("");
   const [remarks, setRemarks] = useState("");
   const [loading, setLoading] = useState(false);
@@ -48,7 +50,7 @@ export function ManualBalanceAdjustmentDialog({
       setAmount(String(adjustment.amount));
       setRemarks(adjustment.remarks ?? "");
     } else {
-      setDate(new Date().toISOString().slice(0, 10));
+      setDate(todayPKT());
       setAmount("");
       setRemarks("");
     }
@@ -68,7 +70,7 @@ export function ManualBalanceAdjustmentDialog({
     const oldAmount = isEdit ? (adjustment?.amount ?? 0) : 0;
     const newBalance = currentBalance - oldAmount + amt;
     if (newBalance < 0) {
-      toast.error(`Cannot apply: project balance would become negative. Current: ${currentBalance.toLocaleString()}`);
+      toast.error(`Cannot apply: project balance would become negative. Current: ${formatCurrency(currentBalance)}`);
       return;
     }
     setLoading(true);
@@ -99,7 +101,7 @@ export function ManualBalanceAdjustmentDialog({
         </DialogHeader>
         {projectName && (
           <p className="text-sm text-muted-foreground">
-            Project: {projectName} — Current balance: {currentBalance.toLocaleString()}
+            Project: {projectName} — Current balance: {formatCurrency(currentBalance)}
           </p>
         )}
         <form onSubmit={handleSubmit} className="space-y-4">

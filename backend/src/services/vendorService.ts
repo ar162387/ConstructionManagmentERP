@@ -1,7 +1,9 @@
 import mongoose from "mongoose";
 import { Vendor } from "../models/Vendor.js";
 import { User } from "../models/User.js";
-import { logAudit } from "./auditService.js";
+import { ItemLedgerEntry } from "../models/ItemLedgerEntry.js";
+import { VendorPayment } from "../models/VendorPayment.js";
+import { logAudit, getProjectName } from "./auditService.js";
 import { roleDisplay } from "./authService.js";
 
 export interface VendorPayload {
@@ -45,10 +47,19 @@ function toPayload(
   };
 }
 
+export interface ListVendorsOptions {
+  /** Inclusive "YYYY-MM-DD" range. When provided, totalBilled/totalPaid/remaining are recomputed
+   *  from the underlying ItemLedgerEntry/VendorPayment rows dated within the range, instead of
+   *  returning the vendor's all-time cumulative stored fields. */
+  startDate?: string;
+  endDate?: string;
+}
+
 /** List vendors for a project. Site Manager: uses assigned project. Admin/Super Admin: uses projectId param. */
 export async function listVendors(
   actor: { userId: string; role: string },
-  projectIdParam?: string
+  projectIdParam?: string,
+  options?: ListVendorsOptions
 ): Promise<VendorPayload[]> {
   let projectId: string | undefined;
   if (actor.role === "site_manager") {
@@ -61,7 +72,48 @@ export async function listVendors(
   const query =
     projectId && mongoose.Types.ObjectId.isValid(projectId) ? { projectId } : {};
   const docs = await Vendor.find(query).lean();
-  return docs.map(toPayload);
+  const payloads = docs.map(toPayload);
+
+  const startDate = options?.startDate?.trim() || undefined;
+  const endDate = options?.endDate?.trim() || undefined;
+  if (!startDate && !endDate) return payloads;
+
+  const vendorIds = docs.map((d) => d._id);
+  if (vendorIds.length === 0) return payloads;
+
+  const dateMatch: Record<string, unknown> = {};
+  if (startDate) (dateMatch.date as Record<string, unknown>) = { ...(dateMatch.date as Record<string, unknown> | undefined), $gte: startDate };
+  if (endDate) dateMatch.date = { ...(dateMatch.date as Record<string, unknown> | undefined), $lte: endDate };
+
+  // Mirrors getVendorLedger's totals math: totalBilled = sum of item totalPrice in range;
+  // totalPaid = (ledger paidAmount + advanceGenerated) in range + external VendorPayment amounts
+  // in range; remaining = totalBilled - totalPaid, floored at 0 for display.
+  const [billedAgg, payAgg] = await Promise.all([
+    ItemLedgerEntry.aggregate<{ _id: mongoose.Types.ObjectId; billed: number; paidFromLedger: number }>([
+      { $match: { vendorId: { $in: vendorIds }, ...dateMatch } },
+      {
+        $group: {
+          _id: "$vendorId",
+          billed: { $sum: "$totalPrice" },
+          paidFromLedger: { $sum: { $add: ["$paidAmount", { $ifNull: ["$advanceGenerated", 0] }] } },
+        },
+      },
+    ]),
+    VendorPayment.aggregate<{ _id: mongoose.Types.ObjectId; paid: number }>([
+      { $match: { vendorId: { $in: vendorIds }, source: { $ne: "advance" }, ...dateMatch } },
+      { $group: { _id: "$vendorId", paid: { $sum: "$amount" } } },
+    ]),
+  ]);
+  const billedMap = new Map(billedAgg.map((r) => [r._id.toString(), r]));
+  const payMap = new Map(payAgg.map((r) => [r._id.toString(), r.paid]));
+
+  return payloads.map((v) => {
+    const b = billedMap.get(v.id);
+    const totalBilled = b?.billed ?? 0;
+    const totalPaid = (b?.paidFromLedger ?? 0) + (payMap.get(v.id) ?? 0);
+    const remaining = Math.max(0, totalBilled - totalPaid);
+    return { ...v, totalBilled, totalPaid, remaining };
+  });
 }
 
 export async function getVendorById(id: string): Promise<VendorPayload | null> {
@@ -111,6 +163,8 @@ export async function createVendor(
     action: "create",
     module: "vendors",
     entityId: vendor._id.toString(),
+    projectId: vendor.projectId?.toString(),
+    projectName: await getProjectName(vendor.projectId?.toString()),
     description: `Created vendor: ${vendor.name}`,
     newValue: { name: vendor.name },
   });
@@ -150,6 +204,8 @@ export async function updateVendor(
     action: "update",
     module: "vendors",
     entityId: id,
+    projectId: target.projectId?.toString(),
+    projectName: await getProjectName(target.projectId?.toString()),
     description: `Updated vendor: ${target.name}`,
     oldValue: { name: target.name },
     newValue: { name: updated.name },
@@ -196,6 +252,8 @@ export async function deleteVendor(
     action: "delete",
     module: "vendors",
     entityId: id,
+    projectId: target.projectId?.toString(),
+    projectName: await getProjectName(target.projectId?.toString()),
     description: `Deleted vendor: ${target.name}`,
     oldValue: { name: target.name },
   });

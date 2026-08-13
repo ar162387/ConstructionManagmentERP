@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import type { ApiEmployeeWithSnapshot } from "@/services/employeesService";
+import { formatCurrency } from "@/lib/mock-data";
 
 interface SelectEmployeeDialogProps {
   open: boolean;
@@ -64,7 +65,7 @@ export function SelectEmployeeDialog({
                   <SelectItem key={e.id} value={e.id}>
                     {e.name}
                     {e.snapshot?.remaining != null && e.snapshot.remaining > 0
-                      ? ` (${e.snapshot.remaining.toLocaleString()} due)`
+                      ? ` (${formatCurrency(e.snapshot.remaining)} due)`
                       : ""}
                   </SelectItem>
                 ))}

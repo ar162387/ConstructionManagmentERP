@@ -106,7 +106,7 @@ export function AddMachineDialog({
           </div>
           <div>
             <Label>Hourly Rate *</Label>
-            <Input type="number" min={0} value={hourlyRate} onChange={(e) => setHourlyRate(e.target.value)} className="mt-1" />
+            <Input type="number" min={0} step={0.01} value={hourlyRate} onChange={(e) => setHourlyRate(e.target.value)} className="mt-1" />
           </div>
           <div>
             <Label>Project *</Label>

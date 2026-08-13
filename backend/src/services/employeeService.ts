@@ -4,7 +4,7 @@ import { Machine } from "../models/Machine.js";
 import { EmployeePayment } from "../models/EmployeePayment.js";
 import { Project } from "../models/Project.js";
 import { User } from "../models/User.js";
-import { logAudit } from "./auditService.js";
+import { logAudit, getProjectName } from "./auditService.js";
 import { roleDisplay } from "./authService.js";
 import { getEmployeeTotals, getEmployeeSnapshotForMonth } from "./employeeLedgerService.js";
 import type { MonthlySnapshot } from "./employeeLedgerService.js";
@@ -101,6 +101,10 @@ function validateJoiningDate(value: string): string {
 export interface EmployeeListOptions {
   month?: string;
   category?: EmployeeCategory;
+  /** Inclusive "YYYY-MM-DD" range. When provided, totalPaid/totalDue are computed within that
+   *  period instead of all-time — see getEmployeeTotals for date-range semantics. */
+  startDate?: string;
+  endDate?: string;
 }
 
 /** List employees for a project. When month is provided, includes snapshot (payable, paid, remaining, paymentStatus) for that month. */
@@ -129,7 +133,7 @@ export async function listEmployees(
   const projectMap = new Map(projects.map((p) => [p._id.toString(), p.name]));
 
   const totalsResults = await Promise.allSettled(
-    docs.map((d) => getEmployeeTotals(d._id.toString()))
+    docs.map((d) => getEmployeeTotals(d._id.toString(), { startDate: options?.startDate, endDate: options?.endDate }))
   );
   const totalsList = totalsResults.map((r) =>
     r.status === "fulfilled" ? r.value : { totalPaid: 0, totalDue: 0 }
@@ -138,7 +142,7 @@ export async function listEmployees(
   let snapshots: (MonthlySnapshot | undefined)[] = [];
   if (month) {
     const snapshotResults = await Promise.allSettled(
-      docs.map((d) => getEmployeeSnapshotForMonth(d._id.toString(), month, d.createdAt, d.joiningDate))
+      docs.map((d) => getEmployeeSnapshotForMonth(d._id.toString(), month, d.createdAt, d.joiningDate, d.type))
     );
     snapshots = snapshotResults.map((r) => (r.status === "fulfilled" ? r.value : undefined));
   }
@@ -217,6 +221,8 @@ export async function createEmployee(
     action: "create",
     module: "employees",
     entityId: employee._id.toString(),
+    projectId: employee.projectId?.toString(),
+    projectName: await getProjectName(employee.projectId?.toString()),
     description: `Created employee: ${employee.name}`,
     newValue: { name: employee.name, type: employee.type },
   });
@@ -277,6 +283,8 @@ export async function updateEmployee(
     action: "update",
     module: "employees",
     entityId: id,
+    projectId: target.projectId?.toString(),
+    projectName: await getProjectName(target.projectId?.toString()),
     description: `Updated employee: ${target.name}`,
     oldValue: { name: target.name },
     newValue: { name: updated.name },
@@ -315,6 +323,8 @@ export async function deleteEmployee(
     action: "delete",
     module: "employees",
     entityId: id,
+    projectId: target.projectId?.toString(),
+    projectName: await getProjectName(target.projectId?.toString()),
     description: `Deleted employee: ${target.name}`,
     oldValue: { name: target.name },
   });

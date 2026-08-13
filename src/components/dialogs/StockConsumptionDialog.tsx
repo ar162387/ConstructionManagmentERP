@@ -22,6 +22,7 @@ import { Plus, Trash2 } from "lucide-react";
 import { createStockConsumption, updateStockConsumption, type ApiStockConsumption } from "@/services/stockConsumptionService";
 import type { ApiConsumableItem } from "@/services/consumableItemsService";
 import { createConsumableUnit, listConsumableUnits, type ApiConsumableUnit } from "@/services/consumableUnitService";
+import { todayPKT } from "@/lib/pktDate";
 
 interface ConsumptionRow {
   itemId: string;
@@ -49,7 +50,7 @@ export function StockConsumptionDialog({
   onSuccess,
 }: StockConsumptionDialogProps) {
   const isEdit = !!editEntry;
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(todayPKT());
   const [remarks, setRemarks] = useState("");
   const [rows, setRows] = useState<ConsumptionRow[]>([{ itemId: "", unit: "", quantityUsed: "" }]);
   const [units, setUnits] = useState<ApiConsumableUnit[]>([]);
@@ -63,7 +64,7 @@ export function StockConsumptionDialog({
         setRemarks(editEntry.remarks ?? "");
         setRows(editEntry.items.map((i) => ({ itemId: i.itemId, unit: i.unit, quantityUsed: String(i.quantityUsed) })));
       } else {
-        setDate(new Date().toISOString().slice(0, 10));
+        setDate(todayPKT());
         setRemarks("");
         setRows([{ itemId: "", unit: "", quantityUsed: "" }]);
       }

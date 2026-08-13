@@ -591,7 +591,7 @@ export default function Contractors() {
                     </tbody>
                     {ledger && ledger.rows.length > 0 && (
                       <tfoot>
-                        <tr className="contractor-ledger-totals hidden border-t-2 border-border bg-secondary">
+                        <tr className="contractor-ledger-totals border-t-2 border-border bg-secondary">
                           <td colSpan={3} className="px-4 py-3 text-right text-sm font-bold uppercase tracking-wider">Totals</td>
                           <td className="px-4 py-3 text-right font-mono text-sm font-bold">{formatCurrency(displayedBillTotal)}</td>
                           <td className="px-4 py-3 text-right font-mono text-sm font-bold">{formatCurrency(displayedPaymentTotal)}</td>

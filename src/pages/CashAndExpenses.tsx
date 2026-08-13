@@ -17,11 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Loader2 } from "lucide-react";
 import type { CashExpensesEntityType } from "@/services/cashExpensesReportService";
 import { CashExpensesLedgerDialog } from "@/components/dialogs/CashExpensesLedgerDialog";
-
-function toTodayISO(): string {
-  const d = new Date();
-  return d.toISOString().slice(0, 10);
-}
+import { todayPKT } from "@/lib/pktDate";
 
 const ENTITY_TYPE_LABELS: Record<CashExpensesEntityType, string> = {
   Consumable: "Consumable",
@@ -29,6 +25,7 @@ const ENTITY_TYPE_LABELS: Record<CashExpensesEntityType, string> = {
   Vendor: "Vendor",
   Contractor: "Contractor",
   Salary: "Salary",
+  Wages: "Wages",
   Expense: "Expense",
   Machinery: "Machinery",
 };
@@ -73,8 +70,8 @@ export default function CashAndExpenses() {
   const assignedProjectId = user?.assignedProjectId ?? null;
 
   const effectiveProjectId = isSiteManager ? assignedProjectId : (selectedProjectId || null);
-  const [startDate, setStartDate] = useState(toTodayISO);
-  const [endDate, setEndDate] = useState(toTodayISO);
+  const [startDate, setStartDate] = useState(todayPKT);
+  const [endDate, setEndDate] = useState(todayPKT);
   const [selectedEntity, setSelectedEntity] = useState<{
     entityType: CashExpensesEntityType;
     entityId: string;
@@ -116,7 +113,7 @@ export default function CashAndExpenses() {
 
   const formatReportCurrency = (value: number | null | undefined): string => {
     if (!value) return "-";
-    return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(value);
+    return new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
   };
 
   const totalPayments =

@@ -17,9 +17,11 @@ export async function list(req: AuthRequest, res: Response) {
     const projectId = typeof req.query.projectId === "string" ? req.query.projectId : undefined;
     const page = req.query.page !== undefined ? Number(req.query.page) : undefined;
     const pageSize = req.query.pageSize !== undefined ? Number(req.query.pageSize) : undefined;
+    const startDate = typeof req.query.startDate === "string" ? req.query.startDate : undefined;
+    const endDate = typeof req.query.endDate === "string" ? req.query.endDate : undefined;
     const result = await listMachines(
       { userId: actor.userId, role: actor.role },
-      { projectId, page, pageSize }
+      { projectId, page, pageSize, startDate, endDate }
     );
     res.json(result);
   } catch (err) {

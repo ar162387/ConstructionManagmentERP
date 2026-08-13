@@ -14,9 +14,12 @@ export async function list(req: AuthRequest, res: Response) {
   try {
     const actor = req.user!;
     const projectId = typeof req.query.projectId === "string" ? req.query.projectId : undefined;
+    const startDate = typeof req.query.startDate === "string" ? req.query.startDate : undefined;
+    const endDate = typeof req.query.endDate === "string" ? req.query.endDate : undefined;
     const items = await listContractors(
       { userId: actor.userId, role: actor.role },
-      projectId
+      projectId,
+      { startDate, endDate }
     );
     res.json(items);
   } catch (err) {

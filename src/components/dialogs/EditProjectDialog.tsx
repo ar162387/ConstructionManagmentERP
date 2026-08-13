@@ -20,6 +20,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { updateProject } from "@/services/projectsService";
 import type { ApiProject } from "@/services/projectsService";
 import { toast } from "sonner";
+import { todayPKT } from "@/lib/pktDate";
 
 type Status = "Active" | "On Hold" | "Completed";
 
@@ -75,7 +76,7 @@ export function EditProjectDialog({
         description: description.trim(),
         allocatedBudget: budget,
         status,
-        startDate: startDate || project.startDate || new Date().toISOString().slice(0, 10),
+        startDate: startDate || project.startDate || todayPKT(),
         endDate: endDate || "",
       });
       toast.success("Project updated");

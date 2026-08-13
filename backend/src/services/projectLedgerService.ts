@@ -3,7 +3,7 @@ import { Project } from "../models/Project.js";
 import { BankTransaction } from "../models/BankTransaction.js";
 import { ProjectBalanceAdjustment } from "../models/ProjectBalanceAdjustment.js";
 import { User } from "../models/User.js";
-import { logAudit } from "./auditService.js";
+import { logAudit, getProjectName } from "./auditService.js";
 import { roleDisplay } from "./authService.js";
 
 export type ProjectLedgerRowType = "bank_outflow" | "manual_adjustment";
@@ -187,6 +187,8 @@ export async function createProjectBalanceAdjustment(
     action: "create",
     module: "project_ledger",
     entityId: doc._id.toString(),
+    projectId: projectId,
+    projectName: await getProjectName(projectId),
     description: `Manual balance adjustment for project: ${amount > 0 ? "+" : ""}${amount}`,
     newValue: { projectId, amount, date: input.date },
   });
@@ -270,6 +272,8 @@ export async function updateProjectBalanceAdjustment(
     action: "update",
     module: "project_ledger",
     entityId: adjustmentId,
+    projectId: projectId,
+    projectName: project.name,
     description: `Updated manual balance adjustment: ${oldAmount} → ${newAmount}`,
     oldValue: { amount: oldAmount },
     newValue: { amount: newAmount },
@@ -332,6 +336,8 @@ export async function deleteProjectBalanceAdjustment(
     action: "delete",
     module: "project_ledger",
     entityId: adjustmentId,
+    projectId: projectId,
+    projectName: project.name,
     description: `Deleted manual balance adjustment: ${existing.amount}`,
     oldValue: { amount: existing.amount },
   });

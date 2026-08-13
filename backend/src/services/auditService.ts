@@ -1,5 +1,13 @@
 import { AuditLog } from "../models/AuditLog.js";
 import type { AuditAction } from "../models/AuditLog.js";
+import { Project } from "../models/Project.js";
+
+/** Look up a project's name for audit-log display/filtering. Returns undefined if not found. */
+export async function getProjectName(projectId: string | undefined): Promise<string | undefined> {
+  if (!projectId) return undefined;
+  const project = await Project.findById(projectId).select("name").lean();
+  return project?.name;
+}
 
 export interface LogAuditParams {
   userId: string;
@@ -9,6 +17,8 @@ export interface LogAuditParams {
   action: AuditAction;
   module: string;
   entityId?: string;
+  projectId?: string;
+  projectName?: string;
   description: string;
   oldValue?: object;
   newValue?: object;
@@ -24,6 +34,8 @@ export async function logAudit(params: LogAuditParams): Promise<void> {
     action: params.action,
     module: params.module,
     entityId: params.entityId,
+    projectId: params.projectId,
+    projectName: params.projectName,
     description: params.description,
     oldValue: params.oldValue != null ? JSON.stringify(params.oldValue) : undefined,
     newValue: params.newValue != null ? JSON.stringify(params.newValue) : undefined,

@@ -23,6 +23,7 @@ import type { ApiProject } from "@/services/projectsService";
 import type { ApiClient } from "@/services/clientsService";
 import type { ApiCustomHead } from "@/services/customHeadsService";
 import { toast } from "sonner";
+import { todayPKT } from "@/lib/pktDate";
 
 interface AddBankTransactionDialogProps {
   open: boolean;
@@ -30,6 +31,7 @@ interface AddBankTransactionDialogProps {
   accounts: ApiBankAccount[];
   projects: ApiProject[];
   clients?: ApiClient[];
+  clientsLoading?: boolean;
   customHeads?: ApiCustomHead[];
   onSuccess?: () => void;
 }
@@ -42,10 +44,11 @@ export function AddBankTransactionDialog({
   accounts,
   projects,
   clients = [],
+  clientsLoading = false,
   customHeads = [],
   onSuccess,
 }: AddBankTransactionDialogProps) {
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(todayPKT());
   const [type, setType] = useState<"inflow" | "outflow">("inflow");
   const [amount, setAmount] = useState("");
   const [accountId, setAccountId] = useState<string | null>(null);
@@ -221,7 +224,7 @@ export function AddBankTransactionDialog({
 
           {type === "inflow" ? (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div><Label className="text-xs">Client (optional)</Label><Combobox options={clientOptions} value={clientId} onValueChange={(value) => { setClientId(value); if (value) setSource(""); }} placeholder="Select client" searchPlaceholder="Search clients..." emptyText="No client found" className="mt-0.5 h-9" /></div>
+              <div><Label className="text-xs">Client (optional)</Label><Combobox options={clientOptions} value={clientId} onValueChange={(value) => { setClientId(value); if (value) setSource(""); }} placeholder={clientsLoading ? "Loading clients..." : "Select client"} searchPlaceholder="Search clients..." emptyText={clientsLoading ? "Loading clients..." : "No client found"} disabled={clientsLoading} className="mt-0.5 h-9" /></div>
               <div><Label className="text-xs">Source *</Label><Input value={source} disabled={!!clientId} onChange={(e) => setSource(e.target.value)} placeholder="Type payer name" className="mt-0.5 h-9" /></div>
               <div className="sm:col-span-2"><Label className="text-xs">Project (optional)</Label><Combobox options={projectOptions} value={projectId} onValueChange={setProjectId} placeholder="Select project for attribution" searchPlaceholder="Search..." emptyText="No project found" className="mt-0.5 h-9" /><p className="text-[10px] text-muted-foreground mt-0.5">This records the client payment against a project; it does not fund the project balance.</p></div>
             </div>

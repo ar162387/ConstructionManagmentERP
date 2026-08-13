@@ -19,6 +19,8 @@ import {
 import { createMachinePayment } from "@/services/machinesService";
 import type { ApiMachineWithTotals } from "@/services/machinesService";
 import { toast } from "sonner";
+import { formatCurrency } from "@/lib/mock-data";
+import { todayPKT } from "@/lib/pktDate";
 
 interface MachinePaymentDialogProps {
   open: boolean;
@@ -37,7 +39,7 @@ export function MachinePaymentDialog({
   remainingBalance = 0,
   onSuccess,
 }: MachinePaymentDialogProps) {
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(todayPKT());
   const [amount, setAmount] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<"Cash" | "Bank" | "Online">("Bank");
   const [referenceId, setReferenceId] = useState("");
@@ -83,7 +85,7 @@ export function MachinePaymentDialog({
           <DialogTitle>Add Payment — {machine.name}</DialogTitle>
           <p className="text-sm text-muted-foreground">
             {remainingBalance > 0
-              ? `Pending balance: ${remainingBalance.toLocaleString()} PKR. Paying more than this is recorded as an advance.`
+              ? `Pending balance: ${formatCurrency(remainingBalance)} PKR. Paying more than this is recorded as an advance.`
               : "No pending dues. Any amount recorded here is kept as an advance against future hours."}
           </p>
         </DialogHeader>

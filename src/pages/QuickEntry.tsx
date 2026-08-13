@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import Layout from "@/components/Layout";
 import PageHeader from "@/components/PageHeader";
 import { useAuth } from "@/context/AuthContext";
@@ -11,6 +11,9 @@ import { useEmployees } from "@/hooks/useEmployees";
 import { useConsumableItems } from "@/hooks/useConsumableItems";
 import { useNonConsumableItems } from "@/hooks/useNonConsumableItems";
 import { useMachines } from "@/hooks/useMachines";
+import { useClients } from "@/hooks/useClients";
+import { listCustomHeads } from "@/services/customHeadsService";
+import type { ApiCustomHead } from "@/services/customHeadsService";
 import {
   Select,
   SelectContent,
@@ -105,6 +108,9 @@ export default function QuickEntry() {
   const effectiveProjectId = isSiteManager ? assignedProjectId : (selectedProjectId || null);
 
   const { accounts, refetch: refetchAccounts } = useBankAccounts();
+  const { clients, loading: clientsLoading, refetch: refetchClients } = useClients();
+  const [customHeads, setCustomHeads] = useState<ApiCustomHead[]>([]);
+  useEffect(() => { void listCustomHeads().then(setCustomHeads).catch(() => setCustomHeads([])); }, []);
   const { vendors, refetch: refetchVendors } = useVendors(effectiveProjectId);
   const { contractors, refetch: refetchContractors } = useContractors(effectiveProjectId);
   const { employees, refetch: refetchEmployees } = useEmployees(effectiveProjectId);
@@ -314,7 +320,14 @@ export default function QuickEntry() {
         onOpenChange={(open) => !open && closeDialog()}
         accounts={accounts}
         projects={projects}
-        onSuccess={refetchAccounts}
+        clients={clients}
+        clientsLoading={clientsLoading}
+        customHeads={customHeads}
+        onSuccess={() => {
+          refetchAccounts();
+          refetchClients();
+          void listCustomHeads().then(setCustomHeads).catch(() => undefined);
+        }}
       />
       {user?.role && (
         <CreateUserDialog

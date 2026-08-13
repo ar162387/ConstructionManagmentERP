@@ -116,14 +116,23 @@ export const users: User[] = [
   { id: "U003", name: "Site Manager", email: "site.mgr@erp.com", role: "Site Manager", assignedProjectId: "P001", assignedProjectName: "Skyline Tower" },
 ];
 
+/**
+ * Plain grouped number, no currency code/symbol — the whole app is
+ * single-currency (PKR), so repeating it on every row/cell is noise.
+ * Use formatCurrencyCompact (with its "PKR " prefix) for the few
+ * KPI/total spots where stating the currency once is worth it.
+ * Always shows exactly 2 decimal places (e.g. "425.00", "18,405.50") so every
+ * price/amount in the app renders consistently, whole or fractional.
+ */
 export const formatCurrency = (amount: number): string => {
   return new Intl.NumberFormat("en-PK", {
-    style: "currency",
-    currency: "PKR",
-    currencyDisplay: "code",
-    maximumFractionDigits: 0,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   }).format(amount);
 };
+
+/** @deprecated Use formatCurrency — it now always shows 2 decimal places. Kept as an alias. */
+export const formatCurrencyDecimal = formatCurrency;
 
 /** Compact form for KPIs: 85K, 45L (lakh), 2.5Cr (crore). Optional prefix e.g. "PKR ". */
 export const formatCurrencyCompact = (

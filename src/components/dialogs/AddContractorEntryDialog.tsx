@@ -20,6 +20,7 @@ import {
 import { createContractorEntry } from "@/services/contractorLedgerService";
 import type { ApiContractorWithTotals } from "@/services/contractorsService";
 import { toast } from "sonner";
+import { todayPKT } from "@/lib/pktDate";
 
 interface AddContractorEntryDialogProps {
   open: boolean;
@@ -39,7 +40,7 @@ export function AddContractorEntryDialog({
   onSuccess,
 }: AddContractorEntryDialogProps) {
   const [contractorId, setContractorId] = useState(defaultContractorId ?? contractors[0]?.id ?? "");
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(todayPKT());
   const [amount, setAmount] = useState("");
   const [remarks, setRemarks] = useState("");
   const [submitting, setSubmitting] = useState(false);
