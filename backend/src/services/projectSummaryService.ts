@@ -33,7 +33,7 @@ export interface ProjectSummaryOptions {
 /**
  * Compute project-scoped Spent and Liabilities from all ledgers.
  * Uses FIFO allocation for Vendor; entry-based aggregation for Contractor, Employee, Machinery.
- * Non-Consumable: Repair totalCost (projectFrom = projectId) counts as Spent; no payment tracking.
+ * Non-Consumable: all project-scoped totalCost entries count as Spent, matching Cash & Expenses.
  */
 export async function computeProjectSpentAndLiabilities(
   projectId: string,
@@ -163,10 +163,19 @@ async function computeMachinerySpentAndLiabilities(projectObjId: mongoose.Types.
   return { spent, liabilities };
 }
 
-/** Non-Consumable Spent: Repair totalCost only (projectFrom = projectId). Purchase is company-level, excluded. */
+/** Non-Consumable Spent: match Cash & Expenses' expenseProjectId scope, with legacy project fallbacks. */
 async function computeNonConsumableSpent(projectObjId: mongoose.Types.ObjectId): Promise<number> {
   const result = await NonConsumableLedgerEntry.aggregate<{ total: number }>([
-    { $match: { eventType: "Repair", projectFrom: projectObjId, totalCost: { $exists: true, $gte: 0 } } },
+    {
+      $match: {
+        totalCost: { $gt: 0 },
+        $or: [
+          { expenseProjectId: projectObjId },
+          { expenseProjectId: { $exists: false }, projectTo: projectObjId },
+          { expenseProjectId: { $exists: false }, projectFrom: projectObjId },
+        ],
+      },
+    },
     { $group: { _id: null, total: { $sum: "$totalCost" } } },
   ]);
   return result[0]?.total ?? 0;

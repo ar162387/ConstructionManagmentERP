@@ -15,10 +15,11 @@ export async function list(req: AuthRequest, res: Response) {
     const actor = req.user!;
     const projectId = typeof req.query.projectId === "string" ? req.query.projectId : undefined;
     const month = typeof req.query.month === "string" ? req.query.month : undefined;
+    const category = req.query.category === "Machinery" ? "Machinery" : "Regular";
     const items = await listEmployees(
       { userId: actor.userId, role: actor.role },
       projectId,
-      month ? { month } : undefined
+      { ...(month ? { month } : {}), category }
     );
     res.json(items);
   } catch (err) {

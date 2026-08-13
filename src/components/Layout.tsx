@@ -7,6 +7,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/context/AuthContext";
+import { COMPANY_LOGO_URL, COMPANY_NAME, COMPANY_SHORT_NAME } from "@/lib/company";
 
 interface NavItem {
   label: string;
@@ -39,6 +40,7 @@ const projectNavItems: NavItem[] = [
   { label: "Vendors", path: "/vendors", icon: <Truck className="h-4 w-4" /> },
   { label: "Contractors", path: "/contractors", icon: <HardHat className="h-4 w-4" /> },
   { label: "Employees", path: "/employees", icon: <Users className="h-4 w-4" /> },
+  { label: "Machinery Employees", path: "/machinery-employees", icon: <Users className="h-4 w-4" /> },
   { label: "Expenses", path: "/expenses", icon: <Receipt className="h-4 w-4" /> },
   { label: "Machinery", path: "/machinery", icon: <Wrench className="h-4 w-4" /> },
 ];
@@ -97,8 +99,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           <div className="flex items-start justify-between gap-2">
             <div className="flex flex-col gap-1 min-w-0 flex-1">
               <Link to="/" className="flex items-center gap-2.5">
-                <HardHat className="h-6 w-6 text-warning shrink-0" />
-                <span className="text-lg font-semibold tracking-tight">BuildERP</span>
+                <img src={COMPANY_LOGO_URL} alt="PCF logo" className="h-10 w-8 shrink-0 object-contain" />
+                <span className="text-lg font-semibold tracking-tight">{COMPANY_SHORT_NAME}</span>
               </Link>
               {isSiteManager && user?.assignedProjectName && (
                 <p className="font-bold text-sm truncate text-foreground" title={user.assignedProjectName}>
@@ -217,7 +219,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             <Menu className="h-5 w-5" />
           </Button>
           <h2 className="text-sm font-medium text-muted-foreground">
-            Construction Company ERP
+            {COMPANY_NAME}
           </h2>
         </header>
         <main className="flex-1 overflow-y-auto p-4 lg:p-6">{children}</main>

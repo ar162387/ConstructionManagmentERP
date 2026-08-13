@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import { Employee } from "../models/Employee.js";
+import { Machine } from "../models/Machine.js";
 import { EmployeePayment } from "../models/EmployeePayment.js";
 import { Project } from "../models/Project.js";
 import { User } from "../models/User.js";
@@ -7,7 +8,7 @@ import { logAudit } from "./auditService.js";
 import { roleDisplay } from "./authService.js";
 import { getEmployeeTotals, getEmployeeSnapshotForMonth } from "./employeeLedgerService.js";
 import type { MonthlySnapshot } from "./employeeLedgerService.js";
-import type { EmployeeType } from "../models/Employee.js";
+import type { EmployeeCategory, EmployeeType } from "../models/Employee.js";
 
 export interface EmployeePayload {
   id: string;
@@ -19,6 +20,8 @@ export interface EmployeePayload {
   monthlySalary?: number;
   dailyRate?: number;
   phone: string;
+  category: EmployeeCategory;
+  machineId?: string;
   totalPaid?: number;
   totalDue?: number;
   createdAt?: string;
@@ -35,6 +38,8 @@ export interface CreateEmployeeInput {
   dailyRate?: number;
   phone?: string;
   joiningDate?: string;
+  category?: EmployeeCategory;
+  machineId?: string;
 }
 
 export interface UpdateEmployeeInput {
@@ -45,6 +50,7 @@ export interface UpdateEmployeeInput {
   dailyRate?: number;
   phone?: string;
   joiningDate?: string;
+  machineId?: string;
 }
 
 function toPayload(
@@ -57,6 +63,8 @@ function toPayload(
     monthlySalary?: number;
     dailyRate?: number;
     phone?: string;
+    category?: EmployeeCategory;
+    machineId?: mongoose.Types.ObjectId;
     createdAt?: Date;
     joiningDate?: string;
   },
@@ -73,6 +81,8 @@ function toPayload(
     monthlySalary: doc.monthlySalary,
     dailyRate: doc.dailyRate,
     phone: doc.phone ?? "",
+    category: doc.category ?? "Regular",
+    machineId: doc.machineId?.toString(),
     totalPaid: totals?.totalPaid,
     totalDue: totals?.totalDue,
     createdAt: doc.createdAt ? new Date(doc.createdAt).toISOString() : undefined,
@@ -90,6 +100,7 @@ function validateJoiningDate(value: string): string {
 
 export interface EmployeeListOptions {
   month?: string;
+  category?: EmployeeCategory;
 }
 
 /** List employees for a project. When month is provided, includes snapshot (payable, paid, remaining, paymentStatus) for that month. */
@@ -106,9 +117,12 @@ export async function listEmployees(
   } else {
     projectId = projectIdParam;
   }
-  const query = projectId && mongoose.Types.ObjectId.isValid(projectId) ? { projectId: new mongoose.Types.ObjectId(projectId) } : {};
+  const query: Record<string, unknown> = projectId && mongoose.Types.ObjectId.isValid(projectId) ? { projectId: new mongoose.Types.ObjectId(projectId) } : {};
+  query.category = options?.category === "Machinery"
+    ? "Machinery"
+    : { $in: ["Regular", null] }; // retain existing employees created before the category field
   const docs = await Employee.find(query)
-    .select("_id projectId name role type monthlySalary dailyRate phone createdAt joiningDate")
+    .select("_id projectId name role type monthlySalary dailyRate phone category machineId createdAt joiningDate")
     .lean();
   const projectIds = [...new Set(docs.map((d) => d.projectId.toString()))];
   const projects = await Project.find({ _id: { $in: projectIds } }).select("_id name").lean();
@@ -159,6 +173,9 @@ export async function createEmployee(
   if (!input.name?.trim()) throw new Error("Employee name is required");
   if (!input.role?.trim()) throw new Error("Employee role is required");
   if (!input.type || !["Fixed", "Daily"].includes(input.type)) throw new Error("Employee type must be Fixed or Daily");
+  const category = input.category ?? "Regular";
+  if (!['Regular', 'Machinery'].includes(category)) throw new Error("Invalid employee category");
+  if (category === "Machinery" && input.type !== "Fixed") throw new Error("Machinery Employees must use Fixed monthly salary");
 
   let projectId: string;
   if (actor.role === "site_manager") {
@@ -180,6 +197,13 @@ export async function createEmployee(
   if (input.type === "Fixed" && input.monthlySalary != null) payload.monthlySalary = Math.max(0, input.monthlySalary);
   if (input.type === "Daily" && input.dailyRate != null) payload.dailyRate = Math.max(0, input.dailyRate);
   if (input.joiningDate?.trim()) payload.joiningDate = validateJoiningDate(input.joiningDate);
+  payload.category = category;
+  if (category === "Machinery") {
+    if (!input.machineId || !mongoose.Types.ObjectId.isValid(input.machineId)) throw new Error("A Company Owned machine is required for a Machinery Employee");
+    const machine = await Machine.findOne({ _id: input.machineId, projectId, ownership: "Company Owned" }).lean();
+    if (!machine) throw new Error("Machinery Employee must be assigned to a Company Owned machine in the same project");
+    payload.machineId = machine._id;
+  }
 
   const employee = await Employee.create(payload);
 
@@ -221,6 +245,12 @@ export async function updateEmployee(
   if (input.monthlySalary != null) updates.monthlySalary = Math.max(0, input.monthlySalary);
   if (input.dailyRate != null) updates.dailyRate = Math.max(0, input.dailyRate);
   if (input.phone != null) updates.phone = input.phone.trim();
+  if (target.category === "Machinery" && input.machineId != null) {
+    if (!mongoose.Types.ObjectId.isValid(input.machineId)) throw new Error("A valid Company Owned machine is required");
+    const machine = await Machine.findOne({ _id: input.machineId, projectId: target.projectId, ownership: "Company Owned" }).lean();
+    if (!machine) throw new Error("Machinery Employee must be assigned to a Company Owned machine in the same project");
+    updates.machineId = machine._id;
+  }
   let unsetJoiningDate = false;
   if (input.joiningDate != null) {
     const trimmed = input.joiningDate.trim();

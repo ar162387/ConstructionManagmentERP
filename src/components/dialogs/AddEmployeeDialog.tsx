@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -26,6 +26,8 @@ interface AddEmployeeDialogProps {
   restrictedProjectId?: string;
   restrictedProjectName?: string;
   projects: { id: string; name: string }[];
+  category?: "Regular" | "Machinery";
+  machines?: { id: string; name: string }[];
 }
 
 function todayDateString(): string {
@@ -36,7 +38,7 @@ function todayDateString(): string {
   return `${y}-${m}-${d}`;
 }
 
-export function AddEmployeeDialog({ open, onOpenChange, restrictedProjectId, restrictedProjectName, projects }: AddEmployeeDialogProps) {
+export function AddEmployeeDialog({ open, onOpenChange, restrictedProjectId, restrictedProjectName, projects, category = "Regular", machines = [] }: AddEmployeeDialogProps) {
   const [name, setName] = useState("");
   const [role, setRole] = useState("");
   const [type, setType] = useState<"Fixed" | "Daily">("Fixed");
@@ -45,9 +47,14 @@ export function AddEmployeeDialog({ open, onOpenChange, restrictedProjectId, res
   const [dailyRate, setDailyRate] = useState("");
   const [phone, setPhone] = useState("");
   const [joiningDate, setJoiningDate] = useState(todayDateString());
+  const [machineId, setMachineId] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const effectiveProjectId = restrictedProjectId ?? projectId;
   const effectiveProject = projects.find((p) => p.id === effectiveProjectId) ?? (restrictedProjectName ? { id: restrictedProjectId, name: restrictedProjectName } : null);
+
+  useEffect(() => {
+    if (category === "Machinery") setType("Fixed");
+  }, [category]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -61,6 +68,10 @@ export function AddEmployeeDialog({ open, onOpenChange, restrictedProjectId, res
     }
     if (!effectiveProjectId && !restrictedProjectId) {
       toast.error("Select a project");
+      return;
+    }
+    if (category === "Machinery" && !machineId) {
+      toast.error("Select the Company Owned machine that will pay this employee's salary");
       return;
     }
     setSubmitting(true);
@@ -80,6 +91,8 @@ export function AddEmployeeDialog({ open, onOpenChange, restrictedProjectId, res
           monthlySalary: sal,
           phone: phone.trim(),
           joiningDate: joiningDate.trim() || undefined,
+          category,
+          machineId: category === "Machinery" ? machineId : undefined,
         });
       } else {
         const rate = parseFloat(dailyRate);
@@ -96,6 +109,8 @@ export function AddEmployeeDialog({ open, onOpenChange, restrictedProjectId, res
           dailyRate: rate,
           phone: phone.trim(),
           joiningDate: joiningDate.trim() || undefined,
+          category,
+          machineId: category === "Machinery" ? machineId : undefined,
         });
       }
       toast.success("Employee added");
@@ -123,11 +138,21 @@ export function AddEmployeeDialog({ open, onOpenChange, restrictedProjectId, res
             <Label>Name *</Label>
             <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Employee name" className="mt-1" />
           </div>
+          {category === "Machinery" && (
+            <div>
+              <Label>Assigned Company Owned Machine *</Label>
+              <Select value={machineId} onValueChange={setMachineId}>
+                <SelectTrigger className="mt-1"><SelectValue placeholder="Select machine" /></SelectTrigger>
+                <SelectContent>{machines.map((machine) => <SelectItem key={machine.id} value={machine.id}>{machine.name}</SelectItem>)}</SelectContent>
+              </Select>
+              <p className="mt-1 text-xs text-muted-foreground">Salary and advance payments will be deducted from this machine only.</p>
+            </div>
+          )}
           <div>
             <Label>Role *</Label>
             <Input value={role} onChange={(e) => setRole(e.target.value)} placeholder="e.g. Foreman, Mason" className="mt-1" />
           </div>
-          <div>
+          {category !== "Machinery" ? <div>
             <Label>Type *</Label>
             <Select value={type} onValueChange={(v) => setType(v as "Fixed" | "Daily")}>
               <SelectTrigger className="mt-1">
@@ -138,8 +163,11 @@ export function AddEmployeeDialog({ open, onOpenChange, restrictedProjectId, res
                 <SelectItem value="Daily">Daily Wage</SelectItem>
               </SelectContent>
             </Select>
-          </div>
-          <div>
+          </div> : <div>
+            <Label>Type</Label>
+            <p className="mt-1.5 text-sm font-medium">Fixed Monthly Salary</p>
+          </div>}
+          {category !== "Machinery" && <div>
             <Label>Project *</Label>
             {restrictedProjectId && restrictedProjectName ? (
               <p className="mt-1.5 text-sm font-medium">{restrictedProjectName}</p>
@@ -155,7 +183,7 @@ export function AddEmployeeDialog({ open, onOpenChange, restrictedProjectId, res
                 </SelectContent>
               </Select>
             )}
-          </div>
+          </div>}
           {type === "Fixed" && (
             <div>
               <Label>Monthly Salary *</Label>

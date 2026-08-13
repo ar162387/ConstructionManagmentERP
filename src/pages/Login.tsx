@@ -5,9 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { HardHat, Shield, UserCog, User } from "lucide-react";
+import { Shield, UserCog, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { COMPANY_LOGO_URL, COMPANY_NAME, COMPANY_SHORT_NAME } from "@/lib/company";
 
 const DEMO_ACCOUNTS = [
   { name: "Super Admin", email: "superadmin@erp.com", role: "Super Admin" as const },
@@ -63,8 +64,8 @@ export default function Login() {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-background via-background to-primary/5 p-4">
       <div className="flex items-center gap-3 mb-10">
-        <HardHat className="h-10 w-10 text-warning" />
-        <span className="text-2xl font-bold tracking-tight">BuildERP</span>
+        <img src={COMPANY_LOGO_URL} alt="PCF logo" className="h-16 w-10 object-contain" />
+        <span className="text-2xl font-bold tracking-tight">{COMPANY_SHORT_NAME}</span>
       </div>
 
       <Card className="w-full max-w-lg border-2 shadow-xl">
@@ -141,7 +142,7 @@ export default function Login() {
         </CardContent>
       </Card>
       <p className="text-xs text-muted-foreground mt-6">
-        Construction Company ERP · Default password: password123
+        {COMPANY_NAME} · Default password: password123
       </p>
     </div>
   );

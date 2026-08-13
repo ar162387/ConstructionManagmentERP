@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { listEmployees, type ApiEmployeeWithSnapshot } from "@/services/employeesService";
 
 /** projectId: filter. month: optional, for per-month snapshot. */
-export function useEmployees(projectId?: string | null, month?: string | null) {
+export function useEmployees(projectId?: string | null, month?: string | null, category: "Regular" | "Machinery" = "Regular") {
   const [employees, setEmployees] = useState<ApiEmployeeWithSnapshot[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -17,6 +17,7 @@ export function useEmployees(projectId?: string | null, month?: string | null) {
       const list = await listEmployees(
         effectiveProjectId,
         month ?? undefined
+        , category
       );
       setEmployees(list);
     } catch (err) {
@@ -24,7 +25,7 @@ export function useEmployees(projectId?: string | null, month?: string | null) {
     } finally {
       if (!options?.silent) setLoading(false);
     }
-  }, [projectId, month]);
+  }, [projectId, month, category]);
 
   useEffect(() => {
     refetch();

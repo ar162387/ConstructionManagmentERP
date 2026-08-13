@@ -2,6 +2,8 @@ import mongoose from "mongoose";
 import { Employee } from "../models/Employee.js";
 import { EmployeePayment } from "../models/EmployeePayment.js";
 import { EmployeeAttendance } from "../models/EmployeeAttendance.js";
+import { MachinePayment } from "../models/MachinePayment.js";
+import { rebuildMachinePaymentAllocations } from "./machinePaymentAllocationService.js";
 import { User } from "../models/User.js";
 import { logAudit } from "./auditService.js";
 import { roleDisplay } from "./authService.js";
@@ -506,7 +508,7 @@ export async function createEmployeePayment(
   input: CreateEmployeePaymentInput
 ): Promise<EmployeePaymentPayload> {
   if (!mongoose.Types.ObjectId.isValid(employeeId)) throw new Error("Invalid employee ID");
-  await ensureEmployeeAccess(actor, employeeId);
+  const employee = await ensureEmployeeAccess(actor, employeeId);
 
   if (!input.month?.trim() || !input.date?.trim()) throw new Error("Month and date are required");
   if (!["Advance", "Salary", "Wage"].includes(input.type)) throw new Error("Invalid payment type");
@@ -524,7 +526,22 @@ export async function createEmployeePayment(
     remarks: input.remarks?.trim(),
   });
 
-  const employee = await Employee.findById(employeeId).select("name").lean();
+  // Machinery Employee salary is paid from the assigned Company Owned machine's balance.
+  // Keep the two records linked so removing the salary also reverses the machine expense.
+  if (employee.category === "Machinery" && employee.machineId) {
+    const machinePayment = await MachinePayment.create({
+      machineId: employee.machineId,
+      date: payment.date,
+      amount: payment.amount,
+      paymentMethod: payment.paymentMethod,
+      referenceId: `Machinery employee ${payment.type.toLowerCase()} — ${employee.name}`,
+    });
+    payment.machinePaymentId = machinePayment._id;
+    await payment.save();
+    await rebuildMachinePaymentAllocations(employee.machineId.toString());
+  }
+
+  const employeeName = await Employee.findById(employeeId).select("name").lean();
   const actorUser = await User.findById(actor.userId).lean();
   const role = roleDisplay[actor.role as keyof typeof roleDisplay] ?? actor.role;
   await logAudit({
@@ -535,7 +552,7 @@ export async function createEmployeePayment(
     action: "create",
     module: "employees",
     entityId: payment._id.toString(),
-    description: `Payment recorded: ${employee?.name ?? "Employee"} - ${payment.type} ${payment.amount.toLocaleString()} (${payment.month})`,
+    description: `Payment recorded: ${employeeName?.name ?? "Employee"} - ${payment.type} ${payment.amount.toLocaleString()} (${payment.month})`,
     newValue: { amount: payment.amount, type: payment.type, month: payment.month },
   });
 
@@ -552,7 +569,7 @@ export async function updateEmployeePayment(
   const payment = await EmployeePayment.findById(paymentId);
   if (!payment) throw new Error("Payment not found");
 
-  await ensureEmployeeAccess(actor, payment.employeeId.toString());
+  const employee = await ensureEmployeeAccess(actor, payment.employeeId.toString());
 
   const newAmount = input.amount ?? payment.amount;
   const newMonth = (input.month ?? payment.month).trim();
@@ -597,9 +614,13 @@ export async function deleteEmployeePayment(
   const payment = await EmployeePayment.findById(paymentId);
   if (!payment) throw new Error("Payment not found");
 
-  await ensureEmployeeAccess(actor, payment.employeeId.toString());
+  const employee = await ensureEmployeeAccess(actor, payment.employeeId.toString());
 
   await EmployeePayment.findByIdAndDelete(paymentId);
+  if (payment.machinePaymentId) {
+    await MachinePayment.findByIdAndDelete(payment.machinePaymentId);
+    if (employee.machineId) await rebuildMachinePaymentAllocations(employee.machineId.toString());
+  }
 
   const actorUser = await User.findById(actor.userId).lean();
   const role = roleDisplay[actor.role as keyof typeof roleDisplay] ?? actor.role;

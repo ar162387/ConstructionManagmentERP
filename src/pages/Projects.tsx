@@ -39,7 +39,10 @@ interface ProjectCardProps {
 function ProjectCard({ p, summary, valuesLoading, canEdit, canDelete, onEdit, onDelete }: ProjectCardProps) {
   const spent = summary?.spent ?? 0;
   const liabilities = summary?.liabilities ?? 0;
-  const balance = p.balance ?? 0;
+  const received = p.balance ?? 0;
+  const clientPayment = p.clientPayment ?? 0;
+  const budgetBalance = p.allocatedBudget - clientPayment;
+  const projectBalance = received - spent;
 
   return (
     <Card className="flex flex-col border-2 border-border hover:border-primary/30 transition-colors">
@@ -57,16 +60,52 @@ function ProjectCard({ p, summary, valuesLoading, canEdit, canDelete, onEdit, on
           )}
         </CardHeader>
         <CardContent className="flex-1 space-y-3 pt-0">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
             <div className="flex items-center justify-between text-sm">
               <span className="text-muted-foreground flex items-center gap-1.5">
                 <Banknote className="h-3.5 w-3.5" />
-                Balance
+                Allocated Budget
               </span>
               {valuesLoading ? (
                 <Skeleton className="h-3.5 w-16 rounded" />
               ) : (
-                <span className="font-mono text-xs font-medium">{formatCurrency(balance)}</span>
+                <span className="font-mono text-xs font-medium">{formatCurrency(p.allocatedBudget)}</span>
+              )}
+            </div>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground flex items-center gap-1.5">
+                <Banknote className="h-3.5 w-3.5" />
+                Client Payment
+              </span>
+              {valuesLoading ? (
+                <Skeleton className="h-3.5 w-16 rounded" />
+              ) : (
+                <span className="font-mono text-xs font-medium">{formatCurrency(clientPayment)}</span>
+              )}
+            </div>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground flex items-center gap-1.5">
+                <Wallet className="h-3.5 w-3.5" />
+                Budget Balance
+              </span>
+              {valuesLoading ? (
+                <Skeleton className="h-3.5 w-16 rounded" />
+              ) : (
+                <span className={`font-mono text-xs font-medium ${budgetBalance < 0 ? "text-destructive" : ""}`}>{formatCurrency(budgetBalance)}</span>
+              )}
+            </div>
+          </div>
+          <div className="space-y-1.5 sm:border-l sm:border-border sm:pl-4">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground flex items-center gap-1.5">
+                <Banknote className="h-3.5 w-3.5" />
+                Received
+              </span>
+              {valuesLoading ? (
+                <Skeleton className="h-3.5 w-16 rounded" />
+              ) : (
+                <span className="font-mono text-xs font-medium">{formatCurrency(received)}</span>
               )}
             </div>
             <div className="flex items-center justify-between text-sm">
@@ -82,6 +121,17 @@ function ProjectCard({ p, summary, valuesLoading, canEdit, canDelete, onEdit, on
             </div>
             <div className="flex items-center justify-between text-sm">
               <span className="text-muted-foreground flex items-center gap-1.5">
+                <Wallet className="h-3.5 w-3.5" />
+                Project Balance
+              </span>
+              {valuesLoading ? (
+                <Skeleton className="h-3.5 w-16 rounded" />
+              ) : (
+                <span className={`font-mono text-xs font-medium ${projectBalance < 0 ? "text-destructive" : ""}`}>{formatCurrency(projectBalance)}</span>
+              )}
+            </div>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground flex items-center gap-1.5">
                 <AlertCircle className="h-3.5 w-3.5" />
                 Liabilities
               </span>
@@ -91,6 +141,7 @@ function ProjectCard({ p, summary, valuesLoading, canEdit, canDelete, onEdit, on
                 <span className="font-mono text-xs text-destructive font-medium">{formatCurrency(liabilities)}</span>
               )}
             </div>
+          </div>
           </div>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <Calendar className="h-3.5 w-3.5 shrink-0" />
@@ -263,7 +314,7 @@ export default function Projects() {
           You are not assigned to any project. Contact your administrator.
         </p>
       ) : (
-        <div id="projects-cards" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <div id="projects-cards" className="grid grid-cols-1 lg:grid-cols-2 gap-5">
           {visibleProjects.map((p) => (
             <ProjectCard
               key={p.id}

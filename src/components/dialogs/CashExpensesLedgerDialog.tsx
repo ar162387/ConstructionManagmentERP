@@ -9,6 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Loader2, Printer } from "lucide-react";
 import { formatCurrency } from "@/lib/mock-data";
+import { COMPANY_ADDRESS, COMPANY_LOGO_URL, COMPANY_NAME } from "@/lib/company";
 import {
   getCashExpensesEntityLedger,
   type CashExpensesEntityType,
@@ -82,20 +83,32 @@ export function CashExpensesLedgerDialog({
 <head>
   <title>${docTitle}</title>
   <style>
-    body { font-family: Arial, Helvetica, sans-serif; padding: 20px; color: #000; }
+    @page { margin: 16mm 12mm; }
+    * { box-sizing: border-box; }
+    body { font-family: Arial, Helvetica, sans-serif; padding: 20px; color: #000; overflow-wrap: anywhere; }
+    .company-header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 8px; margin-bottom: 12px; }
+    .company-brand-row { display: flex; align-items: center; justify-content: center; gap: 10px; }
+    .company-logo { display: block; width: auto; max-width: 100%; height: 64px; max-height: 64px; object-fit: contain; filter: grayscale(100%) contrast(180%); }
+    .company-name { font-size: 22px; font-weight: 700; line-height: 1.15; text-transform: uppercase; }
+    .company-address { margin-top: 3px; font-size: 12.6px; line-height: 1.2; }
     .print-title { display: block !important; font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; text-align: center; margin-bottom: 4px; }
     .print-period { display: block !important; font-size: 11px; text-align: center; margin-bottom: 12px; color: #444; }
     .print-previous { font-size: 11px; font-weight: 600; padding: 6px 0 10px; border-bottom: 1px solid #000; margin-bottom: 6px; }
-    table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+    table { width: 100%; max-width: 100%; table-layout: fixed; border-collapse: collapse; margin-top: 8px; }
     th, td { border: 1px solid #000; padding: 6px 10px; text-align: left; font-size: 11px; }
-    th { background-color: #000; color: #fff; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; }
+    th { background-color: #e8e8e8 !important; color: #000 !important; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; }
     th.num, td.num { text-align: right; }
-    tr:nth-child(even) { background-color: #f5f5f5; }
+    tr:nth-child(even) { background-color: #f5f5f5 !important; }
     .total-row td { font-weight: bold; background-color: #e8e8e8 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    thead { display: table-header-group; }
+    tr, img { break-inside: avoid; page-break-inside: avoid; }
     @media print { body { padding: 0; } }
   </style>
 </head>
-<body>${content.innerHTML}</body>
+<body>
+  <div class="company-header"><div class="company-brand-row"><img class="company-logo" src="${COMPANY_LOGO_URL}" alt="PCF logo" /><div class="company-name">${COMPANY_NAME}</div></div><div class="company-address">${COMPANY_ADDRESS}</div></div>
+  ${content.innerHTML}
+</body>
 </html>`;
     printWindow.document.open();
     printWindow.document.write(html);

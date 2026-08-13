@@ -14,6 +14,7 @@ export interface ApiProject {
   endDate: string;
   spent: number;
   balance?: number;
+  clientPayment?: number;
 }
 
 export interface CreateProjectInput {

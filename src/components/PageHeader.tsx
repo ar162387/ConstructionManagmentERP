@@ -9,7 +9,7 @@ interface PageHeaderProps {
   secondaryText?: string;
   printTargetId?: string;
   /** Forwarded to PrintExportButton when printTargetId is set */
-  printOptions?: Pick<PrintExportButtonProps, "printDocumentTitle" | "omitDefaultHeader" | "additionalPrintCss">;
+  printOptions?: Pick<PrintExportButtonProps, "printDocumentTitle" | "printLabel" | "omitDefaultHeader" | "additionalPrintCss" | "preparePrintContent">;
   actions?: React.ReactNode;
 }
 

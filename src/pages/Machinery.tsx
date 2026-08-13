@@ -99,13 +99,6 @@ const MACHINERY_RUNNING_PRINT_CSS = `
   }
   table.machinery-running-table tbody tr:nth-child(even) td { background: #f9f9f9; }
   .machinery-row-excluded { display: none !important; }
-  /* Hiding the checkbox column with plain display:none drops it from the table's column count,
-     shifting every later column left and misaligning the Less advance / Balance rows against the
-     header. Keep the cell occupying its column slot in print, just rendered invisible. */
-  table.machinery-running-table .machinery-running-checkbox-cell.print-hidden {
-    display: table-cell !important;
-    visibility: hidden !important;
-  }
   table.machinery-running-table tr.machinery-running-total td { font-weight: 700; background: #f0f0f0; }
   table.machinery-running-table tr.machinery-running-deduction td,
   table.machinery-running-table tr.machinery-running-balance td { font-weight: 700; }
@@ -113,7 +106,7 @@ const MACHINERY_RUNNING_PRINT_CSS = `
   .machinery-running-project { text-align: center; font-size: 13px; font-weight: 600; }
   .machinery-running-title { text-align: center; font-size: 15px; font-weight: 700; margin: 14px 0 6px; letter-spacing: 0.02em; }
   .machinery-running-bill-meta { text-align: right; font-size: 10px; color: #333; line-height: 1.35; }
-  .machinery-running-signatures { display: flex; justify-content: flex-end; margin-top: 36px; padding: 0 8%; font-size: 11px; }
+  .machinery-running-signatures { display: flex; justify-content: flex-end; margin-top: 128px; padding: 0 8%; font-size: 11px; }
   .machinery-running-signatures > div { text-align: center; width: 11rem; max-width: 45%; }
   .machinery-running-signatures .sig-line { border-top: 1px solid #000; margin-bottom: 6px; min-height: 28px; }
 `;
@@ -296,6 +289,17 @@ export default function Machinery() {
                 omitDefaultHeader: true,
                 printDocumentTitle: `Machinery running bill — ${projectName}`,
                 additionalPrintCss: MACHINERY_RUNNING_PRINT_CSS,
+                preparePrintContent: (printContent) => {
+                  printContent.querySelectorAll("table.machinery-running-table").forEach((table) => {
+                    table.querySelector("colgroup > col")?.remove();
+                    table.querySelectorAll(".machinery-running-checkbox-cell").forEach((cell) => cell.remove());
+                    table.querySelectorAll("tbody tr").forEach((row) => {
+                      const leadingCell = row.querySelector(":scope > td[colspan]") as HTMLTableCellElement | null;
+                      if (leadingCell && leadingCell.colSpan > 1) leadingCell.colSpan -= 1;
+                    });
+                  });
+                  return printContent;
+                },
               }
             : undefined
         }
@@ -602,7 +606,7 @@ export default function Machinery() {
                 </tbody>
               </table>
             </div>
-            <div className="machinery-running-signatures mt-8 flex justify-end pe-[6%] text-muted-foreground sm:mt-10 sm:pe-[8%]">
+            <div className="machinery-running-signatures mt-24 flex justify-end px-[8%] text-muted-foreground">
               <div className="w-44 text-center">
                 <div className="sig-line border-border" />
                 <span className="text-xs">Checked by</span>

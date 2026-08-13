@@ -5,6 +5,7 @@
 import { api } from "./api";
 
 export type ApiEmployeeType = "Fixed" | "Daily";
+export type ApiEmployeeCategory = "Regular" | "Machinery";
 
 export interface ApiEmployee {
   id: string;
@@ -16,11 +17,15 @@ export interface ApiEmployee {
   monthlySalary?: number;
   dailyRate?: number;
   phone: string;
+  category: ApiEmployeeCategory;
+  machineId?: string;
   totalPaid?: number;
   totalDue?: number;
   createdAt?: string;
   /** User-specified "YYYY-MM-DD" date the employee actually joined; overrides createdAt as the No-Data cutoff. */
   joiningDate?: string;
+  category?: ApiEmployeeCategory;
+  machineId?: string;
 }
 
 export interface CreateEmployeeInput {
@@ -32,6 +37,7 @@ export interface CreateEmployeeInput {
   dailyRate?: number;
   phone?: string;
   joiningDate?: string;
+  machineId?: string;
 }
 
 export interface UpdateEmployeeInput {
@@ -75,10 +81,12 @@ export interface ApiEmployeeWithSnapshot extends ApiEmployee {
 export async function listEmployees(
   projectId?: string | null,
   month?: string | null
+  , category?: ApiEmployeeCategory
 ): Promise<ApiEmployeeWithSnapshot[]> {
   const params = new URLSearchParams();
   if (projectId) params.set("projectId", projectId);
   if (month) params.set("month", month);
+  if (category) params.set("category", category);
   const q = params.toString();
   return api<ApiEmployeeWithSnapshot[]>(`/api/employees${q ? `?${q}` : ""}`);
 }

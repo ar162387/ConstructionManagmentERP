@@ -75,6 +75,7 @@ export default function ConsumableInventory() {
   const [billVendorId, setBillVendorId] = useState("");
   const [billStart, setBillStart] = useState(new Date().toISOString().slice(0, 10));
   const [billEnd, setBillEnd] = useState(new Date().toISOString().slice(0, 10));
+  const [billLabel, setBillLabel] = useState("");
   const [runningBill, setRunningBill] = useState<ApiConsumableRunningBill | null>(null);
   const [billLoading, setBillLoading] = useState(false);
   const [billError, setBillError] = useState<string | null>(null);
@@ -160,8 +161,6 @@ export default function ConsumableInventory() {
       <PageHeader
         title="Consumable Inventory"
         subtitle="Materials that reduce with usage — per project"
-        printProjectName={selectedProjectName}
-        printTargetId="consumable-tabs"
         actions={
           <>
             <Button variant="warning" size="sm" onClick={() => setAddItemOpen(true)} disabled={!effectiveProjectId}>
@@ -442,6 +441,10 @@ export default function ConsumableInventory() {
                 <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">End date / bill date</Label>
                 <Input className="mt-1 w-44" type="date" value={billEnd} onChange={(event) => setBillEnd(event.target.value)} />
               </div>
+              <div className="min-w-[220px]">
+                <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Running bill label</Label>
+                <Input className="mt-1" value={billLabel} onChange={(event) => setBillLabel(event.target.value)} placeholder="e.g. 1st Running Bill" />
+              </div>
             </div>
 
             {!effectiveProjectId ? (
@@ -454,33 +457,49 @@ export default function ConsumableInventory() {
               <div className="border-2 border-destructive p-8 text-center text-destructive">{billError}</div>
             ) : runningBill && (
               <div id="consumable-running-bill" className="border-2 border-border bg-card p-4 sm:p-6">
-                <header className="mb-4 border-b border-border pb-4 text-center">
-                  <p className="text-base font-semibold">{selectedProjectName}</p>
-                  <h2 className="mt-3 text-xl font-bold uppercase tracking-wide">Consumable running bill</h2>
-                  <div className="mt-2 flex flex-wrap justify-center gap-x-6 gap-y-1 text-sm text-muted-foreground">
-                    <span>Vendor: <strong className="text-foreground">{runningBill.vendorName}</strong></span>
-                    <span>Period: {billStart} – {billEnd}</span>
-                    <span>Bill date: {billEnd}</span>
+                <header className="running-bill-details mb-4 border-b border-border pb-4 text-sm sm:text-base">
+                  <div className="grid grid-cols-1 gap-y-2 sm:grid-cols-2 sm:gap-x-12" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 48px" }}>
+                    <p><strong>Project Name:</strong> {selectedProjectName}</p>
+                    <p className="sm:text-right">{billLabel}</p>
+                    <p><strong>Vendor:</strong> {runningBill.vendorName}</p>
+                    <p className="sm:text-right"><strong>Date:</strong> {billEnd}</p>
                   </div>
                 </header>
                 <div className="mb-3 flex justify-end print-hidden">
                   <PrintExportButton title="Consumable Running Bill" printProjectName={selectedProjectName} printTargetId="consumable-running-bill" omitDefaultHeader additionalPrintCss={`
                     table.consumable-running-bill-table { table-layout: fixed; }
-                    .consumable-running-bill-table th, .consumable-running-bill-table td { padding: 6px 7px; font-size: 10px; white-space: nowrap; }
-                    .consumable-running-bill-table .bill-selector-control { display: none !important; }
-                  `} />
+                    .consumable-running-bill-table th, .consumable-running-bill-table td { padding: 6px 7px; font-size: 10px; overflow: hidden; }
+                    .consumable-running-bill-table th { white-space: normal !important; overflow-wrap: anywhere; word-break: break-word; line-height: 1.15; font-size: 9px; }
+                    .consumable-running-bill-table td { white-space: nowrap; }
+                    .running-bill-details { margin: 0 0 12px; padding: 0 0 8px; border-bottom: 1px solid #000; font-size: 12px; }
+                    .running-bill-details > div { display: grid !important; grid-template-columns: 1fr 1fr !important; gap: 6px 36px !important; }
+                    .running-bill-details p { margin: 0; }
+                    .running-bill-details p:nth-child(even) { text-align: right; }
+                    .running-bill-signatures { display: flex; justify-content: flex-end; margin: 128px 8% 0; font-size: 12px; break-inside: avoid; page-break-inside: avoid; }
+                    .running-bill-signature { width: 38%; text-align: center; }
+                    .running-bill-signature-line { border-top: 1px solid #000; margin-bottom: 6px; min-height: 28px; }
+                  `} preparePrintContent={(printContent) => {
+                    printContent.querySelectorAll("table.consumable-running-bill-table").forEach((table) => {
+                      table.querySelectorAll(".bill-selector-column").forEach((cell) => cell.remove());
+                      table.querySelectorAll("tbody tr").forEach((row) => {
+                        const leadingCell = row.querySelector(":scope > td[colspan]") as HTMLTableCellElement | null;
+                        if (leadingCell && leadingCell.colSpan > 1) leadingCell.colSpan -= 1;
+                      });
+                    });
+                    return printContent;
+                  }} />
                 </div>
                 <div className="overflow-x-auto">
                   <table className="consumable-running-bill-table w-full min-w-[950px] border-collapse text-sm [&_td]:border [&_td]:border-border [&_td]:px-2 [&_td]:py-2 [&_th]:border [&_th]:border-border [&_th]:px-2 [&_th]:py-2">
                     <thead className="bg-primary text-primary-foreground">
                       <tr>
-                        <th className="w-9 text-center"><input className="bill-selector-control" type="checkbox" checked={runningBill.rows.length > 0 && selectedBillRows.size === runningBill.rows.length} onChange={(event) => setSelectedBillRows(event.target.checked ? new Set(runningBill.rows.map((row) => row.id)) : new Set())} aria-label="Select all items" /></th>
+                        <th className="bill-selector-column w-9 text-center"><input className="bill-selector-control" type="checkbox" checked={runningBill.rows.length > 0 && selectedBillRows.size === runningBill.rows.length} onChange={(event) => setSelectedBillRows(event.target.checked ? new Set(runningBill.rows.map((row) => row.id)) : new Set())} aria-label="Select all items" /></th>
                         <th className="text-left">Item Name</th><th className="text-right">Qty</th><th className="text-right">Previous Qty</th><th className="text-right">Total Qty</th><th className="text-right">Rate (Unit Price)</th><th className="text-right">This Bill</th><th className="text-right">Previous Bill</th><th className="text-right">Total Amount</th>
                       </tr>
                     </thead>
                     <tbody>
                       {runningBill.rows.length === 0 ? <tr><td colSpan={9} className="py-8 text-center text-muted-foreground">No purchases for this vendor up to the selected bill date.</td></tr> : selectedBillData.rows.map((row) => <tr key={row.id}>
-                        <td className="text-center"><input className="bill-selector-control" type="checkbox" checked={selectedBillRows.has(row.id)} onChange={(event) => setSelectedBillRows((current) => { const next = new Set(current); event.target.checked ? next.add(row.id) : next.delete(row.id); return next; })} aria-label={`Include ${row.itemName}`} /></td>
+                        <td className="bill-selector-column text-center"><input className="bill-selector-control" type="checkbox" checked={selectedBillRows.has(row.id)} onChange={(event) => setSelectedBillRows((current) => { const next = new Set(current); if (event.target.checked) next.add(row.id); else next.delete(row.id); return next; })} aria-label={`Include ${row.itemName}`} /></td>
                         <td>{row.itemName}</td><td className="text-right font-mono">{row.quantity || "—"}</td><td className="text-right font-mono">{row.previousQuantity || "—"}</td><td className="text-right font-mono">{row.totalQuantity || "—"}</td><td className="text-right font-mono">{formatCurrency(row.rate)}</td><td className="text-right font-mono">{row.thisBill ? formatCurrency(row.thisBill) : "—"}</td><td className="text-right font-mono">{row.previousBill ? formatCurrency(row.previousBill) : "—"}</td><td className="text-right font-mono font-semibold">{row.totalAmount ? formatCurrency(row.totalAmount) : "—"}</td>
                       </tr>)}
                       {selectedBillData.rows.length > 0 && <>
@@ -490,6 +509,12 @@ export default function ConsumableInventory() {
                       </>}
                     </tbody>
                   </table>
+                </div>
+                <div className="running-bill-signatures mt-24 flex justify-end px-[8%] text-center text-sm">
+                  <div className="running-bill-signature w-[38%]">
+                    <div className="running-bill-signature-line min-h-7 border-t border-foreground" />
+                    <span>Checked By</span>
+                  </div>
                 </div>
               </div>
             )}

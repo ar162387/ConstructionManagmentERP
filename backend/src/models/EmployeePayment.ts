@@ -12,6 +12,8 @@ export interface IEmployeePayment {
   type: EmployeePaymentType;
   paymentMethod: EmployeePaymentMethod;
   remarks?: string;
+  /** Linked machine-payment record for Machinery Employee payments. */
+  machinePaymentId?: mongoose.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -25,6 +27,7 @@ const employeePaymentSchema = new mongoose.Schema<IEmployeePayment>(
     type: { type: String, required: true, enum: ["Advance", "Salary", "Wage"] },
     paymentMethod: { type: String, required: true, enum: ["Cash", "Bank", "Online"] },
     remarks: { type: String, trim: true },
+    machinePaymentId: { type: mongoose.Schema.Types.ObjectId, ref: "MachinePayment" },
   },
   { timestamps: true }
 );

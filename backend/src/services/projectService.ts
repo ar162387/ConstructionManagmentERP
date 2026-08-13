@@ -4,6 +4,7 @@ import { User } from "../models/User.js";
 import { ItemLedgerEntry } from "../models/ItemLedgerEntry.js";
 import { NonConsumableLedgerEntry } from "../models/NonConsumableLedgerEntry.js";
 import { ContractorEntry } from "../models/ContractorEntry.js";
+import { BankTransaction } from "../models/BankTransaction.js";
 import { logAudit } from "./auditService.js";
 import { roleDisplay } from "./authService.js";
 import type { AuthRequest } from "../middleware/auth.js";
@@ -30,6 +31,7 @@ export interface ProjectPayload {
   endDate: string;
   spent: number;
   balance: number;
+  clientPayment: number;
 }
 
 export interface CreateProjectInput {
@@ -50,7 +52,7 @@ export interface UpdateProjectInput {
   endDate?: string;
 }
 
-function toPayload(doc: { _id: mongoose.Types.ObjectId; name: string; description?: string; allocatedBudget: number; status: string; startDate?: string; endDate?: string; spent?: number; balance?: number }): ProjectPayload {
+function toPayload(doc: { _id: mongoose.Types.ObjectId; name: string; description?: string; allocatedBudget: number; status: string; startDate?: string; endDate?: string; spent?: number; balance?: number }, clientPayment = 0): ProjectPayload {
   return {
     id: doc._id.toString(),
     name: doc.name,
@@ -61,19 +63,25 @@ function toPayload(doc: { _id: mongoose.Types.ObjectId; name: string; descriptio
     endDate: doc.endDate ?? "",
     spent: doc.spent ?? 0,
     balance: doc.balance ?? 0,
+    clientPayment,
   };
 }
 
 /** Optional actor: when role is site_manager, returns only the assigned project */
 export async function listProjects(actor?: { userId: string; role: string }): Promise<ProjectPayload[]> {
+  let projectFilter: Record<string, unknown> = {};
   if (actor?.role === "site_manager") {
     const user = await User.findById(actor.userId).select("assignedProjectId").lean();
     if (!user?.assignedProjectId) return [];
-    const doc = await Project.findById(user.assignedProjectId).lean();
-    return doc ? [toPayload(doc)] : [];
+    projectFilter = { _id: user.assignedProjectId };
   }
-  const docs = await Project.find().lean();
-  return docs.map(toPayload);
+  const docs = await Project.find(projectFilter).lean();
+  const totals = await BankTransaction.aggregate<{ _id: mongoose.Types.ObjectId; total: number }>([
+    { $match: { type: "inflow", clientId: { $exists: true, $ne: null }, projectId: { $exists: true, $ne: null } } },
+    { $group: { _id: "$projectId", total: { $sum: "$amount" } } },
+  ]);
+  const paymentsByProject = new Map(totals.map((total) => [total._id.toString(), total.total]));
+  return docs.map((doc) => toPayload(doc, paymentsByProject.get(doc._id.toString()) ?? 0));
 }
 
 export async function createProject(actor: { userId: string; email: string; role: string }, input: CreateProjectInput): Promise<ProjectPayload> {

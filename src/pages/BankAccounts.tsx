@@ -22,6 +22,7 @@ import { deleteBankTransaction, listBankTransactions } from "@/services/bankTran
 import type { ApiBankAccount } from "@/services/bankAccountService";
 import type { ApiBankTransaction } from "@/services/bankTransactionService";
 import { toast } from "sonner";
+import { COMPANY_ADDRESS, COMPANY_LOGO_URL, COMPANY_NAME } from "@/lib/company";
 import {
   Dialog,
   DialogContent,
@@ -267,20 +268,33 @@ export default function BankAccounts() {
         <head>
           <title>${escapeHtml(selectedAccount.name)} Bank Report</title>
           <style>
-            body { font-family: Arial, Helvetica, sans-serif; color: #000; padding: 20px; }
+            @page { margin: 16mm 12mm; }
+            * { box-sizing: border-box; }
+            body { font-family: Arial, Helvetica, sans-serif; color: #000; padding: 20px; overflow-wrap: anywhere; }
+            .company-header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 8px; margin-bottom: 12px; }
+            .company-brand-row { display: flex; align-items: center; justify-content: center; gap: 10px; }
+            .company-logo { display: block; width: auto; max-width: 100%; height: 64px; max-height: 64px; object-fit: contain; filter: grayscale(100%) contrast(180%); }
+            .company-name { font-size: 22px; font-weight: 700; line-height: 1.15; text-transform: uppercase; }
+            .company-address { margin-top: 3px; font-size: 12.6px; line-height: 1.2; }
             .header { text-align: center; margin-bottom: 12px; }
             .header h1 { font-size: 18px; margin: 0 0 6px; }
             .header p { margin: 2px 0; font-size: 12px; }
-            table { width: 100%; border-collapse: collapse; }
+            table { width: 100%; max-width: 100%; table-layout: fixed; border-collapse: collapse; }
             th, td { border: 1px solid #000; padding: 6px 8px; font-size: 12px; vertical-align: top; }
             th { background: #efefef; text-transform: uppercase; }
             td.amount { white-space: nowrap; }
             .text-right { text-align: right; }
             .text-center { text-align: center; }
+            thead { display: table-header-group; }
+            tr, img { break-inside: avoid; page-break-inside: avoid; }
             @media print { body { padding: 0; } }
           </style>
         </head>
         <body>
+          <div class="company-header">
+            <div class="company-brand-row"><img class="company-logo" src="${COMPANY_LOGO_URL}" alt="PCF logo" /><div class="company-name">${COMPANY_NAME}</div></div>
+            <div class="company-address">${COMPANY_ADDRESS}</div>
+          </div>
           <div class="header">
             <h1>${escapeHtml(selectedAccount.name)} (${escapeHtml(selectedAccount.accountNumber || "Account")})</h1>
             <p>Date Range: ${escapeHtml(printStartDate)} to ${escapeHtml(printEndDate)}</p>

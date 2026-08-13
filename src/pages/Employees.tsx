@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import Layout from "@/components/Layout";
 import PageHeader from "@/components/PageHeader";
 import StatusBadge from "@/components/StatusBadge";
@@ -8,6 +8,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useSelectedProject } from "@/context/SelectedProjectContext";
 import { useProjects } from "@/hooks/useProjects";
 import { useEmployees } from "@/hooks/useEmployees";
+import { useMachines } from "@/hooks/useMachines";
 import { AddEmployeeDialog } from "@/components/dialogs/AddEmployeeDialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -51,8 +52,12 @@ function thisMonthLabel(employee: ApiEmployeeWithSnapshot, snapshot: ApiEmployee
   return `Overtime: ${att.overtimeHours}h, Days: ${att.workedDays.toFixed(1)}`;
 }
 
-function snapshotAdvancePaid(snapshot: ApiEmployeeWithSnapshot["snapshot"] | undefined): number {
-  return snapshot?.advancePaid ?? 0;
+/**
+ * Any amount already paid against this employee's selected-month salary is an advance
+ * on the final salary sheet, whether the payment was entered as Advance, Salary, or Wage.
+ */
+function salaryAdvanceAmount(snapshot: ApiEmployeeWithSnapshot["snapshot"] | undefined): number {
+  return snapshot?.paid ?? 0;
 }
 
 function salaryBasicAmount(employee: ApiEmployeeWithSnapshot): number {
@@ -75,7 +80,7 @@ function salaryWorkingDays(
 
 function salaryNetPayable(snapshot: ApiEmployeeWithSnapshot["snapshot"] | undefined): number | null {
   if (!snapshot) return null;
-  return Math.max(0, snapshot.payable - snapshotAdvancePaid(snapshot));
+  return Math.max(0, snapshot.payable - salaryAdvanceAmount(snapshot));
 }
 
 const EMPLOYEES_PRINT_CSS = `
@@ -133,7 +138,7 @@ function EmployeesSalaryPrintSheet({
       const isBefore = firstMonth ? selectedMonth < firstMonth : false;
       const snapshot = isBefore ? undefined : employee.snapshot;
       const wd = salaryWorkingDays(employee, snapshot, selectedMonth, isBefore);
-      const adv = snapshotAdvancePaid(snapshot);
+      const adv = salaryAdvanceAmount(snapshot);
       const net = salaryNetPayable(snapshot);
 
       if (!isBefore && snapshot && wd != null) {
@@ -155,7 +160,6 @@ function EmployeesSalaryPrintSheet({
           <td className="t-right">{isBefore || !snapshot ? "—" : formatCurrency(snapshot.payable)}</td>
           <td className="t-right">{isBefore || !snapshot || adv <= 0 ? "—" : formatCurrency(adv)}</td>
           <td className="t-right">{isBefore || !snapshot || net == null ? "—" : formatCurrency(net)}</td>
-          <td className="t-center">—</td>
           <td className="sig" />
         </tr>
       );
@@ -166,7 +170,7 @@ function EmployeesSalaryPrintSheet({
   return (
     <div className="salary-print-doc">
       <div className="salary-print-top">
-        <div className="salary-print-company">Construction Company ERP</div>
+        <div className="salary-print-company">Pioneer Construction &amp; Fabrication Co.</div>
         <div className="salary-print-staff">{staffLabel}</div>
       </div>
       <div className="salary-print-title">{title}</div>
@@ -181,20 +185,19 @@ function EmployeesSalaryPrintSheet({
             <th>Total Payable</th>
             <th>Advance Amount</th>
             <th>Net Payable</th>
-            <th>Advance</th>
             <th>Signature</th>
           </tr>
         </thead>
         <tbody>
           {loading ? (
             <tr>
-              <td colSpan={10} className="t-center">
+              <td colSpan={9} className="t-center">
                 Loading…
               </td>
             </tr>
           ) : employees.length === 0 ? (
             <tr>
-              <td colSpan={10} className="t-center">
+              <td colSpan={9} className="t-center">
                 No employees in this list.
               </td>
             </tr>
@@ -211,7 +214,6 @@ function EmployeesSalaryPrintSheet({
               <td className="t-right">{formatCurrency(subPayable)}</td>
               <td className="t-right">{subAdvance > 0 ? formatCurrency(subAdvance) : "—"}</td>
               <td className="t-right">{formatCurrency(subNet)}</td>
-              <td className="t-center">—</td>
               <td className="sig" />
             </tr>
           )}
@@ -236,11 +238,13 @@ function EmployeeRows({
   selectedMonth,
   navigate,
   loading,
+  detailBasePath = "/employees",
 }: {
   employees: ApiEmployeeWithSnapshot[];
   selectedMonth: string;
   navigate: ReturnType<typeof useNavigate>;
   loading: boolean;
+  detailBasePath?: string;
 }) {
   const colCount = 9;
   if (loading) {
@@ -277,11 +281,11 @@ function EmployeeRows({
           <tr
             key={employee.id}
             className="border-b border-border hover:bg-accent/40 transition-colors cursor-pointer"
-            onClick={() => navigate(`/employees/${employee.id}?month=${selectedMonth}`)}
+            onClick={() => navigate(`${detailBasePath}/${employee.id}?month=${selectedMonth}`)}
             onKeyDown={(event) => {
               if (event.key === "Enter" || event.key === " ") {
                 event.preventDefault();
-                navigate(`/employees/${employee.id}?month=${selectedMonth}`);
+                navigate(`${detailBasePath}/${employee.id}?month=${selectedMonth}`);
               }
             }}
             role="button"
@@ -316,6 +320,8 @@ function EmployeeRows({
 
 export default function Employees() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const machineryMode = location.pathname.startsWith("/machinery-employees");
   const { user: currentUser } = useAuth();
   const { projects } = useProjects();
   const isSiteManager = currentUser?.role === "Site Manager";
@@ -327,12 +333,18 @@ export default function Employees() {
   const [paymentFilter, setPaymentFilter] = useState<PaymentStatusFilter>("All");
   const [addOpen, setAddOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<EmployeeTab>("Fixed");
+  useEffect(() => {
+    if (machineryMode) setActiveTab("Fixed");
+  }, [machineryMode]);
 
   const projectIdForApi = isSiteManager ? undefined : (selectedProjectId || undefined);
   const { employees: allEmployees, loading, error, refetch } = useEmployees(
     projectIdForApi,
-    selectedMonth
+    selectedMonth,
+    machineryMode ? "Machinery" : "Regular"
   );
+  const { machines } = useMachines(isSiteManager ? currentUser?.assignedProjectId : selectedProjectId || undefined, 1, 100);
+  const companyOwnedMachines = useMemo(() => machines.filter((machine) => machine.ownership === "Company Owned"), [machines]);
 
   const monthOptions = useMemo(() => buildMonthOptionsUpToCurrent(12), []);
   const currentMonth = useMemo(() => getLocalMonthKey(), []);
@@ -391,18 +403,19 @@ export default function Employees() {
   return (
     <Layout>
       <PageHeader
-        title="Employees"
+        title={machineryMode ? "Machinery Employees" : "Employees"}
         subtitle={subtitle}
         printTargetId="employees-print-root"
         printOptions={{
           omitDefaultHeader: true,
           printDocumentTitle: salaryPrintDocumentTitle,
+          printLabel: "Generate Salary Sheet",
           additionalPrintCss: EMPLOYEES_PRINT_CSS,
         }}
         actions={
-          <Button variant="warning" size="sm" onClick={() => setAddOpen(true)}>
+          <Button variant="warning" size="sm" onClick={() => setAddOpen(true)} disabled={machineryMode && !isSiteManager && !selectedProjectId}>
             <Plus className="h-4 w-4 mr-1" />
-            Add Employee
+            Add {machineryMode ? "Machinery Employee" : "Employee"}
           </Button>
         }
       />
@@ -413,9 +426,11 @@ export default function Employees() {
           setAddOpen(open);
           if (!open) refetch();
         }}
-        restrictedProjectId={isSiteManager ? currentUser?.assignedProjectId : undefined}
-        restrictedProjectName={isSiteManager ? currentUser?.assignedProjectName : undefined}
+        restrictedProjectId={machineryMode ? (isSiteManager ? currentUser?.assignedProjectId : selectedProjectId || undefined) : (isSiteManager ? currentUser?.assignedProjectId : undefined)}
+        restrictedProjectName={machineryMode ? salaryProjectLineName : (isSiteManager ? currentUser?.assignedProjectName : undefined)}
         projects={projects.map((p) => ({ id: p.id, name: p.name }))}
+        category={machineryMode ? "Machinery" : "Regular"}
+        machines={companyOwnedMachines.map((machine) => ({ id: machine.id, name: machine.name }))}
       />
 
       <div className="border-2 border-border p-4 space-y-4 mb-4">
@@ -523,7 +538,7 @@ export default function Employees() {
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as EmployeeTab)}>
           <TabsList className="w-full md:w-auto">
             <TabsTrigger value="Fixed" className="flex-1 md:flex-none min-w-[140px]">Fixed Salary ({fixedEmployees.length})</TabsTrigger>
-            <TabsTrigger value="Daily" className="flex-1 md:flex-none min-w-[140px]">Daily Wage ({dailyEmployees.length})</TabsTrigger>
+            {!machineryMode && <TabsTrigger value="Daily" className="flex-1 md:flex-none min-w-[140px]">Daily Wage ({dailyEmployees.length})</TabsTrigger>}
           </TabsList>
         </Tabs>
       </div>
@@ -550,6 +565,7 @@ export default function Employees() {
                 selectedMonth={selectedMonth}
                 navigate={navigate}
                 loading={loading}
+                detailBasePath={machineryMode ? "/machinery-employees" : "/employees"}
               />
             </tbody>
           </table>
