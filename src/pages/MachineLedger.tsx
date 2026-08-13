@@ -374,6 +374,18 @@ export default function MachineLedger() {
                 )
               )}
             </tbody>
+            {!loading && !error && rows.length > 0 && (
+              <tfoot>
+                <tr className="border-t-2 border-border bg-muted/30 font-bold">
+                  <td colSpan={2} className="px-4 py-3 text-right text-sm uppercase tracking-wider">Total</td>
+                  <td className="px-4 py-3 text-right font-mono text-sm">{totalHours}</td>
+                  <td className="px-4 py-3 text-right font-mono text-sm">{formatCurrency(totalCost)}</td>
+                  <td className="px-4 py-3 text-right font-mono text-sm text-success">{formatCurrency(totalPaid)}</td>
+                  <td className="px-4 py-3" />
+                  {canDeleteEntry && <td className="print-hidden" />}
+                </tr>
+              </tfoot>
+            )}
           </table>
         </div>
         <div className="print-hidden">
