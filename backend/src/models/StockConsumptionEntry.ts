@@ -19,7 +19,7 @@ export interface IStockConsumptionEntry {
 const consumptionItemSchema = new mongoose.Schema<IConsumptionItem>(
   {
     itemId: { type: mongoose.Schema.Types.ObjectId, ref: "ConsumableItem", required: true },
-    quantityUsed: { type: Number, required: true, min: 1 },
+    quantityUsed: { type: Number, required: true, min: 0.01 },
     unit: { type: String, trim: true },
   },
   { _id: false }

@@ -134,6 +134,19 @@ export const formatCurrency = (amount: number): string => {
 /** @deprecated Use formatCurrency — it now always shows 2 decimal places. Kept as an alias. */
 export const formatCurrencyDecimal = formatCurrency;
 
+/**
+ * Consumable stock quantities follow the same .XX (2-decimal) convention as pricing —
+ * e.g. "300.00", "12.50" — so fractional bags/bundles/units display consistently
+ * everywhere a quantity shows up (item list, ledgers, running bill, dialogs).
+ */
+export const formatQuantity = (quantity: number | null | undefined): string => {
+  if (quantity == null || Number.isNaN(quantity)) return "-";
+  return new Intl.NumberFormat("en-PK", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(quantity);
+};
+
 /** Compact form for KPIs: 85K, 45L (lakh), 2.5Cr (crore). Optional prefix e.g. "PKR ". */
 export const formatCurrencyCompact = (
   amount: number,

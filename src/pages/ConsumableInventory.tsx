@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import { Link } from "react-router-dom";
 import Layout from "@/components/Layout";
 import PageHeader from "@/components/PageHeader";
-import { formatCurrency } from "@/lib/mock-data";
+import { formatCurrency, formatQuantity } from "@/lib/mock-data";
 import { useConsumableItems } from "@/hooks/useConsumableItems";
 import { useStockConsumption } from "@/hooks/useStockConsumption";
 import { useProjects } from "@/hooks/useProjects";
@@ -307,8 +307,8 @@ export default function ConsumableInventory() {
                             {item.name}
                           </Link>
                         </td>
-                        <td className="px-4 py-3 text-right font-mono text-sm font-bold">{item.currentStock.toLocaleString()}</td>
-                        <td className="px-4 py-3 text-right font-mono text-sm">{item.totalPurchased.toLocaleString()}</td>
+                        <td className="px-4 py-3 text-right font-mono text-sm font-bold">{formatQuantity(item.currentStock)}</td>
+                        <td className="px-4 py-3 text-right font-mono text-sm">{formatQuantity(item.totalPurchased)}</td>
                         <td className="px-4 py-3 text-right font-mono text-sm">{formatCurrency(item.totalAmount)}</td>
                         <td className="px-4 py-3 text-right font-mono text-sm text-success">{formatCurrency(item.totalPaid)}</td>
                         <td className="px-4 py-3 text-right font-mono text-sm text-destructive">{item.totalPending > 0 ? formatCurrency(item.totalPending) : "—"}</td>
@@ -383,7 +383,7 @@ export default function ConsumableInventory() {
                     consumptionPagination.paginatedItems.map((sc) => (
                       <tr key={sc.id} className="border-b border-border hover:bg-accent/50">
                         <td className="px-4 py-3 text-sm">{sc.date}</td>
-                        <td className="px-4 py-3 text-sm">{sc.items.map((i) => `${i.itemName} (${i.quantityUsed} ${i.unit})`).join(", ")}</td>
+                        <td className="px-4 py-3 text-sm">{sc.items.map((i) => `${i.itemName} (${formatQuantity(i.quantityUsed)} ${i.unit})`).join(", ")}</td>
                         <td className="px-4 py-3 text-sm text-muted-foreground">{sc.remarks || "—"}</td>
                         {canEditDelete && (
                           <td className="px-4 py-3 text-right">
@@ -501,10 +501,10 @@ export default function ConsumableInventory() {
                     <tbody>
                       {runningBill.rows.length === 0 ? <tr><td colSpan={9} className="py-8 text-center text-muted-foreground">No purchases for this vendor up to the selected bill date.</td></tr> : selectedBillData.rows.map((row) => <tr key={row.id}>
                         <td className="bill-selector-column text-center"><input className="bill-selector-control" type="checkbox" checked={selectedBillRows.has(row.id)} onChange={(event) => setSelectedBillRows((current) => { const next = new Set(current); if (event.target.checked) next.add(row.id); else next.delete(row.id); return next; })} aria-label={`Include ${row.itemName}`} /></td>
-                        <td>{row.itemName}</td><td className="text-right font-mono">{row.quantity || "—"}</td><td className="text-right font-mono">{row.previousQuantity || "—"}</td><td className="text-right font-mono">{row.totalQuantity || "—"}</td><td className="text-right font-mono">{formatCurrency(row.rate)}</td><td className="text-right font-mono">{row.thisBill ? formatCurrency(row.thisBill) : "—"}</td><td className="text-right font-mono">{row.previousBill ? formatCurrency(row.previousBill) : "—"}</td><td className="text-right font-mono font-semibold">{row.totalAmount ? formatCurrency(row.totalAmount) : "—"}</td>
+                        <td>{row.itemName}</td><td className="text-right font-mono">{row.quantity ? formatQuantity(row.quantity) : "—"}</td><td className="text-right font-mono">{row.previousQuantity ? formatQuantity(row.previousQuantity) : "—"}</td><td className="text-right font-mono">{row.totalQuantity ? formatQuantity(row.totalQuantity) : "—"}</td><td className="text-right font-mono">{formatCurrency(row.rate)}</td><td className="text-right font-mono">{row.thisBill ? formatCurrency(row.thisBill) : "—"}</td><td className="text-right font-mono">{row.previousBill ? formatCurrency(row.previousBill) : "—"}</td><td className="text-right font-mono font-semibold">{row.totalAmount ? formatCurrency(row.totalAmount) : "—"}</td>
                       </tr>)}
                       {selectedBillData.rows.length > 0 && <>
-                        <tr className="bg-muted/40 font-bold"><td colSpan={2} className="text-left">Total</td><td className="text-right font-mono">{selectedBillData.summary.quantity || "—"}</td><td className="text-right font-mono">{selectedBillData.summary.previousQuantity || "—"}</td><td className="text-right font-mono">{selectedBillData.summary.totalQuantity || "—"}</td><td>—</td><td className="text-right font-mono">{selectedBillData.summary.thisBill ? formatCurrency(selectedBillData.summary.thisBill) : "—"}</td><td className="text-right font-mono">{selectedBillData.summary.previousBill ? formatCurrency(selectedBillData.summary.previousBill) : "—"}</td><td className="text-right font-mono">{formatCurrency(selectedBillData.summary.totalAmount)}</td></tr>
+                        <tr className="bg-muted/40 font-bold"><td colSpan={2} className="text-left">Total</td><td className="text-right font-mono">{selectedBillData.summary.quantity ? formatQuantity(selectedBillData.summary.quantity) : "—"}</td><td className="text-right font-mono">{selectedBillData.summary.previousQuantity ? formatQuantity(selectedBillData.summary.previousQuantity) : "—"}</td><td className="text-right font-mono">{selectedBillData.summary.totalQuantity ? formatQuantity(selectedBillData.summary.totalQuantity) : "—"}</td><td>—</td><td className="text-right font-mono">{selectedBillData.summary.thisBill ? formatCurrency(selectedBillData.summary.thisBill) : "—"}</td><td className="text-right font-mono">{selectedBillData.summary.previousBill ? formatCurrency(selectedBillData.summary.previousBill) : "—"}</td><td className="text-right font-mono">{formatCurrency(selectedBillData.summary.totalAmount)}</td></tr>
                         <tr className="bg-muted/20 font-semibold"><td colSpan={6}>Less Advance</td><td className="text-right font-mono">{selectedBillData.advances.thisBillAdvance ? formatCurrency(selectedBillData.advances.thisBillAdvance) : "—"}</td><td className="text-right font-mono">{selectedBillData.advances.previousBillAdvance ? formatCurrency(selectedBillData.advances.previousBillAdvance) : "—"}</td><td className="text-right font-mono">{selectedBillData.advances.thisBillAdvance + selectedBillData.advances.previousBillAdvance ? formatCurrency(selectedBillData.advances.thisBillAdvance + selectedBillData.advances.previousBillAdvance) : "—"}</td></tr>
                         <tr className="bg-muted/40 font-bold"><td colSpan={6}>Balance</td><td className="text-right font-mono">{formatCurrency(selectedBillData.summary.thisBill - selectedBillData.advances.thisBillAdvance)}</td><td className="text-right font-mono">{formatCurrency(selectedBillData.summary.previousBill - selectedBillData.advances.previousBillAdvance)}</td><td className="text-right font-mono">{formatCurrency(selectedBillData.summary.totalAmount - selectedBillData.advances.thisBillAdvance - selectedBillData.advances.previousBillAdvance)}</td></tr>
                       </>}

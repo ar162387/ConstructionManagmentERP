@@ -3,7 +3,7 @@ import { useParams, useSearchParams, Link } from "react-router-dom";
 import Layout from "@/components/Layout";
 import PageHeader from "@/components/PageHeader";
 import StatCard from "@/components/StatCard";
-import { formatCurrency } from "@/lib/mock-data";
+import { formatCurrency, formatQuantity } from "@/lib/mock-data";
 import { useVendors } from "@/hooks/useVendors";
 import { useVendorLedger } from "@/hooks/useVendorLedger";
 import { VendorPaymentDialog } from "@/components/dialogs/VendorPaymentDialog";
@@ -236,7 +236,7 @@ export default function VendorLedger() {
                         {row.type === "purchase" ? row.itemName : (row.remarks || row.referenceId || "—")}
                       </td>
                       <td className="px-4 py-3 text-right font-mono text-sm">
-                        {row.type === "purchase" ? row.quantity : "—"}
+                        {row.type === "purchase" ? formatQuantity(row.quantity) : "—"}
                       </td>
                       <td className="px-4 py-3 text-right font-mono text-sm">
                         {row.type === "purchase" ? formatCurrency(row.unitPrice!) : "—"}

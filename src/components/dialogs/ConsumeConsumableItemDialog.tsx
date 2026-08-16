@@ -10,6 +10,7 @@ import { createConsumableUnit, listConsumableUnits, type ApiConsumableUnit } fro
 import { Plus } from "lucide-react";
 import { toast } from "sonner";
 import { todayPKT } from "@/lib/pktDate";
+import { formatQuantity } from "@/lib/mock-data";
 
 interface Props {
   open: boolean;
@@ -36,8 +37,8 @@ export function ConsumeConsumableItemDialog({ open, onOpenChange, item, onSucces
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
-    const quantityUsed = Number(quantity);
-    if (!date || !Number.isInteger(quantityUsed) || quantityUsed < 1) return toast.error("Date and a whole quantity are required");
+    const quantityUsed = Math.round(Number(quantity) * 100) / 100;
+    if (!date || !Number.isFinite(quantityUsed) || quantityUsed <= 0) return toast.error("Date and a valid quantity are required");
     if (!unit.trim()) return toast.error("Unit is required");
     if (quantityUsed > item.currentStock) return toast.error(`Only ${item.currentStock} are available`);
     setLoading(true);
@@ -63,9 +64,9 @@ export function ConsumeConsumableItemDialog({ open, onOpenChange, item, onSucces
   return <Dialog open={open} onOpenChange={onOpenChange}>
     <DialogContent className="max-w-md"><DialogHeader><DialogTitle>Consume — {item.name}</DialogTitle></DialogHeader>
       <form onSubmit={submit} className="space-y-4">
-        <p className="text-sm text-muted-foreground">Available: <strong>{item.currentStock}</strong></p>
+        <p className="text-sm text-muted-foreground">Available: <strong>{formatQuantity(item.currentStock)}</strong></p>
         <div><Label>Date *</Label><Input className="mt-1" type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div>
-        <div><Label>Use Qty *</Label><Input className="mt-1" type="number" min={1} max={item.currentStock} value={quantity} onChange={(e) => setQuantity(e.target.value)} /></div>
+        <div><Label>Use Qty *</Label><Input className="mt-1" type="number" step="0.01" min={0.01} max={item.currentStock} value={quantity} onChange={(e) => setQuantity(e.target.value)} /></div>
         <div><Label>Unit *</Label><div className="mt-1 flex gap-2"><Select value={unit} onValueChange={setUnit}><SelectTrigger><SelectValue placeholder="Select unit" /></SelectTrigger><SelectContent>{units.map((u) => <SelectItem key={u.id} value={u.name}>{u.name}</SelectItem>)}</SelectContent></Select><Button type="button" variant="outline" size="icon" onClick={() => setAddingUnit((value) => !value)} aria-label="Add unit"><Plus className="h-4 w-4" /></Button></div></div>
         {addingUnit && <div className="rounded-md border border-border p-3"><Label>New Unit *</Label><div className="mt-1 flex gap-2"><Input value={newUnit} onChange={(e) => setNewUnit(e.target.value)} placeholder="e.g. bag, kg, cft" /><Button type="button" variant="outline" onClick={handleCreateUnit}>Add</Button></div></div>}
         <div><Label>Remarks</Label><Textarea className="mt-1" value={remarks} onChange={(e) => setRemarks(e.target.value)} rows={2} /></div>

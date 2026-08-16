@@ -49,7 +49,7 @@ const CASH_REPORT_PRINT_CSS = `
   .cash-expenses-sheet .cash-col-amount { width: 17%; }
   .cash-expenses-sheet .cash-col-remarks { width: 16%; }
   .cash-expenses-sheet th, .cash-expenses-sheet td { padding: 6px 8px !important; }
-  .cash-expenses-sheet .cash-number { white-space: nowrap; }
+  .cash-expenses-sheet .cash-number { white-space: nowrap; text-align: right !important; }
   .cash-expenses-sheet .cash-text { overflow-wrap: anywhere; }
   .cash-expenses-sheet .cash-section td {
     background: #e8e8e8 !important;
@@ -60,6 +60,15 @@ const CASH_REPORT_PRINT_CSS = `
   }
   .cash-expenses-sheet tbody tr.cash-section td { border-top: 2px solid #000; }
   .cash-expenses-sheet tbody tr:first-child td { border-top: 1px solid #000; }
+  .cash-expenses-sheet tr.cash-row-strong td,
+  .cash-expenses-sheet tr.cash-row-strong th {
+    font-weight: 700 !important;
+  }
+  .cash-expenses-sheet tr.cash-row-highlight td {
+    background: #fdeec5 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
 `;
 
 export default function CashAndExpenses() {
@@ -301,7 +310,10 @@ export default function CashAndExpenses() {
                       <th className={thNum}>T.Payment</th>
                     </tr>
                     {openingRows.map((row) => (
-                      <tr key={row.id}>
+                      <tr
+                        key={row.id}
+                        className={row.isOpeningRow ? "cash-row-strong font-bold" : undefined}
+                      >
                         <td className={`${tdBase} text-muted-foreground`}>
                           {row.date || "-"}
                         </td>
@@ -318,7 +330,7 @@ export default function CashAndExpenses() {
                         <td className={tdNum}>{formatReportCurrency(row.tPayment)}</td>
                       </tr>
                     ))}
-                    <tr className="font-medium bg-muted/10">
+                    <tr className="cash-row-strong font-bold bg-muted/10">
                       <td className={tdBase}>-</td>
                       <td className={tdBase}>
                         Total
@@ -381,7 +393,7 @@ export default function CashAndExpenses() {
                   ))
                 )}
                 {report?.payments?.length ? (
-                  <tr className="bg-warning/20 font-bold print:bg-amber-100">
+                  <tr className="cash-row-strong cash-row-highlight font-bold bg-warning/20 print:bg-amber-100">
                     <td colSpan={2} className={tdBase}>
                       Total payments
                     </td>
@@ -392,7 +404,7 @@ export default function CashAndExpenses() {
                   </tr>
                 ) : null}
                 {report?.openingBalances ? (
-                  <tr className="font-medium bg-muted/10">
+                  <tr className="cash-row-strong font-bold bg-muted/10">
                     <td colSpan={2} className={tdBase}>
                       Receipts balance
                     </td>
@@ -403,7 +415,7 @@ export default function CashAndExpenses() {
                   </tr>
                 ) : null}
                 {report?.openingBalances ? (
-                  <tr className="border-t-2 border-border/60 font-semibold">
+                  <tr className="cash-row-strong border-t-2 border-border/60 font-bold">
                     <td colSpan={2} className={tdBase}>
                       Day closing balance
                     </td>

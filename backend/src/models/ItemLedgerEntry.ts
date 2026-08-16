@@ -30,7 +30,7 @@ const itemLedgerEntrySchema = new mongoose.Schema<IItemLedgerEntry>(
     itemId: { type: mongoose.Schema.Types.ObjectId, ref: "ConsumableItem", required: true },
     vendorId: { type: mongoose.Schema.Types.ObjectId, ref: "Vendor", required: true },
     date: { type: String, required: true },
-    quantity: { type: Number, required: true, min: 1 },
+    quantity: { type: Number, required: true, min: 0.01 },
     unit: { type: String, trim: true },
     unitPrice: { type: Number, required: true, min: 0 },
     totalPrice: { type: Number, required: true, min: 0 },

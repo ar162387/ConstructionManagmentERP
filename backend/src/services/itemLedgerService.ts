@@ -44,6 +44,11 @@ export interface ItemConsumptionLedgerPayload {
 
 export type ItemLedgerRowPayload = ItemLedgerPayload | ItemConsumptionLedgerPayload;
 
+/** Quantities follow the same .XX (2-decimal) convention as pricing elsewhere in the app. */
+function normalizeQuantity(quantity: number): number {
+  return Math.round(quantity * 100) / 100;
+}
+
 export interface CreateItemLedgerInput {
   projectId: string;
   itemId: string;
@@ -190,7 +195,8 @@ export async function createItemLedgerEntry(
   input: CreateItemLedgerInput
 ): Promise<ItemLedgerPayload> {
   if (!input.date) throw new Error("Date is required");
-  if (!input.quantity || input.quantity < 1) throw new Error("Quantity must be at least 1");
+  if (!input.quantity || input.quantity <= 0) throw new Error("Quantity must be greater than 0");
+  input.quantity = normalizeQuantity(input.quantity);
   if (!input.unit?.trim()) throw new Error("Unit is required");
   if (input.unitPrice == null || input.unitPrice < 0) throw new Error("Unit price must be >= 0");
   if (!input.vendorId) throw new Error("Vendor is required");
@@ -318,7 +324,8 @@ export async function updateItemLedgerEntry(
   const existing = await ItemLedgerEntry.findById(id).lean();
   if (!existing) throw new Error("Ledger entry not found");
 
-  const newQuantity = input.quantity ?? existing.quantity;
+  if (input.quantity != null && input.quantity <= 0) throw new Error("Quantity must be greater than 0");
+  const newQuantity = input.quantity != null ? normalizeQuantity(input.quantity) : existing.quantity;
   if (input.unit !== undefined && !input.unit.trim()) throw new Error("Unit is required");
   const newUnitPrice = input.unitPrice ?? existing.unitPrice;
   const newTotalPrice = newQuantity * newUnitPrice;

@@ -23,6 +23,7 @@ import { createStockConsumption, updateStockConsumption, type ApiStockConsumptio
 import type { ApiConsumableItem } from "@/services/consumableItemsService";
 import { createConsumableUnit, listConsumableUnits, type ApiConsumableUnit } from "@/services/consumableUnitService";
 import { todayPKT } from "@/lib/pktDate";
+import { formatQuantity } from "@/lib/mock-data";
 
 interface ConsumptionRow {
   itemId: string;
@@ -92,8 +93,8 @@ export function StockConsumptionDialog({
     const seen = new Set<string>();
     for (const row of rows) {
       if (!row.itemId) continue;
-      const qty = parseInt(row.quantityUsed, 10);
-      if (isNaN(qty) || qty < 1) { toast.error("All quantities must be positive integers"); return; }
+      const qty = Math.round(parseFloat(row.quantityUsed) * 100) / 100;
+      if (isNaN(qty) || qty <= 0) { toast.error("All quantities must be greater than 0"); return; }
       if (!row.unit.trim()) { toast.error("Select a unit for each item"); return; }
 
       if (seen.has(row.itemId)) {
@@ -205,7 +206,8 @@ export function StockConsumptionDialog({
                     </Select>
                     <Input
                       type="number"
-                      min={1}
+                      min={0.01}
+                      step="0.01"
                       max={selectedItem ? available : undefined}
                       placeholder="Qty"
                       className="w-20"
@@ -213,7 +215,7 @@ export function StockConsumptionDialog({
                       onChange={(e) => updateRow(i, "quantityUsed", e.target.value)}
                     />
                     <span className="text-xs text-muted-foreground min-w-[60px]">
-                      {selectedItem ? `Avail: ${available}` : "—"}
+                      {selectedItem ? `Avail: ${formatQuantity(available)}` : "—"}
                     </span>
                     <Button type="button" variant="ghost" size="icon" onClick={() => removeRow(i)}>
                       <Trash2 className="h-4 w-4 text-destructive" />

@@ -98,13 +98,60 @@ export default function PrintExportButton({
           a { color: inherit !important; text-decoration: none !important; }
           button, [role="button"]:not(tr), .print-hidden, .employees-print-screen-only, .cash-controls, .kpi-card, .stat-card { display: none !important; }
           .print-hidden { display: none !important; }
+
+          /* Mirror the on-screen table's Tailwind utility classes so every print/PDF
+             output matches the live report exactly (alignment, weight, emphasis). The
+             print document has no Tailwind stylesheet, so these classes otherwise sit
+             on the cloned elements inert — this is the single shared translation layer. */
+          .text-left { text-align: left !important; }
+          .text-right { text-align: right !important; }
+          .text-center { text-align: center !important; }
+          .font-bold { font-weight: 700 !important; }
+          .font-semibold { font-weight: 600 !important; }
+          .font-medium { font-weight: 500 !important; }
+          .font-mono { font-family: "Courier New", Courier, monospace !important; }
+          .uppercase { text-transform: uppercase !important; }
+          .tracking-wide { letter-spacing: 0.025em !important; }
+          .tracking-wider { letter-spacing: 0.05em !important; }
+          .whitespace-nowrap { white-space: nowrap !important; }
+          .truncate { overflow: hidden !important; text-overflow: ellipsis !important; white-space: nowrap !important; }
+          .italic { font-style: italic !important; }
+          .text-muted-foreground { color: #4b4b52 !important; }
+          .text-destructive { color: #b91c1c !important; }
+          .text-success { color: #15803d !important; }
+          .bg-muted\\/10, .bg-muted\\/20, .bg-muted\\/25, .bg-muted\\/30, .bg-muted\\/40, .bg-muted\\/50 {
+            background-color: #ececee !important;
+            -webkit-print-color-adjust: exact; print-color-adjust: exact;
+          }
+          .bg-warning\\/20 {
+            background-color: #fdecc8 !important;
+            -webkit-print-color-adjust: exact; print-color-adjust: exact;
+          }
+          .bg-success\\/10, .bg-success\\/20 {
+            background-color: #dcf5e4 !important;
+            -webkit-print-color-adjust: exact; print-color-adjust: exact;
+          }
+          .bg-destructive\\/10 {
+            background-color: #fbe0e0 !important;
+            -webkit-print-color-adjust: exact; print-color-adjust: exact;
+          }
+          /* Table cells paint their own background over their row/section, so the
+             dark fill has to be set on the th/td themselves, not just the ancestor
+             tr/thead that carries the bg-primary class. */
+          .bg-primary, thead.bg-primary,
+          .bg-primary th, .bg-primary td, tr.bg-primary th, tr.bg-primary td {
+            background-color: #1a1a1a !important;
+            -webkit-print-color-adjust: exact; print-color-adjust: exact;
+          }
+          .bg-primary th, .bg-primary td, tr.bg-primary th, tr.bg-primary td,
+          .text-primary-foreground { color: #fff !important; }
           @media print { body { padding: 0; } }
           ${safeAdditionalCss}
         </style>
       </head>
       <body>
         ${defaultHeaderBlock}
-        ${printableContent.innerHTML}
+        ${printableContent.outerHTML}
       </body>
       </html>
     `);

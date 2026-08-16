@@ -124,7 +124,7 @@ export function AddLedgerEntryDialog({
   }, [open, isEdit, editEntry?.vendorId, vendors]);
 
   const totalPrice = (() => {
-    const qty = parseInt(quantity, 10);
+    const qty = parseFloat(quantity);
     const up = parseFloat(unitPrice);
     if (isNaN(qty) || isNaN(up)) return null;
     return qty * up;
@@ -132,10 +132,10 @@ export function AddLedgerEntryDialog({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const qty = parseInt(quantity, 10);
+    const qty = Math.round(parseFloat(quantity) * 100) / 100;
     const up = parseFloat(unitPrice);
     if (!date) { toast.error("Date is required"); return; }
-    if (isNaN(qty) || qty < 1) { toast.error("Quantity must be at least 1"); return; }
+    if (isNaN(qty) || qty <= 0) { toast.error("Quantity must be greater than 0"); return; }
     if (!unit.trim()) { toast.error("Unit is required"); return; }
     if (isNaN(up) || up < 0) { toast.error("Unit price must be >= 0"); return; }
     if (!vendorId) { toast.error("Please select a vendor"); return; }
@@ -202,7 +202,7 @@ export function AddLedgerEntryDialog({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label>Quantity Added *</Label>
-              <Input type="number" min={1} value={quantity} onChange={(e) => setQuantity(e.target.value)} className="mt-1" />
+              <Input type="number" min={0.01} step="0.01" value={quantity} onChange={(e) => setQuantity(e.target.value)} className="mt-1" />
             </div>
             <div>
               <Label>Unit Price *</Label>

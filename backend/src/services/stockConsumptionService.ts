@@ -33,6 +33,14 @@ export interface UpdateConsumptionInput {
   items?: { itemId: string; unit: string; quantityUsed: number }[];
 }
 
+/** Quantities follow the same .XX (2-decimal) convention as pricing elsewhere in the app. */
+function normalizeQuantity(quantityUsed: number): number {
+  if (typeof quantityUsed !== "number" || !Number.isFinite(quantityUsed) || quantityUsed <= 0) {
+    throw new Error("Quantity must be a positive number");
+  }
+  return Math.round(quantityUsed * 100) / 100;
+}
+
 function assertUniqueItems(items: { itemId: string; unit: string; quantityUsed: number }[]) {
   const seen = new Set<string>();
   for (const line of items) {
@@ -115,9 +123,7 @@ export async function createStockConsumption(
     await session.withTransaction(async () => {
       for (const line of input.items) {
         if (!mongoose.Types.ObjectId.isValid(line.itemId)) throw new Error(`Invalid item ID: ${line.itemId}`);
-        if (!Number.isInteger(line.quantityUsed) || line.quantityUsed < 1) {
-          throw new Error("Quantity must be a positive integer");
-        }
+        line.quantityUsed = normalizeQuantity(line.quantityUsed);
         if (!line.unit?.trim()) throw new Error("Unit is required");
         const item = await ConsumableItem.findOne({ _id: line.itemId, projectId }).session(session).lean();
         if (!item) throw new Error(`Item not found or does not belong to this project: ${line.itemId}`);
@@ -205,9 +211,7 @@ export async function updateStockConsumption(
 
       for (const line of newItems) {
         if (!mongoose.Types.ObjectId.isValid(line.itemId)) throw new Error(`Invalid item ID: ${line.itemId}`);
-        if (!Number.isInteger(line.quantityUsed) || line.quantityUsed < 1) {
-          throw new Error("Quantity must be a positive integer");
-        }
+        line.quantityUsed = normalizeQuantity(line.quantityUsed);
         if (!line.unit?.trim()) throw new Error("Unit is required");
         const item = await ConsumableItem.findById(line.itemId).session(session).lean();
         if (!item) throw new Error(`Item not found: ${line.itemId}`);

@@ -3,7 +3,7 @@ import { useParams, Link } from "react-router-dom";
 import Layout from "@/components/Layout";
 import PageHeader from "@/components/PageHeader";
 import StatCard from "@/components/StatCard";
-import { formatCurrency } from "@/lib/mock-data";
+import { formatCurrency, formatQuantity } from "@/lib/mock-data";
 import { useItemLedger } from "@/hooks/useItemLedger";
 import { getConsumableItem } from "@/services/consumableItemsService";
 import { deleteItemLedgerEntry, type ApiItemLedgerEntry } from "@/services/itemLedgerService";
@@ -94,7 +94,7 @@ export default function ItemLedger() {
 
       <PageHeader
         title={`${item.name} Ledger`}
-        subtitle={`Current Stock: ${item.currentStock.toLocaleString()}`}
+        subtitle={`Current Stock: ${formatQuantity(item.currentStock)}`}
         printTargetId="item-ledger"
         actions={<div className="flex gap-2"><Button variant="outline" size="sm" onClick={() => setConsumeOpen(true)} disabled={item.currentStock === 0}><Minus className="h-4 w-4 mr-1" />Consume</Button><Button variant="warning" size="sm" onClick={() => setAddEntryOpen(true)}><Plus className="h-4 w-4 mr-1" />Add Entry</Button></div>}
       />
@@ -146,7 +146,7 @@ export default function ItemLedger() {
       </AlertDialog>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 mb-6">
-        <StatCard label="Current Stock" value={item.currentStock.toLocaleString()} variant="info" />
+        <StatCard label="Current Stock" value={formatQuantity(item.currentStock)} variant="info" />
         <StatCard label="Total Amount" value={formatCurrency(item.totalAmount)} />
         <StatCard label="Total Paid" value={formatCurrency(item.totalPaid)} variant="success" />
         <StatCard label="Pending" value={formatCurrency(item.totalPending)} variant={item.totalPending > 0 ? "destructive" : "default"} />
@@ -185,9 +185,9 @@ export default function ItemLedger() {
                     <td className="px-3 py-3 text-sm">{entry.type === "purchase" ? entry.vehicleNumber || "—" : "—"}</td>
                     <td className="px-3 py-3 text-sm">{entry.type === "purchase" ? entry.biltyNumber || "—" : "—"}</td>
                     <td className="px-3 py-3 text-sm">{entry.unit || "—"}</td>
-                    <td className="px-3 py-3 text-right font-mono text-sm text-success">{entry.type === "purchase" ? entry.quantity : "—"}</td>
-                    <td className="px-3 py-3 text-right font-mono text-sm text-destructive">{entry.type === "consumption" ? entry.quantityUsed : "—"}</td>
-                    <td className="px-3 py-3 text-right font-mono text-sm font-bold">{entry.runningBalance ?? "—"}</td>
+                    <td className="px-3 py-3 text-right font-mono text-sm text-success">{entry.type === "purchase" ? formatQuantity(entry.quantity) : "—"}</td>
+                    <td className="px-3 py-3 text-right font-mono text-sm text-destructive">{entry.type === "consumption" ? formatQuantity(entry.quantityUsed) : "—"}</td>
+                    <td className="px-3 py-3 text-right font-mono text-sm font-bold">{entry.runningBalance != null ? formatQuantity(entry.runningBalance) : "—"}</td>
                     {canEditDelete && (
                     <td className="px-3 py-3 text-right print-hidden">
                         {entry.type === "purchase" && <div className="flex items-center justify-end gap-1">
@@ -209,10 +209,10 @@ export default function ItemLedger() {
                 <tr className="border-t-2 border-border bg-muted/50 font-bold">
                   <td className="px-3 py-3 text-sm" colSpan={6}>Total</td>
                   <td className="px-3 py-3 text-right font-mono text-sm text-success">
-                    {entries.reduce((sum, entry) => sum + (entry.type === "purchase" ? entry.quantity : 0), 0)}
+                    {formatQuantity(entries.reduce((sum, entry) => sum + (entry.type === "purchase" ? entry.quantity : 0), 0))}
                   </td>
                   <td className="px-3 py-3 text-right font-mono text-sm text-destructive">
-                    {entries.reduce((sum, entry) => sum + (entry.type === "consumption" ? entry.quantityUsed : 0), 0)}
+                    {formatQuantity(entries.reduce((sum, entry) => sum + (entry.type === "consumption" ? entry.quantityUsed : 0), 0))}
                   </td>
                   <td className="px-3 py-3"></td>
                   {canEditDelete && <td className="px-3 py-3 print-hidden"></td>}

@@ -62,7 +62,7 @@ export function ApplyAdvanceDialog({ open, onOpenChange, vendor, onSuccess }: Ap
 
   const totalPrice = (() => {
     if (itemId === NONE_ITEM) return null;
-    const qty = parseInt(quantity, 10);
+    const qty = parseFloat(quantity);
     const up = parseFloat(unitPrice);
     if (isNaN(qty) || isNaN(up)) return null;
     return qty * up;
@@ -98,9 +98,9 @@ export function ApplyAdvanceDialog({ open, onOpenChange, vendor, onSuccess }: Ap
     let qty = 0;
     let up = 0;
     if (hasItem) {
-      qty = parseInt(quantity, 10);
+      qty = Math.round(parseFloat(quantity) * 100) / 100;
       up = parseFloat(unitPrice);
-      if (isNaN(qty) || qty < 1) { toast.error("Quantity must be at least 1"); return; }
+      if (isNaN(qty) || qty <= 0) { toast.error("Quantity must be greater than 0"); return; }
       if (isNaN(up) || up < 0) { toast.error("Unit price must be >= 0"); return; }
     }
 
@@ -175,7 +175,7 @@ export function ApplyAdvanceDialog({ open, onOpenChange, vendor, onSuccess }: Ap
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label>Quantity *</Label>
-                <Input type="number" min={1} value={quantity} onChange={(e) => setQuantity(e.target.value)} className="mt-1" />
+                <Input type="number" min={0.01} step="0.01" value={quantity} onChange={(e) => setQuantity(e.target.value)} className="mt-1" />
               </div>
               <div>
                 <Label>Unit Price *</Label>
