@@ -39,6 +39,7 @@ export function EditEmployeeDialog({
   const [dailyRate, setDailyRate] = useState("");
   const [phone, setPhone] = useState("");
   const [joiningDate, setJoiningDate] = useState("");
+  const [endingDate, setEndingDate] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -50,6 +51,7 @@ export function EditEmployeeDialog({
       setDailyRate(employee.type === "Daily" && employee.dailyRate != null ? String(employee.dailyRate) : "");
       setPhone(employee.phone ?? "");
       setJoiningDate(employee.joiningDate ?? employee.createdAt?.slice(0, 10) ?? "");
+      setEndingDate(employee.endingDate ?? "");
     }
   }, [employee, open]);
 
@@ -64,6 +66,10 @@ export function EditEmployeeDialog({
       toast.error("Role is required");
       return;
     }
+    if (endingDate.trim() && joiningDate.trim() && endingDate.trim() < joiningDate.trim()) {
+      toast.error("Ending date cannot be before joining date");
+      return;
+    }
     setSubmitting(true);
     try {
       const input: UpdateEmployeeInput = {
@@ -72,6 +78,7 @@ export function EditEmployeeDialog({
         type,
         phone: phone.trim(),
         joiningDate: joiningDate.trim(),
+        endingDate: endingDate.trim(),
       };
       if (type === "Fixed") {
         const sal = parseFloat(monthlySalary);
@@ -151,6 +158,15 @@ export function EditEmployeeDialog({
             <Input type="date" value={joiningDate} onChange={(e) => setJoiningDate(e.target.value)} className="mt-1" />
             <p className="mt-1 text-xs text-muted-foreground">
               The date the employee actually started. Salary/attendance data before this month will show "No Data".
+            </p>
+          </div>
+          <div>
+            <Label>Ending Date</Label>
+            <Input type="date" value={endingDate} onChange={(e) => setEndingDate(e.target.value)} className="mt-1" />
+            <p className="mt-1 text-xs text-muted-foreground">
+              {type === "Fixed"
+                ? "The date the employee left. Salary is prorated up to this date, and no salary or liability is generated after it."
+                : "The date the employee left. Wages still depend on marked attendance, but this records that they're no longer with the company."}
             </p>
           </div>
           <DialogFooter>

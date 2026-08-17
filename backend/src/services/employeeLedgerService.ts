@@ -42,6 +42,22 @@ function effectiveFirstMonth(employee: { joiningDate?: string; createdAt?: Date 
   return employee.createdAt ? monthKeyPKT(new Date(employee.createdAt)) : null;
 }
 
+/** Last month (YYYY-MM) the employee is eligible for salary/attendance data, or null when still active.
+ * Once set (via endingDate — the employee has left), no payable accrues for any month after this one;
+ * the ending month itself is prorated up to the ending day (see endingDayInMonth). */
+function effectiveLastMonth(employee: { endingDate?: string }): string | null {
+  if (employee.endingDate?.trim()) return employee.endingDate.trim().slice(0, 7);
+  return null;
+}
+
+/** When `month` is the employee's final month (per endingDate), returns the last paid day-of-month
+ * for proration; otherwise null (no truncation applies). */
+function endingDayInMonth(employee: { endingDate?: string }, month: string): number | null {
+  const lastMonth = effectiveLastMonth(employee);
+  if (!lastMonth || lastMonth !== month) return null;
+  return Number(employee.endingDate!.trim().slice(8, 10));
+}
+
 /** Build day -> status map from fixed entries */
 function fixedMap(attendance: IEmployeeAttendance | null): Record<number, string> {
   const out: Record<number, string> = {};
@@ -86,25 +102,37 @@ function dailyMapFromEntries(
  * Compute payable from explicit attendance entries (no DB read). Used to validate before saving.
  */
 function computePayableFromEntries(
-  employee: { type: string; monthlySalary?: number; dailyRate?: number },
+  employee: { type: string; monthlySalary?: number; dailyRate?: number; endingDate?: string },
   month: string,
   fixedEntries: { day: number; status: string }[] | undefined,
   dailyEntries: { day: number; hoursWorked?: number; overtimeHours?: number; status: string }[] | undefined,
   globalAllowedLeaves: number = GLOBAL_ALLOWED_LEAVES_DEFAULT
 ): number {
+  const endingDay = endingDayInMonth(employee, month);
+
   if (employee.type === "Fixed") {
     const fixedAttendance = fixedMapFromEntries(fixedEntries);
     const baseSalary = employee.monthlySalary ?? 0;
-    const unpaidLeaveDays = Object.entries(fixedAttendance)
-      .filter(([, status]) => status === "unpaid_leave")
-      .map(([day]) => Number(day));
-    const unpaidLeaves = unpaidLeaveDays.length;
+    const unpaidLeaveDaySet = new Set<number>(
+      Object.entries(fixedAttendance)
+        .filter(([, status]) => status === "unpaid_leave")
+        .map(([day]) => Number(day))
+    );
+    if (endingDay != null) {
+      const totalDays = getDaysInMonth(month);
+      for (let day = endingDay + 1; day <= totalDays; day++) unpaidLeaveDaySet.add(day);
+    }
+    const unpaidLeaves = unpaidLeaveDaySet.size;
     const unpaidLeaveDeduction = roundAmount((baseSalary / 30) * unpaidLeaves);
     return Math.max(baseSalary - unpaidLeaveDeduction, 0);
   }
 
   const dailyAttendance = dailyMapFromEntries(dailyEntries);
-  const presentDays = Object.values(dailyAttendance).filter((e) => e.status === "present");
+  const dailyEntryPairs =
+    endingDay != null
+      ? Object.entries(dailyAttendance).filter(([day]) => Number(day) <= endingDay)
+      : Object.entries(dailyAttendance);
+  const presentDays = dailyEntryPairs.map(([, e]) => e).filter((e) => e.status === "present");
   const overtimeHours = presentDays.reduce((t, e) => t + Math.max(e.overtimeHours, 0), 0);
   const workedDays = presentDays.reduce(
     (t, e) => t + Math.min(Math.max(e.hoursWorked, 0), 8) / 8,
@@ -131,23 +159,38 @@ export async function computePayableForMonth(
 
   const firstMonth = effectiveFirstMonth(employee);
   if (firstMonth && month < firstMonth) return 0;
+  const lastMonth = effectiveLastMonth(employee);
+  if (lastMonth && month > lastMonth) return 0;
+  const endingDay = endingDayInMonth(employee, month);
 
   const attendance = await EmployeeAttendance.findOne({ employeeId: new mongoose.Types.ObjectId(employeeId), month }).lean();
 
   if (employee.type === "Fixed") {
     const fixedAttendance = fixedMap(attendance ?? null);
     const baseSalary = employee.monthlySalary ?? 0;
-    const unpaidLeaveDays = Object.entries(fixedAttendance)
-      .filter(([, status]) => status === "unpaid_leave")
-      .map(([day]) => Number(day));
-    const unpaidLeaves = unpaidLeaveDays.length;
+    const unpaidLeaveDaySet = new Set<number>(
+      Object.entries(fixedAttendance)
+        .filter(([, status]) => status === "unpaid_leave")
+        .map(([day]) => Number(day))
+    );
+    // Employee left partway through this month: days after the ending day accrue no salary,
+    // same as an unpaid leave day.
+    if (endingDay != null) {
+      const totalDays = getDaysInMonth(month);
+      for (let day = endingDay + 1; day <= totalDays; day++) unpaidLeaveDaySet.add(day);
+    }
+    const unpaidLeaves = unpaidLeaveDaySet.size;
     // Fixed monthly salaries use a consistent 30-day payroll basis.
     const unpaidLeaveDeduction = roundAmount((baseSalary / 30) * unpaidLeaves);
     return Math.max(baseSalary - unpaidLeaveDeduction, 0);
   }
 
   const dailyAttendance = dailyMap(attendance ?? null);
-  const presentDays = Object.values(dailyAttendance).filter((e) => e.status === "present");
+  const dailyEntryPairs =
+    endingDay != null
+      ? Object.entries(dailyAttendance).filter(([day]) => Number(day) <= endingDay)
+      : Object.entries(dailyAttendance);
+  const presentDays = dailyEntryPairs.map(([, e]) => e).filter((e) => e.status === "present");
   const overtimeHours = presentDays.reduce((t, e) => t + Math.max(e.overtimeHours, 0), 0);
   const workedDays = presentDays.reduce(
     (t, e) => t + Math.min(Math.max(e.hoursWorked, 0), 8) / 8,
@@ -182,10 +225,13 @@ export async function getAttendanceSummaryForMonth(
   month: string,
   globalAllowedLeaves: number = GLOBAL_ALLOWED_LEAVES_DEFAULT
 ): Promise<AttendanceSummary> {
-  const employee = await Employee.findById(employeeId).select("type createdAt joiningDate").lean();
+  const employee = await Employee.findById(employeeId).select("type createdAt joiningDate endingDate").lean();
   if (!employee) return undefined;
   const firstMonth = effectiveFirstMonth(employee);
   if (firstMonth && month < firstMonth) return undefined;
+  const lastMonth = effectiveLastMonth(employee);
+  if (lastMonth && month > lastMonth) return undefined;
+  const endingDay = endingDayInMonth(employee, month);
 
   const attendance = await EmployeeAttendance.findOne({ employeeId: new mongoose.Types.ObjectId(employeeId), month }).lean();
   const totalDays = getDaysInMonth(month);
@@ -198,6 +244,11 @@ export async function getAttendanceSummaryForMonth(
     const explicitUnpaidLeaveDays: number[] = [];
     const legacyLeaveDays: number[] = [];
     for (let day = 1; day <= totalDays; day++) {
+      if (endingDay != null && day > endingDay) {
+        // Employee had already left — count as unpaid, regardless of any recorded status.
+        explicitUnpaidLeaveDays.push(day);
+        continue;
+      }
       const status = fixedAttendance[day] ?? "present";
       if (status === "present") present += 1;
       else if (status === "absent") absent += 1;
@@ -212,7 +263,11 @@ export async function getAttendanceSummaryForMonth(
   }
 
   const dailyAttendance = dailyMap(attendance ?? null);
-  const presentDays = Object.values(dailyAttendance).filter((e) => e.status === "present");
+  const dailyEntryPairs =
+    endingDay != null
+      ? Object.entries(dailyAttendance).filter(([day]) => Number(day) <= endingDay)
+      : Object.entries(dailyAttendance);
+  const presentDays = dailyEntryPairs.map(([, e]) => e).filter((e) => e.status === "present");
   const overtimeHours = presentDays.reduce((t, e) => t + Math.max(e.overtimeHours, 0), 0);
   const workedDays = presentDays.reduce(
     (t, e) => t + Math.min(Math.max(e.hoursWorked, 0), 8) / 8,
@@ -240,17 +295,22 @@ export async function getEmployeeSnapshotForMonth(
   month: string,
   employeeCreatedAt?: Date,
   employeeJoiningDate?: string,
-  employeeType?: "Fixed" | "Daily"
+  employeeType?: "Fixed" | "Daily",
+  employeeEndingDate?: string
 ): Promise<MonthlySnapshot | undefined> {
   let firstMonth: string | null = null;
+  let lastMonth: string | null = null;
   if (employeeCreatedAt != null || employeeJoiningDate != null) {
     firstMonth = effectiveFirstMonth({ createdAt: employeeCreatedAt, joiningDate: employeeJoiningDate });
+    lastMonth = effectiveLastMonth({ endingDate: employeeEndingDate });
   } else {
-    const employee = await Employee.findById(employeeId).select("createdAt joiningDate").lean();
+    const employee = await Employee.findById(employeeId).select("createdAt joiningDate endingDate").lean();
     if (!employee) return undefined;
     firstMonth = effectiveFirstMonth(employee);
+    lastMonth = effectiveLastMonth(employee);
   }
   if (firstMonth && month < firstMonth) return undefined;
+  if (lastMonth && month > lastMonth) return undefined;
 
   const [payable, paid, advancePaid, attendance, lastNonAdvance] = await Promise.all([
     computePayableForMonth(employeeId, month),
@@ -344,16 +404,19 @@ export async function getEmployeeTotals(
 
   if (!startDate && !endDate) {
     const [employee, paidAgg, paymentMonths, attendanceMonths] = await Promise.all([
-      Employee.findById(employeeId).select("createdAt joiningDate").lean(),
+      Employee.findById(employeeId).select("createdAt joiningDate endingDate").lean(),
       EmployeePayment.aggregate([{ $match: { employeeId: oid } }, { $group: { _id: null, total: { $sum: "$amount" } } }]),
       EmployeePayment.distinct("month", { employeeId: oid }),
       EmployeeAttendance.distinct("month", { employeeId: oid }),
     ]);
     const totalPaid = paidAgg[0]?.total ?? 0;
     const firstMonth = employee ? effectiveFirstMonth(employee) ?? "1970-01" : "1970-01";
-    const monthsUpToCurrent = monthsFromTo(firstMonth, currentMonth);
+    const lastMonth = employee ? effectiveLastMonth(employee) : null;
+    // An employee who has left doesn't accrue liability past their ending month.
+    const cappedCurrentMonth = lastMonth && lastMonth < currentMonth ? lastMonth : currentMonth;
+    const monthsUpToCurrent = monthsFromTo(firstMonth, cappedCurrentMonth);
     const months = [...new Set([...paymentMonths, ...attendanceMonths, ...monthsUpToCurrent])].filter(
-      (m) => m >= firstMonth && m <= currentMonth
+      (m) => m >= firstMonth && m <= cappedCurrentMonth
     );
     let totalDue = 0;
     for (const month of months) {
@@ -367,12 +430,14 @@ export async function getEmployeeTotals(
   // Date-ranged: payable is summed over the months overlapping the range (see semantics note
   // above), minus payments dated within the range for those same months. totalPaid (display stat)
   // is every payment dated within the range, regardless of which month it settles.
-  const employee = await Employee.findById(employeeId).select("createdAt joiningDate").lean();
+  const employee = await Employee.findById(employeeId).select("createdAt joiningDate endingDate").lean();
   const firstMonth = employee ? effectiveFirstMonth(employee) ?? "1970-01" : "1970-01";
+  const lastMonth = employee ? effectiveLastMonth(employee) : null;
   const rangeStartMonth = startDate ? startDate.slice(0, 7) : firstMonth;
   const rangeEndMonth = endDate ? endDate.slice(0, 7) : currentMonth;
   const loMonth = rangeStartMonth > firstMonth ? rangeStartMonth : firstMonth;
-  const hiMonth = rangeEndMonth < currentMonth ? rangeEndMonth : currentMonth;
+  let hiMonth = rangeEndMonth < currentMonth ? rangeEndMonth : currentMonth;
+  if (lastMonth && lastMonth < hiMonth) hiMonth = lastMonth;
   const months = monthsFromTo(loMonth, hiMonth);
 
   const dateMatch: Record<string, unknown> = {
@@ -880,10 +945,13 @@ export async function getEmployeeLedger(
 
   const allPaymentDocs = await EmployeePayment.find(baseMatch).sort({ date: 1, _id: 1 }).lean();
   const firstMonth = employee ? effectiveFirstMonth(employee) : null;
+  const lastMonth = employee ? effectiveLastMonth(employee) : null;
   const currentMonth = monthKeyPKT();
+  // An employee who has left doesn't accrue payable rows past their ending month.
+  const cappedCurrentMonth = lastMonth && lastMonth < currentMonth ? lastMonth : currentMonth;
   const payableRows: Omit<EmployeeLedgerRow, "runningTotal">[] = [];
   if (firstMonth) {
-    for (let cursor = firstMonth; cursor <= currentMonth; cursor = nextMonth(cursor)) {
+    for (let cursor = firstMonth; cursor <= cappedCurrentMonth; cursor = nextMonth(cursor)) {
       const payable = await computePayableForMonth(employeeId, cursor);
       if (payable > 0) {
         payableRows.push({ type: "payable", id: `payable-${cursor}`, date: monthEndDate(cursor), month: cursor, amount: payable, remarks: employee?.type === "Fixed" ? "Monthly salary payable" : "Monthly wage payable" });
@@ -894,17 +962,15 @@ export async function getEmployeeLedger(
     ...payableRows,
     ...allPaymentDocs.map((payment) => ({ type: "payment" as const, id: payment._id.toString(), date: payment.date, month: payment.month, amount: payment.amount, remarks: payment.remarks, paymentMethod: payment.paymentMethod, paymentType: payment.type })),
   ].sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
-  // Daily (wage) employees: an Advance is money given ahead of earned wages, so track it as an
-  // accumulating amount the employee still owes back via future work, instead of subtracting it
-  // like a normal salary/wage settlement. Fixed employees are unaffected — every payment subtracts.
-  const isDailyEmployee = employee?.type === "Daily";
+  // Every payment type — including Advance — settles against the running balance the same way:
+  // payable adds to what's owed, any payment (Advance, Salary, or Wage) subtracts from it. An
+  // outstanding, not-yet-worked-off advance for daily wage employees is tracked separately (see
+  // getOutstandingAdvanceThroughMonth) for the salary sheet net figure, not in this running balance.
   let balance = 0;
   let previousBalance = 0;
   const rows: EmployeeLedgerRow[] = [];
   for (const row of allRows) {
     if (row.type === "payable") {
-      balance += row.amount;
-    } else if (isDailyEmployee && row.paymentType === "Advance") {
       balance += row.amount;
     } else {
       balance -= row.amount;

@@ -126,6 +126,15 @@ export function getFirstMonth(createdAt: string | undefined, joiningDate?: strin
   return `${y}-${m}`;
 }
 
+/** Returns YYYY-MM from employee endingDate, or undefined when the employee is still active.
+ *  For months after this, the employee has left — no salary/attendance data accrues. */
+export function getLastMonth(endingDate?: string): string | undefined {
+  if (!endingDate?.trim()) return undefined;
+  const ed = endingDate.trim();
+  if (/^\d{4}-\d{2}$/.test(ed.slice(0, 7))) return ed.slice(0, 7);
+  return undefined;
+}
+
 /** Month options up to current month only (no future). Use for viewing data. */
 export function buildMonthOptionsUpToCurrent(beforeMonths = 12): string[] {
   const now = new Date();

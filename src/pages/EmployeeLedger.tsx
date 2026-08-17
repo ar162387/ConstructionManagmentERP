@@ -3,6 +3,7 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import Layout from "@/components/Layout";
 import PageHeader from "@/components/PageHeader";
 import StatusBadge from "@/components/StatusBadge";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -43,6 +44,7 @@ import {
   buildMonthOptionsUpToCurrent,
   getDaysInMonth,
   getFirstMonth,
+  getLastMonth,
   getLocalMonthKey,
   getMonthKey,
   monthLabel,
@@ -880,8 +882,14 @@ export default function EmployeeLedger() {
 
   const subtitle = `${employee.project ?? ""} - ${employee.role}`;
   const firstMonth = getFirstMonth(employee.createdAt, employee.joiningDate);
+  const lastMonth = getLastMonth(employee.endingDate);
   const isBeforeEmployeeCreated = firstMonth ? selectedMonth < firstMonth : false;
-  const noRemainingDue = isBeforeEmployeeCreated || !snapshot || snapshot.remaining <= 0;
+  const isAfterEmployeeLeft = lastMonth ? selectedMonth > lastMonth : false;
+  const isOutOfRange = isBeforeEmployeeCreated || isAfterEmployeeLeft;
+  const noRemainingDue = isOutOfRange || !snapshot || snapshot.remaining <= 0;
+  const noDataMessage = isAfterEmployeeLeft
+    ? "NO DATA — Employee had already left the company by this month."
+    : "NO DATA — Employee was not on the project for this month.";
 
   return (
     <Layout>
@@ -965,13 +973,14 @@ export default function EmployeeLedger() {
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <StatusBadge status={employee.type} />
-        {!isBeforeEmployeeCreated && snapshot && <StatusBadge status={snapshot.paymentStatus} />}
+        {lastMonth && <Badge variant="outline" className="text-xs font-normal text-muted-foreground">Left {lastMonth}</Badge>}
+        {!isOutOfRange && snapshot && <StatusBadge status={snapshot.paymentStatus} />}
       </div>
 
       <div className="border-2 border-border p-4 mb-4">
         <h2 className="text-sm font-bold uppercase tracking-wide mb-3">Summary</h2>
-        {isBeforeEmployeeCreated ? (
-          <p className="text-muted-foreground py-4">NO DATA — Employee was not on the project for this month.</p>
+        {isOutOfRange ? (
+          <p className="text-muted-foreground py-4">{noDataMessage}</p>
         ) : dataLoading ? (
           <div className="flex items-center gap-2 py-4 text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -1020,7 +1029,7 @@ export default function EmployeeLedger() {
           <h2 className="text-sm font-bold uppercase tracking-wide">Payments Ledger</h2>
           <div className="flex flex-wrap items-center gap-2">
             <PrintExportButton title={`Payments Ledger - ${employee.name}`} printTargetId="employee-payment-ledger" />
-            {noRemainingDue && !isBeforeEmployeeCreated && (
+            {noRemainingDue && !isOutOfRange && (
               <span className="text-sm text-muted-foreground">No remaining due for this month.</span>
             )}
             <Button type="button" variant="outline" onClick={() => openPaymentDialog("partial")} disabled={noRemainingDue}>
@@ -1131,8 +1140,8 @@ export default function EmployeeLedger() {
       <div className="border-2 border-border p-4">
         <h2 className="text-sm font-bold uppercase tracking-wide mb-3">Attendance</h2>
 
-        {isBeforeEmployeeCreated ? (
-          <p className="text-muted-foreground py-4">NO DATA — Employee was not on the project for this month.</p>
+        {isOutOfRange ? (
+          <p className="text-muted-foreground py-4">{noDataMessage}</p>
         ) : dataLoading ? (
           <div className="flex items-center gap-2 py-4 text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />

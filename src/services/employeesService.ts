@@ -24,8 +24,9 @@ export interface ApiEmployee {
   createdAt?: string;
   /** User-specified "YYYY-MM-DD" date the employee actually joined; overrides createdAt as the No-Data cutoff. */
   joiningDate?: string;
-  category?: ApiEmployeeCategory;
-  machineId?: string;
+  /** User-specified "YYYY-MM-DD" date the employee actually left. When set, no salary/wage accrues
+   *  after this month (the ending month is prorated up to this day) and it's excluded from liabilities. */
+  endingDate?: string;
 }
 
 export interface CreateEmployeeInput {
@@ -37,6 +38,8 @@ export interface CreateEmployeeInput {
   dailyRate?: number;
   phone?: string;
   joiningDate?: string;
+  endingDate?: string;
+  category?: ApiEmployeeCategory;
   machineId?: string;
 }
 
@@ -48,6 +51,7 @@ export interface UpdateEmployeeInput {
   dailyRate?: number;
   phone?: string;
   joiningDate?: string;
+  endingDate?: string;
 }
 
 export interface AttendanceSnapshotFixed {

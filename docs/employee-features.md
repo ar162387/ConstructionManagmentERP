@@ -21,6 +21,14 @@
 ## Payment Actions
 - Record payment modal with quick options (Advance, Partial, Full Remaining), date, amount, method, remarks.
 - Payments immediately reflected in KPIs and ledger.
+- Every payment type — Advance, Salary, and Wage — subtracts from the employee's running ledger balance the same way; there's no special-case where an Advance adds to it. (Daily-wage employees additionally get an `outstandingAdvance` figure — cumulative advance not yet worked off through a given month — shown separately for the salary sheet's net payable; it does not affect the running balance itself.)
+
+## Joining Date & Ending Date
+- Joining Date: the date the employee actually started. Salary/attendance data before this month shows "No Data".
+- Ending Date: the date the employee actually left. Available for Fixed, Machinery, and Daily-wage employees.
+  - Fixed/Machinery: the ending month's salary is prorated (days after the ending date are treated like unpaid leave), and no salary/liability is generated for any month after it — the employee is excluded from liabilities as if no longer employed.
+  - Daily wage: salary already depends on attendance being marked, so no extra accrual logic is needed; the ending date is recorded to mark that the employee is no longer with the company. Attendance dated after the ending date is also excluded from payable, as a safety net.
+  - The Employees list and ledger detail page show a "Left" badge and treat months after the ending date as "No Data", mirroring the joining-date cutoff.
 
 ## Data & Defaults
 - Global allowed paid leaves: 4 per month (applies to all fixed-salary employees).

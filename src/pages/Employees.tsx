@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import Layout from "@/components/Layout";
 import PageHeader from "@/components/PageHeader";
 import StatusBadge from "@/components/StatusBadge";
+import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/mock-data";
 import { useAuth } from "@/context/AuthContext";
 import { useSelectedProject } from "@/context/SelectedProjectContext";
@@ -27,6 +28,7 @@ import {
   buildMonthOptionsUpToCurrent,
   getDaysInMonth,
   getFirstMonth,
+  getLastMonth,
   getLocalMonthKey,
   monthLabel,
   salarySheetMonthLabel,
@@ -149,7 +151,8 @@ function EmployeesSalaryPrintSheet({
     let sn = 0;
     const body = employees.map((employee, idx) => {
       const firstMonth = getFirstMonth(employee.createdAt, employee.joiningDate);
-      const isBefore = firstMonth ? selectedMonth < firstMonth : false;
+      const lastMonth = getLastMonth(employee.endingDate);
+      const isBefore = (firstMonth ? selectedMonth < firstMonth : false) || (lastMonth ? selectedMonth > lastMonth : false);
       const snapshot = isBefore ? undefined : employee.snapshot;
       const wd = salaryWorkingDays(employee, snapshot, selectedMonth, isBefore);
       const adv = salaryAdvanceAmount(employee, snapshot);
@@ -287,8 +290,11 @@ function EmployeeRows({
     <>
       {employees.map((employee) => {
         const firstMonth = getFirstMonth(employee.createdAt, employee.joiningDate);
+        const lastMonth = getLastMonth(employee.endingDate);
         const isBeforeEmployeeCreated = firstMonth ? selectedMonth < firstMonth : false;
-        const snapshot = isBeforeEmployeeCreated ? undefined : employee.snapshot;
+        const isAfterEmployeeLeft = lastMonth ? selectedMonth > lastMonth : false;
+        const isOutOfRange = isBeforeEmployeeCreated || isAfterEmployeeLeft;
+        const snapshot = isOutOfRange ? undefined : employee.snapshot;
         const totalPaidAllMonths = employee.totalPaid ?? 0;
 
         return (
@@ -306,24 +312,29 @@ function EmployeeRows({
             tabIndex={0}
             aria-label={`Open ${employee.name} ledger`}
           >
-            <td className="px-4 py-3 font-semibold">{employee.name}</td>
+            <td className="px-4 py-3 font-semibold">
+              <span className="inline-flex items-center gap-2">
+                {employee.name}
+                {lastMonth && <Badge variant="outline" className="text-xs font-normal text-muted-foreground">Left</Badge>}
+              </span>
+            </td>
             <td className="px-4 py-3">{employee.role}</td>
             <td className="px-4 py-3 text-right font-mono">{employeeRateLabel(employee)}</td>
             <td className="px-4 py-3 text-xs text-muted-foreground">
-              {isBeforeEmployeeCreated ? "NO DATA" : thisMonthLabel(employee, snapshot)}
+              {isOutOfRange ? "NO DATA" : thisMonthLabel(employee, snapshot)}
             </td>
             <td className="px-4 py-3 text-right font-mono">
-              {isBeforeEmployeeCreated ? "NO DATA" : snapshot ? formatCurrency(snapshot.payable) : "—"}
+              {isOutOfRange ? "NO DATA" : snapshot ? formatCurrency(snapshot.payable) : "—"}
             </td>
             <td className="px-4 py-3 text-right font-mono text-success">
-              {isBeforeEmployeeCreated ? "NO DATA" : snapshot ? formatCurrency(snapshot.paid) : "—"}
+              {isOutOfRange ? "NO DATA" : snapshot ? formatCurrency(snapshot.paid) : "—"}
             </td>
             <td className="px-4 py-3 text-right font-mono text-destructive">
-              {isBeforeEmployeeCreated ? "NO DATA" : snapshot && snapshot.remaining > 0 ? formatCurrency(snapshot.remaining) : snapshot ? "-" : "—"}
+              {isOutOfRange ? "NO DATA" : snapshot && snapshot.remaining > 0 ? formatCurrency(snapshot.remaining) : snapshot ? "-" : "—"}
             </td>
             <td className="px-4 py-3 text-right font-mono">{formatCurrency(totalPaidAllMonths)}</td>
             <td className="px-4 py-3">
-              {isBeforeEmployeeCreated ? "NO DATA" : snapshot ? <StatusBadge status={snapshot.paymentStatus} /> : "—"}
+              {isOutOfRange ? "NO DATA" : snapshot ? <StatusBadge status={snapshot.paymentStatus} /> : "—"}
             </td>
           </tr>
         );

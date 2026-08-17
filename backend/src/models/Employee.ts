@@ -18,6 +18,10 @@ export interface IEmployee {
   /** Optional user-specified "YYYY-MM-DD" date the employee actually joined/started.
    *  When set, this (not createdAt) is used as the cutoff for which months have payable salary/attendance data. */
   joiningDate?: string;
+  /** Optional user-specified "YYYY-MM-DD" date the employee actually left/stopped.
+   *  When set, no payable salary/wage accrues for months after it, and the ending month itself is
+   *  prorated up to this day. Used to mark an employee as no longer with the company. */
+  endingDate?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -34,6 +38,7 @@ const employeeSchema = new mongoose.Schema<IEmployee>(
     category: { type: String, enum: ["Regular", "Machinery"], default: "Regular", required: true },
     machineId: { type: mongoose.Schema.Types.ObjectId, ref: "Machine" },
     joiningDate: { type: String, trim: true },
+    endingDate: { type: String, trim: true },
   },
   { timestamps: true }
 );

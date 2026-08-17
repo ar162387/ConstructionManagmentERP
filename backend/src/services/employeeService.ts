@@ -27,6 +27,9 @@ export interface EmployeePayload {
   createdAt?: string;
   /** User-specified "YYYY-MM-DD" date the employee actually joined; overrides createdAt as the No-Data cutoff. */
   joiningDate?: string;
+  /** User-specified "YYYY-MM-DD" date the employee actually left. When set, no salary/wage accrues
+   *  after this month (the ending month is prorated up to this day) and it's excluded from liabilities. */
+  endingDate?: string;
 }
 
 export interface CreateEmployeeInput {
@@ -38,6 +41,7 @@ export interface CreateEmployeeInput {
   dailyRate?: number;
   phone?: string;
   joiningDate?: string;
+  endingDate?: string;
   category?: EmployeeCategory;
   machineId?: string;
 }
@@ -50,6 +54,7 @@ export interface UpdateEmployeeInput {
   dailyRate?: number;
   phone?: string;
   joiningDate?: string;
+  endingDate?: string;
   machineId?: string;
 }
 
@@ -67,6 +72,7 @@ function toPayload(
     machineId?: mongoose.Types.ObjectId;
     createdAt?: Date;
     joiningDate?: string;
+    endingDate?: string;
   },
   projectName?: string,
   totals?: { totalPaid: number; totalDue: number }
@@ -87,15 +93,24 @@ function toPayload(
     totalDue: totals?.totalDue,
     createdAt: doc.createdAt ? new Date(doc.createdAt).toISOString() : undefined,
     joiningDate: doc.joiningDate,
+    endingDate: doc.endingDate,
   };
 }
 
-/** Validates a "YYYY-MM-DD" joining date string; throws if malformed. */
-function validateJoiningDate(value: string): string {
+/** Validates a "YYYY-MM-DD" date string; throws (with the given field label) if malformed. */
+function validateDateString(value: string, label: string): string {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || Number.isNaN(new Date(value).getTime())) {
-    throw new Error("Joining date must be a valid date (YYYY-MM-DD)");
+    throw new Error(`${label} must be a valid date (YYYY-MM-DD)`);
   }
   return value;
+}
+
+function validateJoiningDate(value: string): string {
+  return validateDateString(value, "Joining date");
+}
+
+function validateEndingDate(value: string): string {
+  return validateDateString(value, "Ending date");
 }
 
 export interface EmployeeListOptions {
@@ -126,7 +141,7 @@ export async function listEmployees(
     ? "Machinery"
     : { $in: ["Regular", null] }; // retain existing employees created before the category field
   const docs = await Employee.find(query)
-    .select("_id projectId name role type monthlySalary dailyRate phone category machineId createdAt joiningDate")
+    .select("_id projectId name role type monthlySalary dailyRate phone category machineId createdAt joiningDate endingDate")
     .lean();
   const projectIds = [...new Set(docs.map((d) => d.projectId.toString()))];
   const projects = await Project.find({ _id: { $in: projectIds } }).select("_id name").lean();
@@ -142,7 +157,7 @@ export async function listEmployees(
   let snapshots: (MonthlySnapshot | undefined)[] = [];
   if (month) {
     const snapshotResults = await Promise.allSettled(
-      docs.map((d) => getEmployeeSnapshotForMonth(d._id.toString(), month, d.createdAt, d.joiningDate, d.type))
+      docs.map((d) => getEmployeeSnapshotForMonth(d._id.toString(), month, d.createdAt, d.joiningDate, d.type, d.endingDate))
     );
     snapshots = snapshotResults.map((r) => (r.status === "fulfilled" ? r.value : undefined));
   }
@@ -201,6 +216,13 @@ export async function createEmployee(
   if (input.type === "Fixed" && input.monthlySalary != null) payload.monthlySalary = Math.max(0, input.monthlySalary);
   if (input.type === "Daily" && input.dailyRate != null) payload.dailyRate = Math.max(0, input.dailyRate);
   if (input.joiningDate?.trim()) payload.joiningDate = validateJoiningDate(input.joiningDate);
+  if (input.endingDate?.trim()) {
+    const endingDate = validateEndingDate(input.endingDate);
+    if (payload.joiningDate && endingDate < (payload.joiningDate as string)) {
+      throw new Error("Ending date cannot be before joining date");
+    }
+    payload.endingDate = endingDate;
+  }
   payload.category = category;
   if (category === "Machinery") {
     if (!input.machineId || !mongoose.Types.ObjectId.isValid(input.machineId)) throw new Error("A Company Owned machine is required for a Machinery Employee");
@@ -266,9 +288,25 @@ export async function updateEmployee(
       unsetJoiningDate = true;
     }
   }
+  let unsetEndingDate = false;
+  if (input.endingDate != null) {
+    const trimmed = input.endingDate.trim();
+    if (trimmed) {
+      updates.endingDate = validateEndingDate(trimmed);
+    } else {
+      unsetEndingDate = true;
+    }
+  }
+  const effectiveJoiningDate = (updates.joiningDate as string | undefined) ?? (unsetJoiningDate ? undefined : target.joiningDate);
+  if (updates.endingDate != null && effectiveJoiningDate && (updates.endingDate as string) < effectiveJoiningDate) {
+    throw new Error("Ending date cannot be before joining date");
+  }
 
   const updateDoc: Record<string, unknown> = { $set: updates };
-  if (unsetJoiningDate) updateDoc.$unset = { joiningDate: "" };
+  const unsetFields: Record<string, string> = {};
+  if (unsetJoiningDate) unsetFields.joiningDate = "";
+  if (unsetEndingDate) unsetFields.endingDate = "";
+  if (Object.keys(unsetFields).length) updateDoc.$unset = unsetFields;
 
   const updated = await Employee.findByIdAndUpdate(id, updateDoc, { new: true }).lean();
   if (!updated) throw new Error("Update failed");

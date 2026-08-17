@@ -47,6 +47,7 @@ export function AddEmployeeDialog({ open, onOpenChange, restrictedProjectId, res
   const [dailyRate, setDailyRate] = useState("");
   const [phone, setPhone] = useState("");
   const [joiningDate, setJoiningDate] = useState(todayDateString());
+  const [endingDate, setEndingDate] = useState("");
   const [machineId, setMachineId] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const effectiveProjectId = restrictedProjectId ?? projectId;
@@ -74,6 +75,10 @@ export function AddEmployeeDialog({ open, onOpenChange, restrictedProjectId, res
       toast.error("Select the Company Owned machine that will pay this employee's salary");
       return;
     }
+    if (endingDate.trim() && joiningDate.trim() && endingDate.trim() < joiningDate.trim()) {
+      toast.error("Ending date cannot be before joining date");
+      return;
+    }
     setSubmitting(true);
     try {
       if (type === "Fixed") {
@@ -91,6 +96,7 @@ export function AddEmployeeDialog({ open, onOpenChange, restrictedProjectId, res
           monthlySalary: sal,
           phone: phone.trim(),
           joiningDate: joiningDate.trim() || undefined,
+          endingDate: endingDate.trim() || undefined,
           category,
           machineId: category === "Machinery" ? machineId : undefined,
         });
@@ -109,6 +115,7 @@ export function AddEmployeeDialog({ open, onOpenChange, restrictedProjectId, res
           dailyRate: rate,
           phone: phone.trim(),
           joiningDate: joiningDate.trim() || undefined,
+          endingDate: endingDate.trim() || undefined,
           category,
           machineId: category === "Machinery" ? machineId : undefined,
         });
@@ -120,6 +127,7 @@ export function AddEmployeeDialog({ open, onOpenChange, restrictedProjectId, res
       setDailyRate("");
       setPhone("");
       setJoiningDate(todayDateString());
+      setEndingDate("");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to add employee");
     } finally {
@@ -205,6 +213,17 @@ export function AddEmployeeDialog({ open, onOpenChange, restrictedProjectId, res
             <Input type="date" value={joiningDate} onChange={(e) => setJoiningDate(e.target.value)} className="mt-1" />
             <p className="mt-1 text-xs text-muted-foreground">
               The date the employee actually started. Salary/attendance data before this month will show "No Data".
+            </p>
+          </div>
+          <div>
+            <Label>Ending Date</Label>
+            <Input type="date" value={endingDate} onChange={(e) => setEndingDate(e.target.value)} className="mt-1" />
+            <p className="mt-1 text-xs text-muted-foreground">
+              {category === "Machinery"
+                ? "The date this machinery employee left. Salary is prorated up to this date, and no salary or liability is generated after it."
+                : type === "Fixed"
+                  ? "The date the employee left. Salary is prorated up to this date, and no salary or liability is generated after it."
+                  : "The date the employee left. Wages still depend on marked attendance, but this records that they're no longer with the company."}
             </p>
           </div>
           <DialogFooter>
