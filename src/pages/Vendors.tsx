@@ -40,11 +40,10 @@ export default function Vendors() {
   const { user } = useAuth();
   const { projects } = useProjects();
   const isSiteManager = user?.role === "Site Manager";
-  const assignedProjectId = user?.assignedProjectId ?? null;
 
   const { selectedProjectId, setSelectedProjectId } = useSelectedProject();
   const [searchQuery, setSearchQuery] = useState("");
-  const effectiveProjectId = isSiteManager ? assignedProjectId : (selectedProjectId || null);
+  const effectiveProjectId = selectedProjectId || null;
 
   const { vendors, loading, error, refetch } = useVendors(effectiveProjectId);
 
@@ -61,20 +60,11 @@ export default function Vendors() {
     });
   }, [vendors, searchQuery]);
 
-  const projectOptions = useMemo(() => {
-    if (isSiteManager && assignedProjectId) {
-      const p = projects.find((pr) => pr.id === assignedProjectId);
-      return p ? [{ id: p.id, name: p.name }] : [];
-    }
-    return projects;
-  }, [isSiteManager, assignedProjectId, projects]);
   const [addOpen, setAddOpen] = useState(false);
   const [editVendor, setEditVendor] = useState<ApiVendor | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [deleteVendorState, setDeleteVendorState] = useState<ApiVendor | null>(null);
-  const selectedProjectName = isSiteManager
-    ? (projects.find((p) => p.id === assignedProjectId)?.name ?? "Project")
-    : (projects.find((p) => p.id === selectedProjectId)?.name ?? "Project");
+  const selectedProjectName = projects.find((p) => p.id === selectedProjectId)?.name ?? "Project";
 
   const canEditDelete = user?.role !== "Site Manager";
   const vendorsPagination = useTablePagination(filteredVendors, { defaultPageSize: 12 });
@@ -132,7 +122,7 @@ export default function Vendors() {
       </AlertDialog>
 
       <div className="flex flex-wrap items-end gap-4 mb-4 p-4 border-2 border-border">
-        {!isSiteManager && (
+        {projects.length > 0 && (
           <div>
             <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Project</Label>
             <Select value={selectedProjectId} onValueChange={setSelectedProjectId}>
@@ -140,7 +130,7 @@ export default function Vendors() {
                 <SelectValue placeholder="Select project" />
               </SelectTrigger>
               <SelectContent>
-                {projectOptions.map((p) => (
+                {projects.map((p) => (
                   <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
                 ))}
               </SelectContent>
@@ -158,12 +148,14 @@ export default function Vendors() {
         </div>
       </div>
 
-      {!effectiveProjectId && !isSiteManager && (
+      {!effectiveProjectId && projects.length > 0 && (
         <p className="text-muted-foreground mb-4">Select a project to view and manage vendors.</p>
       )}
 
-      {isSiteManager && !assignedProjectId && (
-        <p className="text-muted-foreground mb-4">You are not assigned to a project. Contact an admin.</p>
+      {projects.length === 0 && (
+        <p className="text-muted-foreground mb-4">
+          {isSiteManager ? "You are not assigned to any project. Contact an admin." : "No projects yet."}
+        </p>
       )}
 
       {error && <p className="text-destructive text-sm mb-4">{error}</p>}

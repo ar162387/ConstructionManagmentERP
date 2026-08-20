@@ -4,6 +4,7 @@ import { ItemLedgerEntry } from "../models/ItemLedgerEntry.js";
 import { Vendor } from "../models/Vendor.js";
 import { VendorPayment } from "../models/VendorPayment.js";
 import { User } from "../models/User.js";
+import { resolveSiteManagerProjectId } from "./projectAccessService.js";
 
 export interface ConsumableRunningBillRow {
   id: string;
@@ -39,8 +40,7 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 async function resolveProjectId(actor: { userId: string; role: string }, requested?: string) {
   if (actor.role !== "site_manager") return requested;
-  const user = await User.findById(actor.userId).select("assignedProjectId").lean();
-  return user?.assignedProjectId?.toString();
+  return resolveSiteManagerProjectId(actor.userId, requested);
 }
 
 export async function getConsumableRunningBill(

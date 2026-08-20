@@ -6,6 +6,7 @@ import { User } from "../models/User.js";
 import { logAudit, getProjectName } from "./auditService.js";
 import { roleDisplay } from "./authService.js";
 import { getContractorTotals } from "./contractorService.js";
+import { isProjectAssignedToUser } from "./projectAccessService.js";
 import { rebuildContractorPaymentAllocations } from "./contractorPaymentAllocationService.js";
 
 export interface ContractorLedgerRow {
@@ -55,8 +56,7 @@ export async function getContractorLedgerAllTime(
     return { rows: [], totalAmount: 0, totalPaid: 0, total: 0, previousBalance: 0 };
   }
   if (options?.actor?.role === "site_manager") {
-    const user = await User.findById(options.actor.userId).select("assignedProjectId").lean();
-    if (user?.assignedProjectId?.toString() !== projectId) {
+    if (!(await isProjectAssignedToUser(options.actor.userId, projectId))) {
       return { rows: [], totalAmount: 0, totalPaid: 0, total: 0, previousBalance: 0 };
     }
   }
@@ -111,9 +111,7 @@ export async function getContractorLedger(
     return { rows: [], totalAmount: 0, totalPaid: 0, remaining: 0, total: 0 };
   }
   if (options?.actor?.role === "site_manager") {
-    const user = await User.findById(options.actor.userId).select("assignedProjectId").lean();
-    const assignedProjectId = user?.assignedProjectId?.toString();
-    if (!assignedProjectId || assignedProjectId !== projectId) {
+    if (!(await isProjectAssignedToUser(options.actor.userId, projectId))) {
       return { rows: [], totalAmount: 0, totalPaid: 0, remaining: 0, total: 0 };
     }
   }
@@ -240,10 +238,8 @@ export async function createContractorEntry(
   }
 
   if (actor.role === "site_manager") {
-    const user = await User.findById(actor.userId).select("assignedProjectId").lean();
-    const assignedProjectId = user?.assignedProjectId?.toString();
-    if (!assignedProjectId || assignedProjectId !== input.projectId) {
-      throw new Error("You can only add entries for your assigned project");
+    if (!(await isProjectAssignedToUser(actor.userId, input.projectId))) {
+      throw new Error("You can only add entries for your assigned projects");
     }
   }
 
@@ -306,10 +302,8 @@ export async function createContractorPayment(
   if (!contractor) throw new Error("Contractor not found");
 
   if (actor.role === "site_manager") {
-    const user = await User.findById(actor.userId).select("assignedProjectId").lean();
-    const assignedProjectId = user?.assignedProjectId?.toString();
-    if (!assignedProjectId || contractor.projectId.toString() !== assignedProjectId) {
-      throw new Error("You can only record payments for contractors in your assigned project");
+    if (!(await isProjectAssignedToUser(actor.userId, contractor.projectId.toString()))) {
+      throw new Error("You can only record payments for contractors in your assigned projects");
     }
   }
 

@@ -11,8 +11,8 @@ export interface UserPayload {
   name: string;
   email: string;
   role: string;
-  assignedProjectId?: string;
-  assignedProjectName?: string;
+  assignedProjectIds?: string[];
+  assignedProjectNames?: string[];
 }
 
 export interface CreateUserInput {
@@ -20,8 +20,8 @@ export interface CreateUserInput {
   email: string;
   password: string;
   role: string;
-  assignedProjectId?: string;
-  assignedProjectName?: string;
+  assignedProjectIds?: string[];
+  assignedProjectNames?: string[];
 }
 
 export interface UpdateUserInput {
@@ -29,14 +29,25 @@ export interface UpdateUserInput {
   email?: string;
   password?: string;
   role?: string;
-  assignedProjectId?: string | null;
-  assignedProjectName?: string | null;
+  assignedProjectIds?: string[] | null;
+  assignedProjectNames?: string[] | null;
 }
 
 export interface Actor {
   userId: string;
   email: string;
   role: UserRole;
+}
+
+/** Reads assigned projects off a user doc, falling back to the legacy single-project fields for
+ *  users that haven't been migrated to the array fields yet. */
+function projectIdsOf(u: { assignedProjectIds?: string[]; assignedProjectId?: string }): string[] {
+  if (u.assignedProjectIds && u.assignedProjectIds.length) return u.assignedProjectIds;
+  return u.assignedProjectId ? [u.assignedProjectId] : [];
+}
+function projectNamesOf(u: { assignedProjectNames?: string[]; assignedProjectName?: string }): string[] {
+  if (u.assignedProjectNames && u.assignedProjectNames.length) return u.assignedProjectNames;
+  return u.assignedProjectName ? [u.assignedProjectName] : [];
 }
 
 export async function listUsers(): Promise<UserPayload[]> {
@@ -46,8 +57,8 @@ export async function listUsers(): Promise<UserPayload[]> {
     name: u.name,
     email: u.email,
     role: roleDisplay[u.role],
-    assignedProjectId: u.assignedProjectId,
-    assignedProjectName: u.assignedProjectName,
+    assignedProjectIds: projectIdsOf(u),
+    assignedProjectNames: projectNamesOf(u),
   }));
 }
 
@@ -71,8 +82,8 @@ export async function createUser(actor: Actor, input: CreateUserInput): Promise<
     email: input.email.toLowerCase().trim(),
     passwordHash,
     role: targetRole,
-    assignedProjectId: input.assignedProjectId || undefined,
-    assignedProjectName: input.assignedProjectName || undefined,
+    assignedProjectIds: input.assignedProjectIds?.length ? input.assignedProjectIds : undefined,
+    assignedProjectNames: input.assignedProjectNames?.length ? input.assignedProjectNames : undefined,
   });
 
   const actorUser = await User.findById(actor.userId).lean();
@@ -93,8 +104,8 @@ export async function createUser(actor: Actor, input: CreateUserInput): Promise<
     name: user.name,
     email: user.email,
     role: roleDisplay[user.role],
-    assignedProjectId: user.assignedProjectId,
-    assignedProjectName: user.assignedProjectName,
+    assignedProjectIds: projectIdsOf(user),
+    assignedProjectNames: projectNamesOf(user),
   };
 }
 
@@ -120,8 +131,12 @@ export async function updateUser(
     email: string;
     passwordHash: string;
     role: UserRole;
-    assignedProjectId?: string | null;
-    assignedProjectName?: string | null;
+    assignedProjectIds?: string[] | null;
+    assignedProjectNames?: string[] | null;
+    // Clear the legacy single-project fields once a user is edited through the array-based flow
+    // so listUsers()'s back-compat fallback doesn't resurrect a stale value.
+    assignedProjectId?: null;
+    assignedProjectName?: null;
   }> = {};
 
   if (input.name != null) updates.name = input.name.trim();
@@ -144,11 +159,13 @@ export async function updateUser(
     }
     updates.role = targetRole;
   }
-  if (input.assignedProjectId !== undefined) {
-    updates.assignedProjectId = (input.assignedProjectId && String(input.assignedProjectId).trim()) ? String(input.assignedProjectId).trim() : null;
+  if (input.assignedProjectIds !== undefined) {
+    updates.assignedProjectIds = input.assignedProjectIds?.length ? input.assignedProjectIds : null;
+    updates.assignedProjectId = null;
   }
-  if (input.assignedProjectName !== undefined) {
-    updates.assignedProjectName = (input.assignedProjectName != null && String(input.assignedProjectName).trim()) ? String(input.assignedProjectName).trim() : null;
+  if (input.assignedProjectNames !== undefined) {
+    updates.assignedProjectNames = input.assignedProjectNames?.length ? input.assignedProjectNames : null;
+    updates.assignedProjectName = null;
   }
 
   const updated = await User.findByIdAndUpdate(id, updates, { new: true }).lean();
@@ -166,8 +183,8 @@ export async function updateUser(
     module: "users",
     entityId: id,
     description: `Updated user ${target.email}`,
-    oldValue: { name: target.name, email: target.email, role: roleDisplay[target.role], assignedProjectId: target.assignedProjectId },
-    newValue: { name: updated.name, email: updated.email, role: roleDisplay[updated.role], assignedProjectId: updated.assignedProjectId },
+    oldValue: { name: target.name, email: target.email, role: roleDisplay[target.role], assignedProjectIds: projectIdsOf(target) },
+    newValue: { name: updated.name, email: updated.email, role: roleDisplay[updated.role], assignedProjectIds: projectIdsOf(updated) },
   });
 
   return {
@@ -175,8 +192,8 @@ export async function updateUser(
     name: updated.name,
     email: updated.email,
     role: roleDisplay[updated.role],
-    assignedProjectId: updated.assignedProjectId,
-    assignedProjectName: updated.assignedProjectName,
+    assignedProjectIds: projectIdsOf(updated),
+    assignedProjectNames: projectNamesOf(updated),
   };
 }
 

@@ -9,8 +9,8 @@ export interface ApiUser {
   name: string;
   email: string;
   role: string;
-  assignedProjectId?: string;
-  assignedProjectName?: string;
+  assignedProjectIds?: string[];
+  assignedProjectNames?: string[];
 }
 
 export interface CreateUserInput {
@@ -18,8 +18,8 @@ export interface CreateUserInput {
   email: string;
   password: string;
   role: string;
-  assignedProjectId?: string;
-  assignedProjectName?: string;
+  assignedProjectIds?: string[];
+  assignedProjectNames?: string[];
 }
 
 export interface UpdateUserInput {
@@ -27,8 +27,8 @@ export interface UpdateUserInput {
   email?: string;
   password?: string;
   role?: string;
-  assignedProjectId?: string;
-  assignedProjectName?: string;
+  assignedProjectIds?: string[];
+  assignedProjectNames?: string[];
 }
 
 export async function listUsers(): Promise<ApiUser[]> {

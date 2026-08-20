@@ -7,6 +7,7 @@ import { ContractorEntry } from "../models/ContractorEntry.js";
 import { BankTransaction } from "../models/BankTransaction.js";
 import { logAudit } from "./auditService.js";
 import { roleDisplay } from "./authService.js";
+import { getAssignedProjectIds } from "./projectAccessService.js";
 import type { AuthRequest } from "../middleware/auth.js";
 
 export const statusDisplay: Record<string, string> = {
@@ -71,9 +72,9 @@ function toPayload(doc: { _id: mongoose.Types.ObjectId; name: string; descriptio
 export async function listProjects(actor?: { userId: string; role: string }): Promise<ProjectPayload[]> {
   let projectFilter: Record<string, unknown> = {};
   if (actor?.role === "site_manager") {
-    const user = await User.findById(actor.userId).select("assignedProjectId").lean();
-    if (!user?.assignedProjectId) return [];
-    projectFilter = { _id: user.assignedProjectId };
+    const assigned = await getAssignedProjectIds(actor.userId);
+    if (!assigned.length) return [];
+    projectFilter = { _id: { $in: assigned } };
   }
   const docs = await Project.find(projectFilter).lean();
   const totals = await BankTransaction.aggregate<{ _id: mongoose.Types.ObjectId; total: number }>([
@@ -193,7 +194,7 @@ export async function deleteProject(actor: { userId: string; email: string; role
     throw new Error("Project not found");
   }
 
-  const usersAssigned = await User.find({ assignedProjectId: id }).select("name").lean();
+  const usersAssigned = await User.find({ $or: [{ assignedProjectId: id }, { assignedProjectIds: id }] }).select("name").lean();
   if (usersAssigned.length > 0) {
     const names = usersAssigned.map((u) => u.name).join(", ");
     throw new Error(

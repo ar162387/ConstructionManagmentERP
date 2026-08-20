@@ -52,9 +52,8 @@ export default function Liabilities() {
   const { projects } = useProjects();
   const { selectedProjectId, setSelectedProjectId } = useSelectedProject();
   const isSiteManager = user?.role === "Site Manager";
-  const assignedProjectId = user?.assignedProjectId ?? null;
 
-  const effectiveProjectId = isSiteManager ? assignedProjectId : (selectedProjectId || null);
+  const effectiveProjectId = selectedProjectId || null;
   const projectIdForApi = effectiveProjectId ?? undefined;
 
   const [entityFilter, setEntityFilter] = useState<string>("all");
@@ -149,9 +148,9 @@ export default function Liabilities() {
     refetchEmployees({ silent: true });
   };
 
-  const showProjectSelector = !isSiteManager && projectsForSelector.length > 0;
+  const showProjectSelector = projectsForSelector.length > 0;
   const hasProjectSelected = !!effectiveProjectId;
-  const showNoProjectMessage = !isSiteManager && projectsForSelector.length > 0 && !effectiveProjectId;
+  const showNoProjectMessage = projectsForSelector.length > 0 && !effectiveProjectId;
 
   return (
     <Layout>

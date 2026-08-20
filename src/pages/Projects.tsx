@@ -203,11 +203,8 @@ export default function Projects() {
   const canCreateProject = actorRole === "Admin" || actorRole === "Super Admin";
   const canManageProjects = actorRole === "Super Admin";
 
-  // Site Manager sees only their assigned project
-  const visibleProjects = useMemo(() => {
-    if (!isSiteManager || !currentUser?.assignedProjectId) return projects;
-    return projects.filter((p) => p.id === currentUser.assignedProjectId);
-  }, [projects, isSiteManager, currentUser?.assignedProjectId]);
+  // Site Manager sees only their assigned project(s) — already scoped server-side by listProjects
+  const visibleProjects = projects;
 
   const visibleProjectIds = useMemo(
     () => visibleProjects.map((p) => p.id).sort().join(","),
@@ -283,7 +280,7 @@ export default function Projects() {
     <Layout>
       <PageHeader
         title="Projects"
-        subtitle={isSiteManager ? "Your assigned project" : "Manage all construction projects"}
+        subtitle={isSiteManager ? "Your assigned projects" : "Manage all construction projects"}
         printTargetId="projects-cards"
         actions={
           canCreateProject ? (

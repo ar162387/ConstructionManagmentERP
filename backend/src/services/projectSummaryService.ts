@@ -7,6 +7,7 @@ import { Machine } from "../models/Machine.js";
 import { NonConsumableLedgerEntry } from "../models/NonConsumableLedgerEntry.js";
 import { Expense } from "../models/Expense.js";
 import { User } from "../models/User.js";
+import { isProjectAssignedToUser } from "./projectAccessService.js";
 import { getEmployeeTotals } from "./employeeLedgerService.js";
 import { getMachineTotals } from "./machineService.js";
 
@@ -46,9 +47,7 @@ export async function computeProjectSpentAndLiabilities(
   const projectObjId = new mongoose.Types.ObjectId(projectId);
 
   if (options?.actor?.role === "site_manager") {
-    const user = await User.findById(options.actor.userId).select("assignedProjectId").lean();
-    const assignedId = user?.assignedProjectId?.toString();
-    if (!assignedId || assignedId !== projectId) {
+    if (!(await isProjectAssignedToUser(options.actor.userId, projectId))) {
       return zeroSummary();
     }
   }

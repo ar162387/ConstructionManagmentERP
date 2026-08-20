@@ -50,16 +50,7 @@ export default function NonConsumableItemLedger() {
   const { user } = useAuth();
   const { projects } = useProjects();
   const canEditDelete = user?.role !== "Site Manager";
-  const isSiteManager = user?.role === "Site Manager";
-  const assignedProjectId = user?.assignedProjectId ?? null;
-
-  const projectOptions = useMemo(() => {
-    if (isSiteManager && assignedProjectId) {
-      const p = projects.find((pr) => pr.id === assignedProjectId);
-      return p ? [{ id: p.id, name: p.name }] : [];
-    }
-    return projects;
-  }, [isSiteManager, assignedProjectId, projects]);
+  const projectOptions = projects;
 
   const [item, setItem] = useState<ApiNonConsumableItem | null>(null);
   const [itemLoading, setItemLoading] = useState(true);

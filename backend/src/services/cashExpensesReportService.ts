@@ -17,6 +17,7 @@ import { Employee } from "../models/Employee.js";
 import { Machine } from "../models/Machine.js";
 import { ConsumableItem } from "../models/ConsumableItem.js";
 import { NonConsumableItem } from "../models/NonConsumableItem.js";
+import { isProjectAssignedToUser } from "./projectAccessService.js";
 
 export type CashExpensesEntityType =
   | "Consumable"
@@ -102,8 +103,7 @@ async function canAccessProject(
 ): Promise<boolean> {
   if (actor.role === "super_admin" || actor.role === "admin") return true;
   if (actor.role === "site_manager") {
-    const user = await User.findById(actor.userId).select("assignedProjectId").lean();
-    return user?.assignedProjectId?.toString() === projectId;
+    return isProjectAssignedToUser(actor.userId, projectId);
   }
   return false;
 }

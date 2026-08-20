@@ -76,9 +76,8 @@ export default function CashAndExpenses() {
   const { projects } = useProjects();
   const { selectedProjectId, setSelectedProjectId } = useSelectedProject();
   const isSiteManager = user?.role === "Site Manager";
-  const assignedProjectId = user?.assignedProjectId ?? null;
 
-  const effectiveProjectId = isSiteManager ? assignedProjectId : (selectedProjectId || null);
+  const effectiveProjectId = selectedProjectId || null;
   const [startDate, setStartDate] = useState(todayPKT);
   const [endDate, setEndDate] = useState(todayPKT);
   const [selectedEntity, setSelectedEntity] = useState<{
@@ -111,12 +110,7 @@ export default function CashAndExpenses() {
   const selectedProjectName =
     projects.find((p) => p.id === effectiveProjectId)?.name ?? "Project";
 
-  const subtitle =
-    isSiteManager && selectedProjectName
-      ? `Report — ${selectedProjectName}`
-      : effectiveProjectId
-        ? `Report — ${selectedProjectName}`
-        : "Report — Select project";
+  const subtitle = effectiveProjectId ? `Report — ${selectedProjectName}` : "Report — Select project";
 
   const periodLabel = startDate === endDate ? startDate : `${startDate} to ${endDate}`;
 
@@ -209,7 +203,7 @@ export default function CashAndExpenses() {
 
       <div className="space-y-6">
         <div className="flex flex-wrap items-end gap-4 p-4 border-2 border-border print-hidden">
-          {!isSiteManager && (
+          {projectsForSelector.length > 0 && (
             <div className="min-w-[200px]">
               <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                 Project
@@ -231,14 +225,6 @@ export default function CashAndExpenses() {
                   ))}
                 </SelectContent>
               </Select>
-            </div>
-          )}
-          {isSiteManager && selectedProjectName && (
-            <div className="min-w-[200px]">
-              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                Project
-              </Label>
-              <p className="mt-1.5 text-sm font-medium">{selectedProjectName}</p>
             </div>
           )}
           <div className="min-w-[220px]">

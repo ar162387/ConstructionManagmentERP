@@ -5,6 +5,7 @@ import { ItemLedgerEntry } from "../models/ItemLedgerEntry.js";
 import { VendorPayment } from "../models/VendorPayment.js";
 import { logAudit, getProjectName } from "./auditService.js";
 import { roleDisplay } from "./authService.js";
+import { resolveSiteManagerProjectId } from "./projectAccessService.js";
 
 export interface VendorPayload {
   id: string;
@@ -63,8 +64,7 @@ export async function listVendors(
 ): Promise<VendorPayload[]> {
   let projectId: string | undefined;
   if (actor.role === "site_manager") {
-    const user = await User.findById(actor.userId).select("assignedProjectId").lean();
-    projectId = user?.assignedProjectId?.toString();
+    projectId = await resolveSiteManagerProjectId(actor.userId, projectIdParam);
     if (!projectId) return [];
   } else {
     projectId = projectIdParam;
@@ -133,9 +133,8 @@ export async function createVendor(
 
   let projectId: string;
   if (actor.role === "site_manager") {
-    const user = await User.findById(actor.userId).select("assignedProjectId").lean();
-    projectId = user?.assignedProjectId?.toString() ?? "";
-    if (!projectId) throw new Error("Site Manager must be assigned to a project to create vendors");
+    projectId = (await resolveSiteManagerProjectId(actor.userId, input.projectId)) ?? "";
+    if (!projectId) throw new Error("Site Manager must be assigned to this project to create vendors");
   } else {
     projectId = input.projectId ?? "";
     if (!projectId || !mongoose.Types.ObjectId.isValid(projectId)) {

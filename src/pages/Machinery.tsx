@@ -131,7 +131,7 @@ export default function Machinery() {
   const isSiteManager = currentUser?.role === "Site Manager";
   const canEditDelete = !isSiteManager;
 
-  const effectiveProjectId = isSiteManager ? (currentUser?.assignedProjectId ?? null) : (selectedProjectId || null);
+  const effectiveProjectId = selectedProjectId || null;
 
   const { machines, total, loading, error, refetch } = useMachines(
     effectiveProjectId,
@@ -159,19 +159,13 @@ export default function Machinery() {
     [projects]
   );
 
-  const projectName =
-    isSiteManager && currentUser?.assignedProjectName
-      ? currentUser.assignedProjectName
-      : effectiveProjectId
-        ? projects.find((p) => p.id === effectiveProjectId)?.name ?? "Project"
-        : "—";
+  const projectName = effectiveProjectId
+    ? projects.find((p) => p.id === effectiveProjectId)?.name ?? "Project"
+    : "—";
 
-  const subtitle =
-    isSiteManager && currentUser?.assignedProjectName
-      ? `Company owned & rented machinery — ${currentUser.assignedProjectName}`
-      : effectiveProjectId
-        ? `Company owned & rented machinery — ${projectName}`
-        : "Company owned & rented machinery — Select project";
+  const subtitle = effectiveProjectId
+    ? `Company owned & rented machinery — ${projectName}`
+    : "Company owned & rented machinery — Select project";
 
   const activeTotal = viewMode === "runningBill" ? runningBill.total : total;
   const activeLoading = viewMode === "runningBill" ? runningBill.loading : loading;
@@ -313,8 +307,8 @@ export default function Machinery() {
       <AddMachineDialog
         open={addOpen}
         onOpenChange={setAddOpen}
-        restrictedProjectId={isSiteManager ? currentUser?.assignedProjectId : undefined}
-        restrictedProjectName={isSiteManager ? currentUser?.assignedProjectName : undefined}
+        restrictedProjectId={isSiteManager ? effectiveProjectId ?? undefined : undefined}
+        restrictedProjectName={isSiteManager ? projectName : undefined}
         projects={projects.map((p) => ({ id: p.id, name: p.name }))}
         onSuccess={handleSuccess}
       />
@@ -342,7 +336,7 @@ export default function Machinery() {
       </AlertDialog>
       <div className="flex flex-col gap-4 p-4 border-2 border-border mb-4 print-hidden">
         <div className="flex flex-wrap items-end gap-4">
-          {!isSiteManager && (
+          {projectsForSelector.length > 0 && (
             <div className="min-w-[200px]">
               <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Project</Label>
               <Select
@@ -364,12 +358,6 @@ export default function Machinery() {
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground mt-1">Group machinery by project</p>
-            </div>
-          )}
-          {isSiteManager && currentUser?.assignedProjectName && (
-            <div className="min-w-[200px]">
-              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Project</Label>
-              <p className="mt-1.5 text-sm font-medium">{currentUser.assignedProjectName}</p>
             </div>
           )}
           <div className="min-w-[220px]">

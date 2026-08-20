@@ -3,6 +3,7 @@ import { NonConsumableLedgerEntry } from "../models/NonConsumableLedgerEntry.js"
 import { NonConsumableItem } from "../models/NonConsumableItem.js";
 import { Project } from "../models/Project.js";
 import { User } from "../models/User.js";
+import { isProjectAssignedToUser } from "./projectAccessService.js";
 import { logAudit } from "./auditService.js";
 import { roleDisplay } from "./authService.js";
 import type { NonConsumableEventType } from "../models/NonConsumableLedgerEntry.js";
@@ -74,9 +75,8 @@ async function validateProjectAccess(
     throw new Error(`${label} project is required`);
   }
   if (actor.role === "site_manager") {
-    const user = await User.findById(actor.userId).select("assignedProjectId").lean();
-    if (!user?.assignedProjectId || user.assignedProjectId !== projectId) {
-      throw new Error("Site Managers can only use their assigned project");
+    if (!(await isProjectAssignedToUser(actor.userId, projectId))) {
+      throw new Error("Site Managers can only use their assigned projects");
     }
   }
   const project = await Project.findById(projectId).select("_id").lean();
