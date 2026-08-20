@@ -6,6 +6,7 @@ import { MachinePaymentAllocation } from "../models/MachinePaymentAllocation.js"
 import { User } from "../models/User.js";
 import { logAudit, getProjectName } from "./auditService.js";
 import { roleDisplay } from "./authService.js";
+import { resolveSiteManagerProjectId } from "./projectAccessService.js";
 
 export interface MachinePayload {
   id: string;
@@ -66,8 +67,7 @@ async function resolveProjectId(
   projectIdParam?: string
 ): Promise<string | undefined> {
   if (actor.role === "site_manager") {
-    const user = await User.findById(actor.userId).select("assignedProjectId").lean();
-    return user?.assignedProjectId?.toString();
+    return resolveSiteManagerProjectId(actor.userId, projectIdParam);
   }
   return projectIdParam;
 }
@@ -466,9 +466,8 @@ export async function createMachine(
 
   let projectId: string;
   if (actor.role === "site_manager") {
-    const user = await User.findById(actor.userId).select("assignedProjectId").lean();
-    projectId = user?.assignedProjectId?.toString() ?? "";
-    if (!projectId) throw new Error("Site Manager must be assigned to a project to add machines");
+    projectId = (await resolveSiteManagerProjectId(actor.userId, input.projectId?.trim())) ?? "";
+    if (!projectId) throw new Error("Site Manager must be assigned to this project to add machines");
   } else {
     projectId = input.projectId?.trim() ?? "";
     if (!projectId || !mongoose.Types.ObjectId.isValid(projectId)) {

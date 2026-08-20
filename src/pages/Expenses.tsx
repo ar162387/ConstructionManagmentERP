@@ -55,8 +55,6 @@ export default function Expenses() {
   const { user: currentUser } = useAuth();
   const { projects } = useProjects();
   const isSiteManager = currentUser?.role === "Site Manager";
-  const assignedProjectId = currentUser?.assignedProjectId ?? null;
-  const assignedProjectName = currentUser?.assignedProjectName ?? null;
 
   const { selectedProjectId, setSelectedProjectId } = useSelectedProject();
   const [addOpen, setAddOpen] = useState(false);
@@ -67,7 +65,7 @@ export default function Expenses() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
-  const effectiveProjectId = isSiteManager ? assignedProjectId : (selectedProjectId || null);
+  const effectiveProjectId = selectedProjectId || null;
 
   const dateRangeActive = !!startDate;
   const showPrevCard = dateRangeActive;
@@ -126,15 +124,10 @@ export default function Expenses() {
     [projects]
   );
 
-  const subtitle =
-    isSiteManager && assignedProjectName
-      ? `Project-level expense tracking — ${assignedProjectName}`
-      : effectiveProjectId
-        ? `Project-level expense tracking — ${projects.find((p) => p.id === effectiveProjectId)?.name ?? "Project"}`
-        : "Project-level expense tracking — Select project";
-  const selectedProjectName = isSiteManager
-    ? (assignedProjectName ?? "Project")
-    : (projects.find((p) => p.id === effectiveProjectId)?.name ?? "Project");
+  const subtitle = effectiveProjectId
+    ? `Project-level expense tracking — ${projects.find((p) => p.id === effectiveProjectId)?.name ?? "Project"}`
+    : "Project-level expense tracking — Select project";
+  const selectedProjectName = projects.find((p) => p.id === effectiveProjectId)?.name ?? "Project";
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const startIndexOneBased = total === 0 ? 0 : (page - 1) * pageSize + 1;
@@ -213,7 +206,7 @@ export default function Expenses() {
         </AlertDialogContent>
       </AlertDialog>
       <div className="flex flex-wrap items-end gap-4 p-4 border-2 border-border mb-4 print-hidden">
-        {!isSiteManager && (
+        {projectsForSelector.length > 0 && (
           <div className="min-w-[200px]">
             <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Project</Label>
             <Select value={selectedProjectId || ""} onValueChange={(v) => { setSelectedProjectId(v); setPage(1); }}>
@@ -227,12 +220,6 @@ export default function Expenses() {
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground mt-1">Filter expenses by project</p>
-          </div>
-        )}
-        {isSiteManager && assignedProjectName && (
-          <div className="min-w-[200px]">
-            <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Project</Label>
-            <p className="mt-1.5 text-sm font-medium">{assignedProjectName}</p>
           </div>
         )}
         <div className="flex-1 min-w-[220px] max-w-xs">
@@ -275,17 +262,19 @@ export default function Expenses() {
         </div>
       </div>
 
-      {!isSiteManager && !effectiveProjectId && (
+      {!effectiveProjectId && projectsForSelector.length > 0 && (
         <p className="text-muted-foreground mb-4">Select a project to view expenses.</p>
       )}
 
-      {isSiteManager && !assignedProjectId && (
-        <p className="text-muted-foreground mb-4">You are not assigned to a project. Contact an admin.</p>
+      {projectsForSelector.length === 0 && (
+        <p className="text-muted-foreground mb-4">
+          {isSiteManager ? "You are not assigned to any project. Contact an admin." : "No projects yet."}
+        </p>
       )}
 
       {error && <p className="text-destructive text-sm mb-4">{error}</p>}
 
-      {effectiveProjectId && !(isSiteManager && !assignedProjectId) && (
+      {effectiveProjectId && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 mb-4">
           <StatCard label="Total Expense" value={formatCurrency(totalAmount)} icon={<Receipt className="h-4 w-4" />} variant="warning" title={formatCurrency(totalAmount)} />
           <StatCard label="Total Records" value={String(total)} variant="default" />
@@ -295,7 +284,7 @@ export default function Expenses() {
         </div>
       )}
 
-      {effectiveProjectId && !(isSiteManager && !assignedProjectId) ? (
+      {effectiveProjectId ? (
         <div id="expenses-table" className="border-2 border-border">
           {showPrevCard && (
             <div className="expenses-prev-header hidden">

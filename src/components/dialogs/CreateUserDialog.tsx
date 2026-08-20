@@ -9,6 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -44,8 +45,12 @@ export function CreateUserDialog({
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState("site_manager");
-  const [projectId, setProjectId] = useState("");
+  const [projectIds, setProjectIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
+
+  const toggleProject = (id: string) => {
+    setProjectIds((prev) => (prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id]));
+  };
 
   const allowedRoles =
     currentUserRole === "Super Admin"
@@ -58,7 +63,7 @@ export function CreateUserDialog({
       setEmail("");
       setPassword("");
       setRole("site_manager");
-      setProjectId("");
+      setProjectIds([]);
     }
   }, [open]);
 
@@ -78,14 +83,14 @@ export function CreateUserDialog({
     }
     setLoading(true);
     try {
-      const project = role === "site_manager" ? projects.find((p) => p.id === projectId) : undefined;
+      const selectedProjects = role === "site_manager" ? projects.filter((p) => projectIds.includes(p.id)) : [];
       await createUser({
         name: name.trim(),
         email: email.trim().toLowerCase(),
         password,
         role: role,
-        assignedProjectId: role === "site_manager" ? (projectId || undefined) : undefined,
-        assignedProjectName: role === "site_manager" ? project?.name : undefined,
+        assignedProjectIds: role === "site_manager" ? selectedProjects.map((p) => p.id) : undefined,
+        assignedProjectNames: role === "site_manager" ? selectedProjects.map((p) => p.name) : undefined,
       });
       toast.success("User created");
       onCreated();
@@ -93,7 +98,7 @@ export function CreateUserDialog({
       setEmail("");
       setPassword("");
       setRole("site_manager");
-      setProjectId("");
+      setProjectIds([]);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to create user");
     } finally {
@@ -154,23 +159,19 @@ export function CreateUserDialog({
           </div>
           {role === "site_manager" && (
             <div>
-              <Label>Assigned Project (optional)</Label>
-              <Select
-                value={projectId || "__none__"}
-                onValueChange={(v) => setProjectId(v === "__none__" ? "" : v)}
-              >
-                <SelectTrigger className="mt-1">
-                  <SelectValue placeholder="Select project" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">None</SelectItem>
-                  {projects.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
+              <Label>Assigned Projects (optional, select any number)</Label>
+              <div className="mt-1 max-h-48 overflow-y-auto rounded-md border border-input p-2 space-y-1.5">
+                {projects.length === 0 ? (
+                  <p className="text-sm text-muted-foreground px-1 py-1">No projects available</p>
+                ) : (
+                  projects.map((p) => (
+                    <label key={p.id} className="flex items-center gap-2 px-1 py-1 text-sm cursor-pointer hover:bg-accent rounded-sm">
+                      <Checkbox checked={projectIds.includes(p.id)} onCheckedChange={() => toggleProject(p.id)} />
                       {p.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                    </label>
+                  ))
+                )}
+              </div>
             </div>
           )}
           <DialogFooter>

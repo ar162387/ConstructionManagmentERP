@@ -88,7 +88,7 @@ export default function Contractors() {
   const fromLiabilities = searchParams.get("returnTo") === "liabilities";
 
   const { selectedProjectId, setSelectedProjectId } = useSelectedProject();
-  const effectiveProjectId = isSiteManager ? (currentUser?.assignedProjectId ?? null) : (selectedProjectId || null);
+  const effectiveProjectId = selectedProjectId || null;
 
   const { contractors, loading: contractorsLoading, error: contractorsError, refetch: refetchContractors } = useContractors(effectiveProjectId);
   const [currentMonth, setCurrentMonth] = useState(() => getLocalMonthKey());
@@ -133,9 +133,7 @@ export default function Contractors() {
     () => projects.filter((p) => p.status === "Active" || p.status === "On Hold" || p.status === "Completed"),
     [projects]
   );
-  const selectedProjectName = isSiteManager
-    ? (currentUser?.assignedProjectName ?? "Project")
-    : (projects.find((p) => p.id === selectedProjectId)?.name ?? "Project");
+  const selectedProjectName = projects.find((p) => p.id === selectedProjectId)?.name ?? "Project";
   const selectedContractor = selectedContractorId !== ALL_CONTRACTORS
     ? contractors.find((c) => c.id === selectedContractorId) ?? null
     : null;
@@ -277,8 +275,8 @@ export default function Contractors() {
       <AddContractorDialog
         open={addContractorOpen}
         onOpenChange={setAddContractorOpen}
-        restrictedProjectId={isSiteManager ? currentUser?.assignedProjectId : undefined}
-        restrictedProjectName={isSiteManager ? currentUser?.assignedProjectName : undefined}
+        restrictedProjectId={isSiteManager ? effectiveProjectId ?? undefined : undefined}
+        restrictedProjectName={isSiteManager ? selectedProjectName : undefined}
         projects={projects.map((p) => ({ id: p.id, name: p.name }))}
         onSuccess={() => { refetchContractors(); refetchLedger(); }}
       />
@@ -354,7 +352,7 @@ export default function Contractors() {
 
       <div id="contractors-content" className="space-y-4">
         <div className="flex flex-wrap items-end gap-4 p-4 border-2 border-border print-hidden">
-          {canEditDelete && (
+          {projectsForSelector.length > 0 && (
             <div className="min-w-[200px]">
               <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Project</Label>
               <Select

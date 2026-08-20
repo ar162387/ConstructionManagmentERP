@@ -104,8 +104,7 @@ export default function QuickEntry() {
   const { projects } = useProjects();
   const { selectedProjectId, setSelectedProjectId } = useSelectedProject();
   const isSiteManager = user?.role === "Site Manager";
-  const assignedProjectId = user?.assignedProjectId ?? null;
-  const effectiveProjectId = isSiteManager ? assignedProjectId : (selectedProjectId || null);
+  const effectiveProjectId = selectedProjectId || null;
 
   const { accounts, refetch: refetchAccounts } = useBankAccounts();
   const { clients, loading: clientsLoading, refetch: refetchClients } = useClients();
@@ -139,13 +138,7 @@ export default function QuickEntry() {
   const [selectedNonConsumableItem, setSelectedNonConsumableItem] = useState<ApiNonConsumableItem | null>(null);
   const [selectedMachine, setSelectedMachine] = useState<ApiMachineWithTotals | null>(null);
 
-  const projectOptions = useMemo(() => {
-    if (isSiteManager && assignedProjectId) {
-      const p = projects.find((pr) => pr.id === assignedProjectId);
-      return p ? [{ id: p.id, name: p.name }] : [];
-    }
-    return projects;
-  }, [isSiteManager, assignedProjectId, projects]);
+  const projectOptions = projects;
 
   const effectiveProjectName = useMemo(() => {
     return projects.find((p) => p.id === effectiveProjectId)?.name ?? "";
@@ -178,7 +171,7 @@ export default function QuickEntry() {
     );
   }, [selectedNonConsumableItem]);
 
-  const noProjectHint = !effectiveProjectId && !isSiteManager;
+  const noProjectHint = !effectiveProjectId;
 
   return (
     <Layout>
@@ -187,7 +180,7 @@ export default function QuickEntry() {
         subtitle="Create entities and ledger entries from one place"
       />
 
-      {!isSiteManager && (
+      {projectOptions.length > 0 && (
         <div className="mb-6 flex flex-wrap items-center gap-3">
           <Label className="text-muted-foreground">Project (for entries below)</Label>
           <Select value={selectedProjectId || ""} onValueChange={(v) => setSelectedProjectId(v)}>

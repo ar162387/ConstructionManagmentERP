@@ -8,8 +8,12 @@ export interface IUser {
   email: string;
   passwordHash: string;
   role: UserRole;
+  /** @deprecated superseded by assignedProjectIds; kept for migration/back-compat only */
   assignedProjectId?: string;
+  /** @deprecated superseded by assignedProjectNames; kept for migration/back-compat only */
   assignedProjectName?: string;
+  assignedProjectIds?: string[];
+  assignedProjectNames?: string[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -26,6 +30,8 @@ const userSchema = new mongoose.Schema<IUser>(
     },
     assignedProjectId: { type: String },
     assignedProjectName: { type: String },
+    assignedProjectIds: { type: [String], default: undefined },
+    assignedProjectNames: { type: [String], default: undefined },
   },
   { timestamps: true }
 );

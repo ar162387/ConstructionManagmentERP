@@ -101,7 +101,7 @@ export default function UserManagement() {
                 <th className="px-4 py-2.5 text-left text-sm font-bold uppercase tracking-wider">Name</th>
                 <th className="px-4 py-2.5 text-left text-sm font-bold uppercase tracking-wider">Email</th>
                 <th className="px-4 py-2.5 text-left text-sm font-bold uppercase tracking-wider">Role</th>
-                <th className="px-4 py-2.5 text-left text-sm font-bold uppercase tracking-wider">Assigned Project</th>
+                <th className="px-4 py-2.5 text-left text-sm font-bold uppercase tracking-wider">Assigned Projects</th>
                 <th className="px-4 py-2.5 text-right text-sm font-bold uppercase tracking-wider w-24 print-hidden">Actions</th>
               </tr>
             </thead>
@@ -120,7 +120,7 @@ export default function UserManagement() {
                       <td className="px-4 py-3 font-bold">{u.name}</td>
                       <td className="px-4 py-3 text-sm font-mono">{u.email}</td>
                       <td className="px-4 py-3"><StatusBadge status={u.role} /></td>
-                      <td className="px-4 py-3 text-sm">{u.assignedProjectName || "—"}</td>
+                      <td className="px-4 py-3 text-sm">{u.assignedProjectNames?.length ? u.assignedProjectNames.join(", ") : "—"}</td>
                       <td className="px-4 py-3 print-hidden">
                         <div className="flex items-center justify-end gap-1">
                           {canManage && (

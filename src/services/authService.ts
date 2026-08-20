@@ -10,8 +10,8 @@ export interface ApiUser {
   name: string;
   email: string;
   role: string;
-  assignedProjectId?: string;
-  assignedProjectName?: string;
+  assignedProjectIds?: string[];
+  assignedProjectNames?: string[];
 }
 
 export interface LoginResponse {

@@ -6,6 +6,7 @@ import { Project } from "../models/Project.js";
 import { User } from "../models/User.js";
 import { logAudit, getProjectName } from "./auditService.js";
 import { roleDisplay } from "./authService.js";
+import { resolveSiteManagerProjectId, getAssignedProjectIds } from "./projectAccessService.js";
 import { getEmployeeTotals, getEmployeeSnapshotForMonth } from "./employeeLedgerService.js";
 import type { MonthlySnapshot } from "./employeeLedgerService.js";
 import type { EmployeeCategory, EmployeeType } from "../models/Employee.js";
@@ -130,8 +131,7 @@ export async function listEmployees(
 ): Promise<(EmployeePayload & { snapshot?: MonthlySnapshot })[]> {
   let projectId: string | undefined;
   if (actor.role === "site_manager") {
-    const user = await User.findById(actor.userId).select("assignedProjectId").lean();
-    projectId = user?.assignedProjectId?.toString();
+    projectId = await resolveSiteManagerProjectId(actor.userId, projectIdParam);
     if (!projectId) return [];
   } else {
     projectId = projectIdParam;
@@ -175,9 +175,8 @@ export async function getEmployeeById(
   const doc = await Employee.findById(id).lean();
   if (!doc) return null;
   if (actor?.role === "site_manager") {
-    const user = await User.findById(actor.userId).select("assignedProjectId").lean();
-    const assignedId = user?.assignedProjectId?.toString();
-    if (assignedId !== doc.projectId.toString()) return null;
+    const assigned = await getAssignedProjectIds(actor.userId);
+    if (!assigned.includes(doc.projectId.toString())) return null;
   }
   const project = await Project.findById(doc.projectId).select("name").lean();
   const totals = await getEmployeeTotals(id);
@@ -198,9 +197,8 @@ export async function createEmployee(
 
   let projectId: string;
   if (actor.role === "site_manager") {
-    const user = await User.findById(actor.userId).select("assignedProjectId").lean();
-    projectId = user?.assignedProjectId?.toString() ?? "";
-    if (!projectId) throw new Error("Site Manager must be assigned to a project to create employees");
+    projectId = (await resolveSiteManagerProjectId(actor.userId, input.projectId)) ?? "";
+    if (!projectId) throw new Error("Site Manager must be assigned to this project to create employees");
   } else {
     projectId = input.projectId ?? "";
     if (!projectId || !mongoose.Types.ObjectId.isValid(projectId)) throw new Error("Project is required");

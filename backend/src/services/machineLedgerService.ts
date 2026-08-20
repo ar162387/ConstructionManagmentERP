@@ -6,6 +6,7 @@ import { MachinePaymentAllocation } from "../models/MachinePaymentAllocation.js"
 import { User } from "../models/User.js";
 import { logAudit, getProjectName } from "./auditService.js";
 import { roleDisplay } from "./authService.js";
+import { isProjectAssignedToUser } from "./projectAccessService.js";
 import { getMachineTotals } from "./machineService.js";
 import { rebuildMachinePaymentAllocations } from "./machinePaymentAllocationService.js";
 
@@ -198,10 +199,8 @@ export async function createMachineEntry(
   if (!machine) throw new Error("Machine not found");
 
   if (actor.role === "site_manager") {
-    const user = await User.findById(actor.userId).select("assignedProjectId").lean();
-    const assignedProjectId = user?.assignedProjectId?.toString();
-    if (!assignedProjectId || machine.projectId.toString() !== assignedProjectId) {
-      throw new Error("You can only add entries for machines in your assigned project");
+    if (!(await isProjectAssignedToUser(actor.userId, machine.projectId.toString()))) {
+      throw new Error("You can only add entries for machines in your assigned projects");
     }
   }
 
@@ -265,10 +264,8 @@ export async function createMachinePayment(
   if (!machine) throw new Error("Machine not found");
 
   if (actor.role === "site_manager") {
-    const user = await User.findById(actor.userId).select("assignedProjectId").lean();
-    const assignedProjectId = user?.assignedProjectId?.toString();
-    if (!assignedProjectId || machine.projectId.toString() !== assignedProjectId) {
-      throw new Error("You can only record payments for machines in your assigned project");
+    if (!(await isProjectAssignedToUser(actor.userId, machine.projectId.toString()))) {
+      throw new Error("You can only record payments for machines in your assigned projects");
     }
   }
 

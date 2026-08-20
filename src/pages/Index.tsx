@@ -5,6 +5,7 @@ import StatusBadge from "@/components/StatusBadge";
 import { ChartCard } from "@/components/charts/ChartCard";
 import { formatCurrency } from "@/lib/mock-data";
 import { useAuth } from "@/context/AuthContext";
+import { useSelectedProject } from "@/context/SelectedProjectContext";
 import { useProjects } from "@/hooks/useProjects";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useVendors } from "@/hooks/useVendors";
@@ -35,9 +36,10 @@ export default function Index() {
   const { user } = useAuth();
   const { projects } = useProjects();
   const isSiteManager = user?.role === "Site Manager";
-  const assignedProjectId = user?.assignedProjectId ?? null;
-  const { vendors } = useVendors(isSiteManager ? assignedProjectId : undefined);
-  const { employees } = useEmployees(isSiteManager ? assignedProjectId : undefined);
+  const { selectedProjectId } = useSelectedProject();
+  const activeProjectId = isSiteManager ? (selectedProjectId || null) : null;
+  const { vendors } = useVendors(isSiteManager ? activeProjectId : undefined);
+  const { employees } = useEmployees(isSiteManager ? activeProjectId : undefined);
   const { accounts: bankAccounts } = useBankAccounts();
 
   const activeProjects = useMemo(
@@ -89,7 +91,7 @@ export default function Index() {
   }, [allProjectIdsStr]);
 
   const { expenses } = useExpenses({
-    projectId: isSiteManager ? assignedProjectId : undefined,
+    projectId: isSiteManager ? activeProjectId : undefined,
     page: 1,
     pageSize: 10000,
   });

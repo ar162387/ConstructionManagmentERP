@@ -3,6 +3,7 @@ import { Project } from "../models/Project.js";
 import { BankTransaction } from "../models/BankTransaction.js";
 import { ProjectBalanceAdjustment } from "../models/ProjectBalanceAdjustment.js";
 import { User } from "../models/User.js";
+import { isProjectAssignedToUser } from "./projectAccessService.js";
 import { logAudit, getProjectName } from "./auditService.js";
 import { roleDisplay } from "./authService.js";
 
@@ -47,8 +48,7 @@ async function canAccessProject(
 ): Promise<boolean> {
   if (actor.role === "super_admin" || actor.role === "admin") return true;
   if (actor.role === "site_manager") {
-    const user = await User.findById(actor.userId).select("assignedProjectId").lean();
-    return user?.assignedProjectId?.toString() === projectId;
+    return isProjectAssignedToUser(actor.userId, projectId);
   }
   return false;
 }

@@ -102,9 +102,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 <img src={COMPANY_LOGO_URL} alt="PCF logo" className="h-10 w-8 shrink-0 object-contain" />
                 <span className="text-lg font-semibold tracking-tight">{COMPANY_SHORT_NAME}</span>
               </Link>
-              {isSiteManager && user?.assignedProjectName && (
-                <p className="font-bold text-sm truncate text-foreground" title={user.assignedProjectName}>
-                  {user.assignedProjectName}
+              {isSiteManager && !!user?.assignedProjectNames?.length && (
+                <p className="font-bold text-sm truncate text-foreground" title={user.assignedProjectNames.join(", ")}>
+                  {user.assignedProjectNames.join(", ")}
                 </p>
               )}
             </div>

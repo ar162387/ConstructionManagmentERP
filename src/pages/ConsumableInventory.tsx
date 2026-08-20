@@ -47,25 +47,16 @@ export default function ConsumableInventory() {
   const { user } = useAuth();
   const { projects } = useProjects();
   const isSiteManager = user?.role === "Site Manager";
-  const assignedProjectId = user?.assignedProjectId ?? null;
 
   const { selectedProjectId, setSelectedProjectId } = useSelectedProject();
   const [searchQuery, setSearchQuery] = useState("");
-  const effectiveProjectId = isSiteManager ? assignedProjectId : (selectedProjectId || null);
+  const effectiveProjectId = selectedProjectId || null;
 
   const { items, loading: itemsLoading, refetch: refetchItems } = useConsumableItems(effectiveProjectId);
   const { entries: consumptionEntries, loading: consumptionLoading, refetch: refetchConsumption } = useStockConsumption(effectiveProjectId);
   const { vendors } = useVendors(effectiveProjectId);
 
   const canEditDelete = !isSiteManager;
-
-  const projectOptions = useMemo(() => {
-    if (isSiteManager && assignedProjectId) {
-      const p = projects.find((pr) => pr.id === assignedProjectId);
-      return p ? [{ id: p.id, name: p.name }] : [];
-    }
-    return projects;
-  }, [isSiteManager, assignedProjectId, projects]);
 
   const [addItemOpen, setAddItemOpen] = useState(false);
   const [editItem, setEditItem] = useState<ApiConsumableItem | null>(null);
@@ -81,9 +72,7 @@ export default function ConsumableInventory() {
   const [billLoading, setBillLoading] = useState(false);
   const [billError, setBillError] = useState<string | null>(null);
   const [selectedBillRows, setSelectedBillRows] = useState<Set<string>>(new Set());
-  const selectedProjectName = isSiteManager
-    ? (projects.find((p) => p.id === assignedProjectId)?.name ?? "Project")
-    : (projects.find((p) => p.id === selectedProjectId)?.name ?? "Project");
+  const selectedProjectName = projects.find((p) => p.id === selectedProjectId)?.name ?? "Project";
 
   const filteredItems = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -173,7 +162,7 @@ export default function ConsumableInventory() {
 
       {/* Project selector */}
       <div className="flex flex-wrap items-end gap-4 mb-4">
-        {!isSiteManager && (
+        {projects.length > 0 && (
           <div className="flex items-center gap-3">
             <Label className="text-sm font-semibold uppercase tracking-wider">Project</Label>
             <Select value={selectedProjectId} onValueChange={setSelectedProjectId}>
@@ -181,7 +170,7 @@ export default function ConsumableInventory() {
                 <SelectValue placeholder="Select project" />
               </SelectTrigger>
               <SelectContent>
-                {projectOptions.map((p) => (
+                {projects.map((p) => (
                   <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
                 ))}
               </SelectContent>

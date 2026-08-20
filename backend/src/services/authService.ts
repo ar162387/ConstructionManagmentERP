@@ -11,6 +11,15 @@ export const roleDisplay: Record<string, string> = {
   site_manager: "Site Manager",
 };
 
+function projectIdsOf(u: { assignedProjectIds?: string[]; assignedProjectId?: string }): string[] {
+  if (u.assignedProjectIds && u.assignedProjectIds.length) return u.assignedProjectIds;
+  return u.assignedProjectId ? [u.assignedProjectId] : [];
+}
+function projectNamesOf(u: { assignedProjectNames?: string[]; assignedProjectName?: string }): string[] {
+  if (u.assignedProjectNames && u.assignedProjectNames.length) return u.assignedProjectNames;
+  return u.assignedProjectName ? [u.assignedProjectName] : [];
+}
+
 export interface LoginResult {
   token: string;
   user: {
@@ -18,8 +27,8 @@ export interface LoginResult {
     name: string;
     email: string;
     role: string;
-    assignedProjectId?: string;
-    assignedProjectName?: string;
+    assignedProjectIds?: string[];
+    assignedProjectNames?: string[];
   };
 }
 
@@ -47,8 +56,8 @@ export async function login(email: string, password: string): Promise<LoginResul
       name: user.name,
       email: user.email,
       role: roleDisplay[user.role] ?? user.role,
-      assignedProjectId: user.assignedProjectId,
-      assignedProjectName: user.assignedProjectName,
+      assignedProjectIds: projectIdsOf(user),
+      assignedProjectNames: projectNamesOf(user),
     },
   };
 }
@@ -58,8 +67,8 @@ export interface MeResult {
   name: string;
   email: string;
   role: string;
-  assignedProjectId?: string;
-  assignedProjectName?: string;
+  assignedProjectIds?: string[];
+  assignedProjectNames?: string[];
 }
 
 export async function getMe(userId: string): Promise<MeResult | null> {
@@ -71,7 +80,7 @@ export async function getMe(userId: string): Promise<MeResult | null> {
     name: user.name,
     email: user.email,
     role: roleDisplay[user.role] ?? user.role,
-    assignedProjectId: user.assignedProjectId,
-    assignedProjectName: user.assignedProjectName,
+    assignedProjectIds: projectIdsOf(user),
+    assignedProjectNames: projectNamesOf(user),
   };
 }

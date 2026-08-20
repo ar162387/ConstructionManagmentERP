@@ -350,7 +350,6 @@ export default function Employees() {
   const { user: currentUser } = useAuth();
   const { projects } = useProjects();
   const isSiteManager = currentUser?.role === "Site Manager";
-  const projectFilterName = isSiteManager ? currentUser?.assignedProjectName ?? null : null;
 
   const { selectedProjectId, setSelectedProjectId } = useSelectedProject();
   const [selectedMonth, setSelectedMonth] = useState<string>(getLocalMonthKey());
@@ -363,13 +362,13 @@ export default function Employees() {
     if (machineryMode) setActiveTab("Fixed");
   }, [machineryMode]);
 
-  const projectIdForApi = isSiteManager ? undefined : (selectedProjectId || undefined);
+  const projectIdForApi = selectedProjectId || undefined;
   const { employees: allEmployees, loading, error, refetch } = useEmployees(
     projectIdForApi,
     selectedMonth,
     machineryMode ? "Machinery" : "Regular"
   );
-  const { machines } = useMachines(isSiteManager ? currentUser?.assignedProjectId : selectedProjectId || undefined, 1, 100);
+  const { machines } = useMachines(selectedProjectId || undefined, 1, 100);
   const companyOwnedMachines = useMemo(() => machines.filter((machine) => machine.ownership === "Company Owned"), [machines]);
 
   const monthOptions = useMemo(() => buildMonthOptionsUpToCurrent(12), []);
@@ -405,18 +404,14 @@ export default function Employees() {
     [filteredEmployees]
   );
 
-  const subtitle =
-    isSiteManager && projectFilterName
-      ? `Month-scoped employee payroll - ${projectFilterName}`
-      : selectedProjectId
-        ? `Month-scoped employee payroll - ${projects.find((p) => p.id === selectedProjectId)?.name ?? "Project"}`
-        : "Month-scoped employee payroll - Select project";
+  const subtitle = selectedProjectId
+    ? `Month-scoped employee payroll - ${projects.find((p) => p.id === selectedProjectId)?.name ?? "Project"}`
+    : "Month-scoped employee payroll - Select project";
 
   const salaryProjectLineName = useMemo(() => {
-    if (isSiteManager && projectFilterName) return projectFilterName;
     if (selectedProjectId) return projects.find((p) => p.id === selectedProjectId)?.name ?? "Project";
     return "Project";
-  }, [isSiteManager, projectFilterName, selectedProjectId, projects]);
+  }, [selectedProjectId, projects]);
 
   const salaryPrintDocumentTitle = useMemo(
     () =>
@@ -446,7 +441,7 @@ export default function Employees() {
                 Generate Salary Slip
               </Button>
             )}
-            <Button variant="warning" size="sm" onClick={() => setAddOpen(true)} disabled={machineryMode && !isSiteManager && !selectedProjectId}>
+            <Button variant="warning" size="sm" onClick={() => setAddOpen(true)} disabled={machineryMode && !selectedProjectId}>
               <Plus className="h-4 w-4 mr-1" />
               Add {machineryMode ? "Machinery Employee" : "Employee"}
             </Button>
@@ -462,8 +457,8 @@ export default function Employees() {
           setAddOpen(open);
           if (!open) refetch();
         }}
-        restrictedProjectId={machineryMode ? (isSiteManager ? currentUser?.assignedProjectId : selectedProjectId || undefined) : (isSiteManager ? currentUser?.assignedProjectId : undefined)}
-        restrictedProjectName={machineryMode ? salaryProjectLineName : (isSiteManager ? currentUser?.assignedProjectName : undefined)}
+        restrictedProjectId={machineryMode ? (selectedProjectId || undefined) : (isSiteManager ? (selectedProjectId || undefined) : undefined)}
+        restrictedProjectName={machineryMode ? salaryProjectLineName : (isSiteManager ? salaryProjectLineName : undefined)}
         projects={projects.map((p) => ({ id: p.id, name: p.name }))}
         category={machineryMode ? "Machinery" : "Regular"}
         machines={companyOwnedMachines.map((machine) => ({ id: machine.id, name: machine.name }))}
@@ -471,7 +466,7 @@ export default function Employees() {
 
       <div className="border-2 border-border p-4 space-y-4 mb-4">
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {!isSiteManager && (
+          {projectsForSelector.length > 0 && (
             <div>
               <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Project</Label>
               <Select value={selectedProjectId || ""} onValueChange={setSelectedProjectId}>
@@ -486,13 +481,6 @@ export default function Employees() {
                   ))}
                 </SelectContent>
               </Select>
-            </div>
-          )}
-
-          {isSiteManager && projectFilterName && (
-            <div>
-              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Project</Label>
-              <p className="mt-1.5 text-sm font-medium">{projectFilterName}</p>
             </div>
           )}
 

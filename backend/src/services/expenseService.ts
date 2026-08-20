@@ -3,6 +3,7 @@ import { Expense } from "../models/Expense.js";
 import { User } from "../models/User.js";
 import { logAudit, getProjectName } from "./auditService.js";
 import { roleDisplay } from "./authService.js";
+import { resolveSiteManagerProjectId } from "./projectAccessService.js";
 
 export type PaymentMode = "Cash" | "Bank" | "Online";
 
@@ -81,8 +82,7 @@ async function resolveProjectId(
   projectIdParam?: string
 ): Promise<string | undefined> {
   if (actor.role === "site_manager") {
-    const user = await User.findById(actor.userId).select("assignedProjectId").lean();
-    return user?.assignedProjectId?.toString();
+    return resolveSiteManagerProjectId(actor.userId, projectIdParam);
   }
   return projectIdParam;
 }
@@ -176,9 +176,8 @@ export async function createExpense(
 
   let projectId: string;
   if (actor.role === "site_manager") {
-    const user = await User.findById(actor.userId).select("assignedProjectId").lean();
-    projectId = user?.assignedProjectId?.toString() ?? "";
-    if (!projectId) throw new Error("Site Manager must be assigned to a project to create expenses");
+    projectId = (await resolveSiteManagerProjectId(actor.userId, input.projectId)) ?? "";
+    if (!projectId) throw new Error("Site Manager must be assigned to this project to create expenses");
   } else {
     projectId = input.projectId ?? "";
     if (!projectId || !mongoose.Types.ObjectId.isValid(projectId)) {

@@ -9,6 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -23,8 +24,8 @@ export interface EditableUser {
   name: string;
   email: string;
   role: string;
-  assignedProjectId?: string;
-  assignedProjectName?: string;
+  assignedProjectIds?: string[];
+  assignedProjectNames?: string[];
 }
 
 interface EditUserDialogProps {
@@ -39,8 +40,8 @@ interface EditUserDialogProps {
       name: string;
       email: string;
       role: string;
-      assignedProjectId?: string | null;
-      assignedProjectName?: string | null;
+      assignedProjectIds?: string[] | null;
+      assignedProjectNames?: string[] | null;
       password?: string;
     }
   ) => Promise<void>;
@@ -63,16 +64,20 @@ export function EditUserDialog({
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [role, setRole] = useState("site_manager");
-  const [projectId, setProjectId] = useState("");
+  const [projectIds, setProjectIds] = useState<string[]>([]);
   const [newPassword, setNewPassword] = useState("");
   const [loading, setLoading] = useState(false);
+
+  const toggleProject = (id: string) => {
+    setProjectIds((prev) => (prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id]));
+  };
 
   useEffect(() => {
     if (user) {
       setName(user.name);
       setEmail(user.email);
       setRole(ROLE_API_VALUES[user.role] ?? user.role);
-      setProjectId(user.assignedProjectId ?? "");
+      setProjectIds(user.assignedProjectIds ?? []);
       setNewPassword("");
     }
   }, [user, open]);
@@ -92,16 +97,16 @@ export function EditUserDialog({
       toast.error("Password must be at least 6 characters");
       return;
     }
-    const project = role === "site_manager" ? projects.find((p) => p.id === projectId) : undefined;
-    const assignedProjectId = role === "site_manager" ? (projectId || null) : undefined;
-    const assignedProjectName = role === "site_manager" ? (project?.name ?? null) : undefined;
+    const selectedProjects = role === "site_manager" ? projects.filter((p) => projectIds.includes(p.id)) : [];
+    const assignedProjectIds = role === "site_manager" ? selectedProjects.map((p) => p.id) : undefined;
+    const assignedProjectNames = role === "site_manager" ? selectedProjects.map((p) => p.name) : undefined;
     setLoading(true);
     try {
       await onSave(user.id, {
         name: name.trim(),
         email: email.trim().toLowerCase(),
         role,
-        ...(role === "site_manager" && { assignedProjectId, assignedProjectName }),
+        ...(role === "site_manager" && { assignedProjectIds, assignedProjectNames }),
         ...(newPassword && { password: newPassword }),
       });
       toast.success("User updated");
@@ -155,21 +160,19 @@ export function EditUserDialog({
           </div>
           {role === "site_manager" && (
             <div>
-              <Label>Assigned Project (optional)</Label>
-              <Select
-                value={projectId || "__none__"}
-                onValueChange={(v) => setProjectId(v === "__none__" ? "" : v)}
-              >
-                <SelectTrigger className="mt-1">
-                  <SelectValue placeholder="Select project" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">None</SelectItem>
-                  {projects.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label>Assigned Projects (optional, select any number)</Label>
+              <div className="mt-1 max-h-48 overflow-y-auto rounded-md border border-input p-2 space-y-1.5">
+                {projects.length === 0 ? (
+                  <p className="text-sm text-muted-foreground px-1 py-1">No projects available</p>
+                ) : (
+                  projects.map((p) => (
+                    <label key={p.id} className="flex items-center gap-2 px-1 py-1 text-sm cursor-pointer hover:bg-accent rounded-sm">
+                      <Checkbox checked={projectIds.includes(p.id)} onCheckedChange={() => toggleProject(p.id)} />
+                      {p.name}
+                    </label>
+                  ))
+                )}
+              </div>
             </div>
           )}
           <DialogFooter>

@@ -5,6 +5,7 @@ import { EmployeeAttendance } from "../models/EmployeeAttendance.js";
 import { MachinePayment } from "../models/MachinePayment.js";
 import { rebuildMachinePaymentAllocations } from "./machinePaymentAllocationService.js";
 import { User } from "../models/User.js";
+import { isProjectAssignedToUser } from "./projectAccessService.js";
 import { logAudit, getProjectName } from "./auditService.js";
 import { roleDisplay } from "./authService.js";
 import type { IEmployee } from "../models/Employee.js";
@@ -686,9 +687,7 @@ async function ensureEmployeeAccess(actor: { userId: string; role: string }, emp
   const employee = await Employee.findById(employeeId).lean();
   if (!employee) throw new Error("Employee not found");
   if (actor.role === "site_manager") {
-    const user = await User.findById(actor.userId).select("assignedProjectId").lean();
-    const assignedId = user?.assignedProjectId?.toString();
-    if (assignedId !== employee.projectId.toString()) {
+    if (!(await isProjectAssignedToUser(actor.userId, employee.projectId.toString()))) {
       throw new Error("Employee not found");
     }
   }
