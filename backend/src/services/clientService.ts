@@ -41,6 +41,18 @@ export async function updateClient(actor: { userId: string; email: string; role:
   return { id: client._id.toString(), name: client.name };
 }
 
+export async function deleteClient(actor: { userId: string; email: string; role: string }, id: string): Promise<void> {
+  if (!mongoose.Types.ObjectId.isValid(id)) throw new Error("Invalid client ID");
+  const client = await Client.findById(id).lean();
+  if (!client) throw new Error("Client not found");
+  if (await BankTransaction.exists({ clientId: client._id })) {
+    throw new Error("Cannot delete client with entries. Delete their entries first.");
+  }
+  await Client.findByIdAndDelete(id);
+  const user = await User.findById(actor.userId).lean();
+  await logAudit({ userId: actor.userId, userName: user?.name ?? "Unknown", userEmail: actor.email, role: roleDisplay[actor.role as keyof typeof roleDisplay] ?? actor.role, action: "delete", module: "clients", entityId: id, description: `Deleted client: ${client.name}`, oldValue: { name: client.name } });
+}
+
 export async function getClientLedger(clientId: string, projectId?: string): Promise<{ clientName: string; rows: ClientLedgerRow[] }> {
   if (!mongoose.Types.ObjectId.isValid(clientId)) throw new Error("Invalid client ID");
   const client = await Client.findById(clientId).lean();

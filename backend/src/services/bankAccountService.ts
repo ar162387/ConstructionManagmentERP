@@ -154,7 +154,17 @@ export async function deleteBankAccount(
     throw new Error(`Cannot delete: ${txCount} transaction(s) linked to this account. Remove transactions first.`);
   }
 
-  await BankAccount.findByIdAndDelete(id);
+  // A transaction may arrive after the linked-entry count was read. Every bank
+  // transaction writes these counters, so compare the original account snapshot
+  // at deletion time rather than removing an account that has since been used.
+  const deleted = await BankAccount.findOneAndDelete({
+    _id: target._id,
+    updatedAt: target.updatedAt,
+    currentBalance: target.currentBalance,
+    totalInflow: target.totalInflow,
+    totalOutflow: target.totalOutflow,
+  });
+  if (!deleted) throw new Error("Cannot delete: account changed while checking linked transactions. Refresh and try again.");
 
   const actorUser = await User.findById(actor.userId).lean();
   const role = roleDisplay[actor.role as keyof typeof roleDisplay] ?? actor.role;

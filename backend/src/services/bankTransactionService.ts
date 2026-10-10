@@ -1,3 +1,5 @@
+import { createBorrowerTransaction, deleteBorrowerTransaction } from "./borrowerFinancialService.js";
+import { BorrowerError } from "./borrowerService.js";
 import mongoose from "mongoose";
 import { BankAccount } from "../models/BankAccount.js";
 import { BankTransaction } from "../models/BankTransaction.js";
@@ -18,7 +20,9 @@ export interface BankTransactionPayload {
   amount: number;
   source: string;
   destination: string;
+  borrowerId?: string;
   clientId?: string;
+  borrowerName?: string;
   clientName?: string;
   projectId?: string;
   projectName?: string;
@@ -36,6 +40,7 @@ export interface CreateBankTransactionInput {
   amount: number;
   source: string;
   destination: string;
+  borrowerId?: string;
   clientId?: string;
   projectId?: string;
   customHeadId?: string;
@@ -68,7 +73,7 @@ export interface ListBankTransactionsOptions {
 }
 
 export interface BankAccountLedgerRow {
-  id: string; date: string; particulars: string; received?: number; outflows: Record<string, number>; balance: number;
+  id: string; date: string; particulars: string; received?: number; outflows: Record<string, number>; balance: number; borrowerId?: string;
 }
 export interface BankAccountLedgerResult {
   accountName: string; accountNumber: string; columns: { key: string; label: string; kind: "project" | "head" }[]; rows: BankAccountLedgerRow[]; openingBalance: number;
@@ -85,6 +90,7 @@ function toPayload(doc: {
   amount: number;
   source: string;
   destination: string;
+  borrowerId?: mongoose.Types.ObjectId;
   clientId?: mongoose.Types.ObjectId;
   projectId?: mongoose.Types.ObjectId;
   customHeadId?: mongoose.Types.ObjectId;
@@ -101,6 +107,8 @@ function toPayload(doc: {
     amount: doc.amount,
     source: doc.source,
     destination: doc.destination,
+    borrowerId: doc.borrowerId?.toString(),
+    borrowerName: doc.borrowerId ? (doc.type === "outflow" ? doc.destination : doc.source) : undefined,
     clientId: doc.clientId?.toString(),
     clientName,
     projectId: doc.projectId?.toString(),
@@ -169,6 +177,7 @@ export async function listBankTransactions(options?: ListBankTransactionsOptions
         amount: d.amount,
         source: d.source,
         destination: d.destination,
+        borrowerId: d.borrowerId,
         clientId: client?._id ?? d.clientId as mongoose.Types.ObjectId | undefined,
         projectId: proj?._id ?? d.projectId as mongoose.Types.ObjectId | undefined,
         customHeadId: head?._id ?? d.customHeadId as mongoose.Types.ObjectId | undefined,
@@ -196,11 +205,12 @@ export async function getBankAccountLedger(accountId: string, startDate?: string
   for (const doc of docs) if (doc.type === "outflow") {
     const project = doc.projectId as unknown as { _id?: mongoose.Types.ObjectId; name?: string } | null;
     const head = doc.customHeadId as unknown as { _id?: mongoose.Types.ObjectId; name?: string } | null;
-    if (project?._id) columns.set(`project:${project._id}`, { key: `project:${project._id}`, label: project.name ?? doc.destination, kind: "project" });
+    if (doc.borrowerId) columns.set("borrower", { key: "borrower", label: "Borrower", kind: "head" });
+    else if (project?._id) columns.set(`project:${project._id}`, { key: `project:${project._id}`, label: project.name ?? doc.destination, kind: "project" });
     else if (head?._id) columns.set(`head:${head._id}`, { key: `head:${head._id}`, label: head.name ?? doc.destination, kind: "head" });
     else columns.set(`legacy:${doc.destination}`, { key: `legacy:${doc.destination}`, label: doc.destination, kind: "head" });
   }
-  const orderedColumns = [...columns.values()].sort((a, b) => a.kind === b.kind ? a.label.localeCompare(b.label) : a.kind === "project" ? -1 : 1);
+  const orderedColumns = [...columns.values()].sort((a, b) => a.key === "borrower" ? 1 : b.key === "borrower" ? -1 : a.kind === b.kind ? a.label.localeCompare(b.label) : a.kind === "project" ? -1 : 1);
   let balance = account.openingBalance ?? 0;
   const rows: BankAccountLedgerRow[] = [];
   for (const doc of docs) {
@@ -208,8 +218,8 @@ export async function getBankAccountLedger(accountId: string, startDate?: string
     if ((startDate && doc.date < startDate) || (endDate && doc.date > endDate)) continue;
     const project = doc.projectId as unknown as { _id?: mongoose.Types.ObjectId } | null;
     const head = doc.customHeadId as unknown as { _id?: mongoose.Types.ObjectId } | null;
-    const key = project?._id ? `project:${project._id}` : head?._id ? `head:${head._id}` : `legacy:${doc.destination}`;
-    rows.push({ id: doc._id.toString(), date: doc.date, particulars: (doc.type === "inflow" ? [doc.source, doc.referenceId, doc.remarks] : [doc.referenceId, doc.remarks]).filter(Boolean).join(" — ") || "—", received: doc.type === "inflow" ? doc.amount : undefined, outflows: doc.type === "outflow" ? { [key]: doc.amount } : {}, balance });
+    const key = doc.borrowerId ? "borrower" : project?._id ? `project:${project._id}` : head?._id ? `head:${head._id}` : `legacy:${doc.destination}`;
+    rows.push({ id: doc._id.toString(), date: doc.date, borrowerId: doc.borrowerId?.toString(), particulars: (doc.borrowerId ? [doc.type === "inflow" ? "Loan payment" : "Loan given", doc.type === "inflow" ? doc.source : doc.destination, doc.referenceId, doc.remarks] : doc.type === "inflow" ? [doc.source, doc.referenceId, doc.remarks] : [doc.referenceId, doc.remarks]).filter(Boolean).join(" — ") || "—", received: doc.type === "inflow" ? doc.amount : undefined, outflows: doc.type === "outflow" ? { [key]: doc.amount } : {}, balance });
   }
   return { accountName: account.name, accountNumber: account.accountNumber ?? "", columns: orderedColumns, rows, openingBalance: account.openingBalance ?? 0 };
 }
@@ -218,6 +228,7 @@ export async function createBankTransaction(
   actor: { userId: string; email: string; role: string },
   input: CreateBankTransactionInput
 ): Promise<BankTransactionPayload> {
+  if (input.borrowerId !== undefined) return createBorrowerTransaction(actor, input);
   if (!mongoose.Types.ObjectId.isValid(input.accountId)) {
     throw new Error("Invalid account ID");
   }
@@ -404,6 +415,7 @@ export async function updateBankTransaction(
     if (!existing) {
       throw new Error("Transaction not found");
     }
+    if (existing.borrowerId || Object.prototype.hasOwnProperty.call(input, "borrowerId")) throw new BorrowerError("Borrower payments cannot be edited; delete and re-enter the transaction");
     // Customer payments own their inflow — editing or deleting it here would desync the
     // customer's ledger from the bank. Route the change through the customer instead.
     if (existing.customerId) {
@@ -564,6 +576,9 @@ export async function deleteBankTransaction(
   if (!mongoose.Types.ObjectId.isValid(id)) {
     throw new Error("Invalid transaction ID");
   }
+
+  const linked = await BankTransaction.findById(id).select("borrowerId").lean();
+  if (linked?.borrowerId) return deleteBorrowerTransaction(actor, id);
 
   const session = await mongoose.startSession();
   session.startTransaction();

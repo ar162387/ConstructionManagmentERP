@@ -9,7 +9,8 @@
     "start": "node dist/index.js",
     "seed": "tsx src/seed.ts",
     "seed:users": "tsx src/seed_users.ts",
-    "test:integrity": "tsx src/test/integrity.e2e.ts"
+    "test:integrity": "tsx src/test/integrity.e2e.ts",
+    "test:borrowers": "tsx --test src/test/borrowers.test.ts"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",
@@ -25,6 +26,7 @@
     "@types/express": "^4.17.21",
     "@types/jsonwebtoken": "^9.0.7",
     "@types/node": "^22.10.0",
+    "mongodb-memory-server-core": "^11.3.0",
     "tsx": "^4.19.2",
     "typescript": "^5.8.3"
   }

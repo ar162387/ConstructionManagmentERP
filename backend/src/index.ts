@@ -32,6 +32,8 @@ import { customHeadRoutes } from "./routes/customHeads.js";
 import { reportsRoutes } from "./routes/reports.js";
 import { inventoryReturnRoutes } from "./routes/inventoryReturns.js";
 
+import { borrowerRoutes } from "./routes/borrowers.js";
+
 const PORT = process.env.PORT ?? 3001;
 const MONGODB_URI = process.env.MONGODB_URI ?? "mongodb://localhost:27017/builderp";
 
@@ -94,6 +96,7 @@ app.use("/api/machines", machineRoutes);
 app.use("/api/bank-accounts", bankAccountRoutes);
 app.use("/api/bank-transactions", bankTransactionRoutes);
 app.use("/api/clients", clientRoutes);
+app.use("/api/borrowers", borrowerRoutes);
 app.use("/api/custom-heads", customHeadRoutes);
 app.use("/api/reports", reportsRoutes);
 app.use("/api/inventory-returns", inventoryReturnRoutes);

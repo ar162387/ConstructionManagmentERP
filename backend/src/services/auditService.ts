@@ -1,3 +1,4 @@
+import type { ClientSession } from "mongoose";
 import { AuditLog } from "../models/AuditLog.js";
 import type { AuditAction } from "../models/AuditLog.js";
 import { Project } from "../models/Project.js";
@@ -25,7 +26,7 @@ export interface LogAuditParams {
   metadata?: Record<string, unknown>;
 }
 
-export async function logAudit(params: LogAuditParams): Promise<void> {
+export async function logAudit(params: LogAuditParams, session?: ClientSession): Promise<void> {
   const doc = {
     userId: params.userId,
     userName: params.userName,
@@ -41,5 +42,6 @@ export async function logAudit(params: LogAuditParams): Promise<void> {
     newValue: params.newValue != null ? JSON.stringify(params.newValue) : undefined,
     metadata: params.metadata,
   };
-  await AuditLog.create(doc);
+  if (session) await AuditLog.create([doc], { session });
+  else await AuditLog.create(doc);
 }

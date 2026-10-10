@@ -11,6 +11,7 @@ export interface IBankTransaction {
   amount: number;
   source: string;
   destination: string;
+  borrowerId?: mongoose.Types.ObjectId;
   clientId?: mongoose.Types.ObjectId;
   customerId?: mongoose.Types.ObjectId;
   projectId?: mongoose.Types.ObjectId;
@@ -30,6 +31,7 @@ const bankTransactionSchema = new mongoose.Schema<IBankTransaction>(
     amount: { type: Number, required: true, min: 0.01 },
     source: { type: String, required: true, trim: true },
     destination: { type: String, required: true, trim: true },
+    borrowerId: { type: mongoose.Schema.Types.ObjectId, ref: "Borrower" },
     clientId: { type: mongoose.Schema.Types.ObjectId, ref: "Client" },
     customerId: { type: mongoose.Schema.Types.ObjectId, ref: "Customer" },
     projectId: { type: mongoose.Schema.Types.ObjectId, ref: "Project" },
@@ -46,5 +48,7 @@ bankTransactionSchema.index({ projectId: 1, date: -1 });
 bankTransactionSchema.index({ clientId: 1, date: 1 });
 bankTransactionSchema.index({ customerId: 1, date: 1 });
 bankTransactionSchema.index({ date: 1 });
+
+bankTransactionSchema.index({ borrowerId: 1, date: 1, createdAt: 1, _id: 1 }, { partialFilterExpression: { borrowerId: { $exists: true } } });
 
 export const BankTransaction = mongoose.model<IBankTransaction>("BankTransaction", bankTransactionSchema);

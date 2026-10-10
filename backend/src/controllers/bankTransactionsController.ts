@@ -1,3 +1,4 @@
+import { BorrowerError } from "../services/borrowerService.js";
 import { Response } from "express";
 import {
   listBankTransactions,
@@ -57,7 +58,7 @@ export async function create(req: AuthRequest, res: Response) {
       message.includes("not found")
         ? 400
         : 500;
-    res.status(status).json({ error: message });
+    res.status(err instanceof BorrowerError ? err.status : status).json({ error: message });
   }
 }
 
@@ -82,7 +83,7 @@ export async function update(req: AuthRequest, res: Response) {
           message.includes("not found")
         ? 400
         : 500;
-    res.status(status).json({ error: message });
+    res.status(err instanceof BorrowerError ? err.status : status).json({ error: message });
   }
 }
 
@@ -98,6 +99,6 @@ export async function remove(req: AuthRequest, res: Response) {
       message === "Transaction not found" ? 404
         : message.includes("Cannot delete") ? 400
         : 500;
-    res.status(status).json({ error: message });
+    res.status(err instanceof BorrowerError ? err.status : status).json({ error: message });
   }
 }
