@@ -1,16 +1,25 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Trash2 } from "lucide-react";
 import Layout from "@/components/Layout";
 import PageHeader from "@/components/PageHeader";
 import { Input } from "@/components/ui/input";
-import { getBankAccountLedger, type BankAccountLedgerResult } from "@/services/bankTransactionService";
+import { deleteBankTransaction, getBankAccountLedger, type BankAccountLedgerResult } from "@/services/bankTransactionService";
 import { formatCurrency } from "@/lib/mock-data";
 import { formatDisplayDate } from "@/lib/pktDate";
+
+import { useAuth } from "@/context/AuthContext";
+import { Button } from "@/components/ui/button";
+import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from "@/components/ui/alert-dialog";
+import { toast } from "sonner";
 
 const RECEIVED_HEAD_KEY = "received";
 
 export default function BankAccountLedger() {
+  const { user } = useAuth();
+  const [refresh, setRefresh] = useState(0);
+  const [deleting, setDeleting] = useState<string>();
+  const [saving, setSaving] = useState(false);
   const { accountId } = useParams<{ accountId: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedHeadKey = searchParams.get("head");
@@ -27,7 +36,7 @@ export default function BankAccountLedger() {
     void getBankAccountLedger(accountId)
       .then(setLedger)
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load ledger"));
-  }, [accountId]);
+  }, [accountId, refresh]);
 
   const selectedHead = useMemo(() => {
     if (!selectedHeadKey || !ledger) return undefined;
@@ -38,12 +47,12 @@ export default function BankAccountLedger() {
   const focusedRows = useMemo(() => {
     if (!selectedHead) return [];
     let balance = 0;
-    return ledger?.rows.reduce<{ id: string; date: string; particulars: string; amount: number; balance: number }[]>((rows, row) => {
+    return ledger?.rows.reduce<{ id: string; date: string; particulars: string; amount: number; balance: number; borrowerId?: string }[]>((rows, row) => {
       const amount = selectedHead.key === RECEIVED_HEAD_KEY ? row.received : row.outflows[selectedHead.key];
       if (!amount) return rows;
       balance += selectedHead.key === RECEIVED_HEAD_KEY ? amount : -amount;
       if ((startDate && row.date < startDate) || (endDate && row.date > endDate)) return rows;
-      rows.push({ id: row.id, date: row.date, particulars: row.particulars, amount, balance });
+      rows.push({ borrowerId: row.borrowerId, id: row.id, date: row.date, particulars: row.particulars, amount, balance });
       return rows;
     }, []) ?? [];
   }, [endDate, ledger?.rows, selectedHead, startDate]);
@@ -82,6 +91,14 @@ export default function BankAccountLedger() {
     });
   };
 
+  const canDelete = user?.role === "Super Admin" && !!ledger?.rows.some((row) => row.borrowerId);
+  const deleteAction = (row: { id: string; borrowerId?: string }) => canDelete && <td className="p-3 text-right print-hidden">{row.borrowerId && <Button variant="ghost" size="icon" aria-label={`Delete borrower payment ${row.id}`} className="text-destructive" onClick={() => setDeleting(row.id)}><Trash2 className="h-4 w-4" /></Button>}</td>;
+  const remove = async () => {
+    if (!deleting) return; setSaving(true);
+    try { await deleteBankTransaction(deleting); setDeleting(undefined); setRefresh((n) => n + 1); toast.success("Payment deleted from both ledgers"); }
+    catch (err) { toast.error(err instanceof Error ? err.message : "Failed to delete payment"); }
+    finally { setSaving(false); }
+  };
   const title = `${ledger?.accountName ?? "Bank Account"} — ${selectedHead ? `${selectedHead.label} Ledger` : "Ledger"}`;
 
   return (
@@ -108,20 +125,21 @@ export default function BankAccountLedger() {
       {error ? <p className="text-destructive">{error}</p> : !ledger ? <p className="text-muted-foreground">Loading ledger…</p> : selectedHead ? (
         <div id="bank-account-ledger" className="rounded-xl border bg-card overflow-x-auto">
           <table className="min-w-max w-full text-sm">
-            <thead><tr className="border-b bg-muted/10 text-muted-foreground"><th className="p-3 text-left">Date</th><th className="p-3 text-left">Reference / Remarks</th><th className="p-3 text-right">{selectedHead.label}</th><th className="p-3 text-right">Balance</th></tr></thead>
-            <tbody>{focusedRows.length ? focusedRows.map((row) => <tr key={row.id} className="border-b"><td className="p-3">{formatDisplayDate(row.date)}</td><td className="p-3">{row.particulars}</td><td className="p-3 text-right">{formatCurrency(row.amount)}</td><td className="p-3 text-right font-mono font-medium">{formatCurrency(row.balance)}</td></tr>) : <tr><td colSpan={4} className="p-6 text-center text-muted-foreground">No transactions for this head in the selected date range.</td></tr>}</tbody>
-            <tfoot><tr className="border-t-2 bg-muted/30 font-bold"><td colSpan={2} className="p-3 text-right">Total</td><td className="p-3 text-right">{formatCurrency(focusedTotal)}</td><td className="p-3" /></tr></tfoot>
+            <thead><tr className="border-b bg-muted/10 text-muted-foreground"><th className="p-3 text-left">Date</th><th className="p-3 text-left">Reference / Remarks</th><th className="p-3 text-right">{selectedHead.label}</th><th className="p-3 text-right">Balance</th>{canDelete && <th className="p-3 text-right print-hidden">Actions</th>}</tr></thead>
+            <tbody>{focusedRows.length ? focusedRows.map((row) => <tr key={row.id} className="border-b"><td className="p-3">{formatDisplayDate(row.date)}</td><td className="p-3">{row.particulars}</td><td className="p-3 text-right">{formatCurrency(row.amount)}</td><td className="p-3 text-right font-mono font-medium">{formatCurrency(row.balance)}</td>{deleteAction(row)}</tr>) : <tr><td colSpan={canDelete ? 5 : 4} className="p-6 text-center text-muted-foreground">No transactions for this head in the selected date range.</td></tr>}</tbody>
+            <tfoot><tr className="border-t-2 bg-muted/30 font-bold"><td colSpan={2} className="p-3 text-right">Total</td><td className="p-3 text-right">{formatCurrency(focusedTotal)}</td><td className="p-3" />{canDelete && <td className="print-hidden" />}</tr></tfoot>
           </table>
         </div>
       ) : (
         <div id="bank-account-ledger" className="rounded-xl border bg-card overflow-x-auto">
           <table className="min-w-max w-full text-sm">
-            <thead><tr className="border-b bg-muted/10 text-muted-foreground"><th className="p-3 text-left">Date</th><th className="p-3 text-left">Reference / Remarks</th><th className="p-3 text-right"><button type="button" onClick={() => selectHead(RECEIVED_HEAD_KEY)} className="hover:text-primary hover:underline">Received</button></th>{ledger.columns.map((column) => <th key={column.key} className="p-3 text-right"><button type="button" onClick={() => selectHead(column.key)} className="hover:text-primary hover:underline">{column.label}</button></th>)}<th className="p-3 text-right">Balance</th></tr></thead>
-            <tbody>{displayedCombinedRows.map((row) => <tr key={row.id} className="border-b"><td className="p-3">{formatDisplayDate(row.date)}</td><td className="p-3">{row.particulars}</td><td className="p-3 text-right">{row.received ? formatCurrency(row.received) : "—"}</td>{ledger.columns.map((column) => <td key={column.key} className="p-3 text-right">{row.outflows[column.key] ? formatCurrency(row.outflows[column.key]) : "—"}</td>)}<td className="p-3 text-right font-mono font-medium">{formatCurrency(row.balance)}</td></tr>)}</tbody>
-            <tfoot><tr className="border-t-2 bg-muted/30 font-bold"><td colSpan={2} className="p-3 text-right">Total</td><td className="p-3 text-right">{formatCurrency(combinedTotals.received)}</td>{ledger.columns.map((column) => <td key={column.key} className="p-3 text-right">{formatCurrency(combinedTotals.outflows[column.key] ?? 0)}</td>)}<td className="p-3" /></tr></tfoot>
+            <thead><tr className="border-b bg-muted/10 text-muted-foreground"><th className="p-3 text-left">Date</th><th className="p-3 text-left">Reference / Remarks</th><th className="p-3 text-right"><button type="button" onClick={() => selectHead(RECEIVED_HEAD_KEY)} className="hover:text-primary hover:underline">Received</button></th>{ledger.columns.map((column) => <th key={column.key} className="p-3 text-right"><button type="button" onClick={() => selectHead(column.key)} className="hover:text-primary hover:underline">{column.label}</button></th>)}<th className="p-3 text-right">Balance</th>{canDelete && <th className="p-3 text-right print-hidden">Actions</th>}</tr></thead>
+            <tbody>{displayedCombinedRows.map((row) => <tr key={row.id} className="border-b"><td className="p-3">{formatDisplayDate(row.date)}</td><td className="p-3">{row.particulars}</td><td className="p-3 text-right">{row.received ? formatCurrency(row.received) : "—"}</td>{ledger.columns.map((column) => <td key={column.key} className="p-3 text-right">{row.outflows[column.key] ? formatCurrency(row.outflows[column.key]) : "—"}</td>)}<td className="p-3 text-right font-mono font-medium">{formatCurrency(row.balance)}</td>{deleteAction(row)}</tr>)}</tbody>
+            <tfoot><tr className="border-t-2 bg-muted/30 font-bold"><td colSpan={2} className="p-3 text-right">Total</td><td className="p-3 text-right">{formatCurrency(combinedTotals.received)}</td>{ledger.columns.map((column) => <td key={column.key} className="p-3 text-right">{formatCurrency(combinedTotals.outflows[column.key] ?? 0)}</td>)}<td className="p-3" />{canDelete && <td className="print-hidden" />}</tr></tfoot>
           </table>
         </div>
       )}
+      <AlertDialog open={!!deleting} onOpenChange={(open) => !open && !saving && setDeleting(undefined)}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Delete borrower payment?</AlertDialogTitle><AlertDialogDescription>This reverses the bank transaction and removes it from the borrower ledger. The bank balance and every borrower running balance must remain nonnegative. Archived borrowers are reactivated if money becomes owed again.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel disabled={saving}>Cancel</AlertDialogCancel><AlertDialogAction disabled={saving} onClick={(e) => { e.preventDefault(); void remove(); }}>Delete</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
     </Layout>
   );
 }

@@ -24,6 +24,8 @@ import Employees from "./pages/Employees";
 import EmployeeLedger from "./pages/EmployeeLedger";
 import BankAccounts from "./pages/BankAccounts";
 import BankAccountLedger from "./pages/BankAccountLedger";
+import Borrowers from "./pages/Borrowers";
+import BorrowerLedger from "./pages/BorrowerLedger";
 import Clients from "./pages/Clients";
 import ClientLedger from "./pages/ClientLedger";
 import Expenses from "./pages/Expenses";
@@ -72,6 +74,8 @@ const App = () => (
           <Route path="/machinery-employees/:employeeId" element={<ProtectedRoute><EmployeeLedger /></ProtectedRoute>} />
           <Route path="/bank-accounts" element={<ProtectedRoute requiredRole="Admin"><BankAccounts /></ProtectedRoute>} />
           <Route path="/bank-accounts/:accountId/ledger" element={<ProtectedRoute requiredRole="Admin"><BankAccountLedger /></ProtectedRoute>} />
+          <Route path="/borrowers" element={<ProtectedRoute requiredRole="Admin"><Borrowers /></ProtectedRoute>} />
+          <Route path="/borrowers/:borrowerId/ledger" element={<ProtectedRoute requiredRole="Admin"><BorrowerLedger /></ProtectedRoute>} />
           <Route path="/clients" element={<ProtectedRoute requiredRole="Admin"><Clients /></ProtectedRoute>} />
           <Route path="/clients/:clientId/ledger" element={<ProtectedRoute requiredRole="Admin"><ClientLedger /></ProtectedRoute>} />
           <Route path="/expenses" element={<ProtectedRoute><Expenses /></ProtectedRoute>} />

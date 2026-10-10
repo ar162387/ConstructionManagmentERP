@@ -46,6 +46,7 @@ const MODULE_LABELS: Record<string, string> = {
   project_ledger: "Project Ledger",
   bank_transactions: "Bank Transactions",
   clients: "Clients",
+  borrowers: "Borrowers",
   users: "Users",
 };
 

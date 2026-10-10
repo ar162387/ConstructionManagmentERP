@@ -8,6 +8,7 @@ import { formatDisplayDate, formatDisplayDateRange, todayPKT } from "@/lib/pktDa
 import { useBankAccounts } from "@/hooks/useBankAccounts";
 import { useBankTransactions } from "@/hooks/useBankTransactions";
 import { useProjects } from "@/hooks/useProjects";
+import { useBorrowers } from "@/hooks/useBorrowers";
 import { useClients } from "@/hooks/useClients";
 import { listCustomHeads, type ApiCustomHead } from "@/services/customHeadsService";
 import { AddBankAccountDialog } from "@/components/dialogs/AddBankAccountDialog";
@@ -75,6 +76,7 @@ export default function BankAccounts() {
 
   const { accounts, loading: accountsLoading, error: accountsError, refetch: refetchAccounts } = useBankAccounts();
   const { projects } = useProjects();
+  const { borrowers, loading: borrowersLoading, error: borrowersError, refetch: refetchBorrowers } = useBorrowers();
   const { clients, loading: clientsLoading, refetch: refetchClients } = useClients();
   const [customHeads, setCustomHeads] = useState<ApiCustomHead[]>([]);
 
@@ -138,6 +140,8 @@ export default function BankAccounts() {
       toast.success("Transaction deleted");
       setDeleteTx(null);
       refetchTx();
+      refetchAccounts();
+      refetchBorrowers();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to delete transaction");
     } finally {
@@ -154,6 +158,7 @@ export default function BankAccounts() {
     refetchAccounts();
     refetchTx();
     refetchClients();
+    refetchBorrowers();
     void listCustomHeads().then(setCustomHeads).catch(() => undefined);
   };
 
@@ -351,6 +356,9 @@ export default function BankAccounts() {
         onOpenChange={setAddTxOpen}
         accounts={accounts}
         projects={projects}
+        borrowers={borrowers}
+        borrowersLoading={borrowersLoading}
+        borrowersError={borrowersError}
         clients={clients}
         clientsLoading={clientsLoading}
         customHeads={customHeads}

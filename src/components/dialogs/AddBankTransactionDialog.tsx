@@ -20,6 +20,8 @@ import { Combobox } from "@/components/ui/combobox";
 import { createBankTransaction } from "@/services/bankTransactionService";
 import type { ApiBankAccount } from "@/services/bankAccountService";
 import type { ApiProject } from "@/services/projectsService";
+import type { ApiBorrower } from "@/services/borrowersService";
+import { formatCurrency } from "@/lib/mock-data";
 import type { ApiClient } from "@/services/clientsService";
 import type { ApiCustomHead } from "@/services/customHeadsService";
 import { toast } from "sonner";
@@ -30,6 +32,9 @@ interface AddBankTransactionDialogProps {
   onOpenChange: (open: boolean) => void;
   accounts: ApiBankAccount[];
   projects: ApiProject[];
+  borrowers?: ApiBorrower[];
+  borrowersLoading?: boolean;
+  borrowersError?: string;
   clients?: ApiClient[];
   clientsLoading?: boolean;
   customHeads?: ApiCustomHead[];
@@ -43,6 +48,9 @@ export function AddBankTransactionDialog({
   onOpenChange,
   accounts,
   projects,
+  borrowers = [],
+  borrowersLoading = false,
+  borrowersError,
   clients = [],
   clientsLoading = false,
   customHeads = [],
@@ -53,6 +61,7 @@ export function AddBankTransactionDialog({
   const [amount, setAmount] = useState("");
   const [accountId, setAccountId] = useState<string | null>(null);
   const [source, setSource] = useState("");
+  const [borrowerId, setBorrowerId] = useState<string | null>(null);
   const [clientId, setClientId] = useState<string | null>(null);
   const [destinationType, setDestinationType] = useState<DestinationType>("custom");
   const [destinationText, setDestinationText] = useState("");
@@ -72,6 +81,12 @@ export function AddBankTransactionDialog({
     [projects]
   );
 
+  const borrowerOptions = useMemo(() => borrowers.filter((b) => !b.archived).map((b) => ({ value: b.id, label: b.name })), [borrowers]);
+  const selectedBorrower = borrowers.find((b) => b.id === borrowerId);
+  const chooseBorrower = (value: string | null) => {
+    setBorrowerId(value);
+    setClientId(null); setProjectId(null); setSource(""); setDestinationText(""); setDestinationType("custom");
+  };
   const selectedAccount = accounts.find((a) => a.id === accountId);
   const selectedProject = projects.find((p) => p.id === projectId);
   const clientOptions = useMemo(() => clients.map((c) => ({ value: c.id, label: c.name })), [clients]);
@@ -84,7 +99,7 @@ export function AddBankTransactionDialog({
       toast.error("Date is required");
       return;
     }
-    if (isNaN(amt) || amt <= 0) {
+    if (!Number.isFinite(amt) || amt <= 0) {
       toast.error("Valid amount is required");
       return;
     }
@@ -92,7 +107,14 @@ export function AddBankTransactionDialog({
       toast.error("Bank account is required");
       return;
     }
-    if (type === "inflow" && !source.trim() && !clientId) {
+    if (borrowerId) {
+      const cents = Math.round(amt * 100);
+      if (!Number.isSafeInteger(cents) || amt !== cents / 100) { toast.error("Use at most two decimal places within the supported range"); return; }
+      if (!selectedBorrower || selectedBorrower.archived) { toast.error("Select an active borrower"); return; }
+      if (type === "inflow" && cents > Math.round(selectedBorrower.outstanding * 100)) { toast.error("Repayment exceeds the borrower’s outstanding loan"); return; }
+      if (type === "outflow" && cents > Math.round((selectedAccount?.currentBalance ?? 0) * 100)) { toast.error("Insufficient bank balance for this loan"); return; }
+    }
+    if (type === "inflow" && !borrowerId && !source.trim() && !clientId) {
       toast.error("Source is required");
       return;
     }
@@ -101,7 +123,10 @@ export function AddBankTransactionDialog({
     let destination = "";
     let projectIdPayload: string | undefined;
 
-    if (type === "inflow") {
+    if (borrowerId) {
+      sourcePayload = type === "inflow" ? selectedBorrower!.name : selectedAccount?.name ?? "";
+      destination = type === "outflow" ? selectedBorrower!.name : selectedAccount?.name ?? "";
+    } else if (type === "inflow") {
       sourcePayload = clientId ? (clients.find((c) => c.id === clientId)?.name ?? source.trim()) : source.trim();
       destination = selectedAccount?.name ?? "";
       projectIdPayload = projectId ?? undefined;
@@ -132,9 +157,10 @@ export function AddBankTransactionDialog({
         amount: amt,
         source: sourcePayload,
         destination,
-        clientId: clientId ?? undefined,
+        borrowerId: borrowerId ?? undefined,
+        clientId: !borrowerId ? clientId ?? undefined : undefined,
         projectId: projectIdPayload,
-        customHeadName: type === "outflow" && destinationType === "custom" ? destination : undefined,
+        customHeadName: !borrowerId && type === "outflow" && destinationType === "custom" ? destination : undefined,
         mode,
         referenceId: referenceId.trim() || undefined,
         remarks: remarks.trim() || undefined,
@@ -142,6 +168,7 @@ export function AddBankTransactionDialog({
       toast.success("Transaction recorded");
       setAmount("");
       setSource("");
+      setBorrowerId(null);
       setClientId(null);
       setDestinationText("");
       setProjectId(null);
@@ -157,7 +184,7 @@ export function AddBankTransactionDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[calc(100vw-2rem)] max-w-2xl p-4 sm:p-6">
+      <DialogContent className="w-[calc(100vw-2rem)] max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
         <DialogHeader className="pb-2">
           <DialogTitle>Add Transaction</DialogTitle>
         </DialogHeader>
@@ -194,6 +221,7 @@ export function AddBankTransactionDialog({
             />
           </div>
 
+          {selectedAccount && <p className="text-xs text-muted-foreground">Available bank balance: {formatCurrency(selectedAccount.currentBalance)}</p>}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <Label className="text-xs">Amount *</Label>
@@ -222,17 +250,24 @@ export function AddBankTransactionDialog({
             </div>
           </div>
 
+          <div>
+            <Label className="text-xs">Borrower (optional)</Label>
+            <Combobox options={borrowerOptions} value={borrowerId} onValueChange={chooseBorrower} placeholder={borrowersLoading ? "Loading borrowers..." : "Select borrower"} searchPlaceholder="Search borrowers..." emptyText="No active borrower found" disabled={borrowersLoading || !!borrowersError} className="mt-0.5 h-9" />
+            {borrowersError && <p className="text-xs text-destructive mt-1">{borrowersError}</p>}
+            {selectedBorrower && <p className="text-xs text-muted-foreground mt-1">Amount owed across all banks: {formatCurrency(selectedBorrower.outstanding)}{type === "inflow" ? ". This payment reduces the loan owed." : ". This loan increases the amount owed."}</p>}
+          </div>
           {type === "inflow" ? (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div><Label className="text-xs">Client (optional)</Label><Combobox options={clientOptions} value={clientId} onValueChange={(value) => { setClientId(value); if (value) setSource(""); }} placeholder={clientsLoading ? "Loading clients..." : "Select client"} searchPlaceholder="Search clients..." emptyText={clientsLoading ? "Loading clients..." : "No client found"} disabled={clientsLoading} className="mt-0.5 h-9" /></div>
-              <div><Label className="text-xs">Source *</Label><Input value={source} disabled={!!clientId} onChange={(e) => setSource(e.target.value)} placeholder="Type payer name" className="mt-0.5 h-9" /></div>
-              <div className="sm:col-span-2"><Label className="text-xs">Project (optional)</Label><Combobox options={projectOptions} value={projectId} onValueChange={setProjectId} placeholder="Select project for attribution" searchPlaceholder="Search..." emptyText="No project found" className="mt-0.5 h-9" /><p className="text-[10px] text-muted-foreground mt-0.5">This records the client payment against a project; it does not fund the project balance.</p></div>
+              <div><Label className="text-xs">Client (optional)</Label><Combobox options={clientOptions} value={clientId} onValueChange={(value) => { setClientId(value); if (value) setSource(""); }} placeholder={clientsLoading ? "Loading clients..." : "Select client"} searchPlaceholder="Search clients..." emptyText={clientsLoading ? "Loading clients..." : "No client found"} disabled={clientsLoading || !!borrowerId} className="mt-0.5 h-9" /></div>
+              <div><Label className="text-xs">Source *</Label><Input value={source} disabled={!!clientId || !!borrowerId} onChange={(e) => setSource(e.target.value)} placeholder="Type payer name" className="mt-0.5 h-9" /></div>
+              <div className="sm:col-span-2"><Label className="text-xs">Project (optional)</Label><Combobox options={projectOptions} value={projectId} onValueChange={setProjectId} disabled={!!borrowerId} placeholder="Select project for attribution" searchPlaceholder="Search..." emptyText="No project found" className="mt-0.5 h-9" /><p className="text-[10px] text-muted-foreground mt-0.5">This records the client payment against a project; it does not fund the project balance.</p></div>
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
                 <Label className="text-xs">Destination</Label>
                 <Select
+                  disabled={!!borrowerId}
                   value={destinationType}
                   onValueChange={(v: DestinationType) => {
                     setDestinationType(v);
@@ -252,8 +287,10 @@ export function AddBankTransactionDialog({
               {destinationType === "custom" ? (
                 <div>
                   <Label className="text-xs">Head *</Label>
+                  {borrowerId ? <Input aria-label="Fixed borrower head" value="Borrower" disabled className="mt-0.5 h-9" /> : <>
                   <Combobox options={headOptions} value={destinationText || null} onValueChange={(value) => setDestinationText(value ?? "")} placeholder="Select or type a new head" searchPlaceholder="Search heads..." emptyText="Type a new head below" className="mt-0.5 h-9" />
                   <Input value={destinationText} onChange={(e) => setDestinationText(e.target.value)} placeholder="New head name" className="mt-1 h-9" />
+                  </>}
                 </div>
               ) : (
                 <div className="sm:col-span-2">

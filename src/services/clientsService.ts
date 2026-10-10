@@ -4,4 +4,5 @@ export interface ClientLedgerResult { clientName: string; rows: { id: string; da
 export const listClients = () => api<ApiClient[]>("/api/clients");
 export const createClient = (name: string) => api<ApiClient>("/api/clients", { method: "POST", body: JSON.stringify({ name }) });
 export const updateClient = (id: string, name: string) => api<ApiClient>(`/api/clients/${id}`, { method: "PATCH", body: JSON.stringify({ name }) });
+export const deleteClient = (id: string) => api<void>(`/api/clients/${id}`, { method: "DELETE" });
 export const getClientLedger = (id: string, projectId?: string) => api<ClientLedgerResult>(`/api/clients/${id}/ledger${projectId ? `?projectId=${encodeURIComponent(projectId)}` : ""}`);

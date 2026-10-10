@@ -22,6 +22,7 @@ const companyNavItems: NavItem[] = [
   { label: "Dashboard", path: "/", icon: <LayoutDashboard className="h-4 w-4" /> },
   { label: "Bank & Accounts", path: "/bank-accounts", icon: <Building2 className="h-4 w-4" />, minRole: "Admin" },
   { label: "Clients", path: "/clients", icon: <ContactRound className="h-4 w-4" />, minRole: "Admin" },
+  { label: "Borrowers", path: "/borrowers", icon: <HandCoins className="h-4 w-4" />, minRole: "Admin" },
   { label: "User Management", path: "/users", icon: <UserCog className="h-4 w-4" />, minRole: "Admin" },
   { label: "Audit Logs", path: "/audit-logs", icon: <ClipboardList className="h-4 w-4" />, minRole: "Super Admin" },
 ];

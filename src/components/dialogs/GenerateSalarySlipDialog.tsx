@@ -9,6 +9,8 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -18,7 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Printer, RefreshCw } from "lucide-react";
+import { Printer } from "lucide-react";
 import { toast } from "sonner";
 import { COMPANY_LOGO_URL } from "@/lib/company";
 import { formatDisplayDate, todayPKT } from "@/lib/pktDate";
@@ -33,9 +35,6 @@ const EARNINGS_ITEMS = [
   "Bonus",
   "Hospitalization",
   "Medical Allowance",
-  "Ex-Gratia",
-  "Incentive KPI",
-  "Incentive",
   "Other Allowance",
 ] as const;
 
@@ -45,11 +44,10 @@ const DEDUCTION_ITEMS = [
   "Fine Violations",
   "Advance vs Salary",
   "Advance vs Travelling",
-  "Other",
   "FRF",
   "PF Loan Instalment",
   "Provident Fund Areas",
-  "Other BN",
+  "Tax Deduction",
 ] as const;
 
 const MONTH_NAMES = [
@@ -57,16 +55,7 @@ const MONTH_NAMES = [
   "July", "August", "September", "October", "November", "December",
 ];
 
-const EMP_ID_SEQ_KEY = "pcf-salary-slip-employee-id-seq";
-const EMP_ID_SEQ_START = 2340;
-
-function nextEmployeeId(): string {
-  const stored = Number(localStorage.getItem(EMP_ID_SEQ_KEY));
-  const base = Number.isFinite(stored) && stored > 0 ? stored : EMP_ID_SEQ_START;
-  const next = base + 1;
-  localStorage.setItem(EMP_ID_SEQ_KEY, String(next));
-  return `PCF${next}`;
-}
+const DEFAULT_NOTE = "The Company is Responsible for Paying all Types of government taxes imposed on the Employee’s Salary";
 
 function daysInMonth(month: number, year: number): number {
   return new Date(year, month, 0).getDate();
@@ -129,6 +118,9 @@ export function GenerateSalarySlipDialog({ open, onOpenChange }: GenerateSalaryS
   const [status, setStatus] = useState("Permanent");
   const [dateOfJoining, setDateOfJoining] = useState("");
   const [chequeNo, setChequeNo] = useState("");
+  const [note, setNote] = useState(DEFAULT_NOTE);
+  const [includeNote, setIncludeNote] = useState(true);
+  const [letterhead, setLetterhead] = useState(false);
 
   const [signName, setSignName] = useState("Zubair Malik");
   const [signDesignation, setSignDesignation] = useState("Managing Director");
@@ -138,10 +130,10 @@ export function GenerateSalarySlipDialog({ open, onOpenChange }: GenerateSalaryS
   const [earnings, setEarnings] = useState<LineMap>(() => emptyLineMap(EARNINGS_ITEMS));
   const [deductions, setDeductions] = useState<LineMap>(() => emptyLineMap(DEDUCTION_ITEMS));
 
-  // Fresh slip each time the dialog opens: new ID, blank form.
+  // Fresh slip each time the dialog opens.
   useEffect(() => {
     if (!open) return;
-    setEmployeeId(nextEmployeeId());
+    setEmployeeId("");
     setName("");
     setDesignation("");
     setDateOfIssue(todayPKT());
@@ -152,6 +144,9 @@ export function GenerateSalarySlipDialog({ open, onOpenChange }: GenerateSalaryS
     setStatus("Permanent");
     setDateOfJoining("");
     setChequeNo("");
+    setNote(DEFAULT_NOTE);
+    setIncludeNote(true);
+    setLetterhead(false);
     setSignName("Zubair Malik");
     setSignDesignation("Managing Director");
     setSignEmail("poineerpcf3@gmail.com");
@@ -174,23 +169,32 @@ export function GenerateSalarySlipDialog({ open, onOpenChange }: GenerateSalaryS
   const netPayable = totalEarnings - totalDeductions;
 
   const handlePrint = () => {
+    if (!employeeId.trim()) {
+      toast.error("Employee ID is required");
+      return;
+    }
     if (!name.trim()) {
       toast.error("Employee name is required");
       return;
     }
 
-    const rowCount = Math.max(EARNINGS_ITEMS.length, DEDUCTION_ITEMS.length);
+    const rowCount = Math.max(EARNINGS_ITEMS.length, DEDUCTION_ITEMS.length) + 1;
     const bodyRows = Array.from({ length: rowCount }, (_, i) => {
       const earnLabel = EARNINGS_ITEMS[i];
       const dedLabel = DEDUCTION_ITEMS[i];
       const earnCell = earnLabel
         ? `<td class="lbl">${escapeHtml(earnLabel)}</td><td class="val">${escapeHtml(printValue(earnings[earnLabel]))}</td>`
-        : `<td class="lbl"></td><td class="val"></td>`;
+        : i === EARNINGS_ITEMS.length
+          ? `<td class="lbl total">Total Earnings</td><td class="val total">${escapeHtml(formatAmount(totalEarnings))}/-</td>`
+          : `<td class="lbl"></td><td class="val"></td>`;
       const dedCell = dedLabel
         ? `<td class="lbl">${escapeHtml(dedLabel)}</td><td class="val">${escapeHtml(printValue(deductions[dedLabel]))}</td>`
-        : `<td class="lbl"></td><td class="val"></td>`;
+        : i === DEDUCTION_ITEMS.length
+          ? `<td class="lbl total">Total Deductions</td><td class="val total">${escapeHtml(formatAmount(totalDeductions))}</td>`
+          : `<td class="lbl"></td><td class="val"></td>`;
       return `<tr>${earnCell}${dedCell}</tr>`;
     }).join("");
+    const netPayableRow = `<tr><td class="earnings-empty" colspan="2" aria-hidden="true"></td><td class="lbl total net-payable">Net Payable</td><td class="val total net-payable">${escapeHtml(formatAmount(netPayable))}/-</td></tr>`;
 
     const monthYearLabel = `${MONTH_NAMES[month - 1].slice(0, 3)} ${year}`;
 
@@ -199,13 +203,13 @@ export function GenerateSalarySlipDialog({ open, onOpenChange }: GenerateSalaryS
 <head>
 <title>Salary Slip - ${escapeHtml(name)} - ${escapeHtml(monthYearLabel)}</title>
 <style>
-  @page { size: A4 portrait; margin: 10mm 12mm; }
+  @page { size: A4 portrait; margin: ${letterhead ? "40mm 20mm 25mm" : "10mm 12mm"}; }
   * { box-sizing: border-box; }
   html, body { width: 100%; }
   body { font-family: Arial, Helvetica, sans-serif; color: #000; padding: 0; margin: 0; }
   .slip { border: 2.5px solid #000; border-radius: 16px; padding: 16px 22px 12px; width: 100%; margin: 0; page-break-inside: avoid; }
   .logo-row { margin-bottom: 4px; }
-  .logo-row img { height: 62px; width: auto; object-fit: contain; }
+  .logo-row img { height: 105.4px; width: auto; max-width: 100%; object-fit: contain; }
   h1.title { text-align: center; font-size: 20px; font-weight: 700; margin: 2px 0 0; }
   .subtitle { text-align: center; font-size: 11.5px; font-weight: 700; margin: 0 0 10px; }
   table.info { width: 100%; border-collapse: collapse; margin-bottom: 0; border: 1.5px solid #000; }
@@ -215,17 +219,19 @@ export function GenerateSalarySlipDialog({ open, onOpenChange }: GenerateSalaryS
   table.info .info-right { width: 45%; }
   .kv { display: flex; }
   .kv .k { width: 100px; }
-  table.lines { width: 100%; border-collapse: collapse; border: 1.5px solid #000; border-top: none; }
-  table.lines th { background: #d9cfa8; color: #000; font-weight: 700; text-align: center; font-size: 12px; padding: 4px 10px; border: 1px solid #000; }
+  table.lines { width: 100%; border-collapse: collapse; border: none; }
+  table.lines th { background: #7cfc00; color: #000; font-weight: 700; text-align: center; font-size: 12px; padding: 4px 10px; border: 1px solid #000; }
   table.lines th.deductions-h { text-align: left; padding-left: 10px; }
   table.lines th.earnings-h { text-align: left; padding-left: 10px; }
   table.lines td { border: 1px solid #000; padding: 3px 10px; font-size: 12px; }
   table.lines td.lbl { text-align: left; }
   table.lines td.val { text-align: right; width: 90px; }
-  .note { font-size: 11px; margin: 8px 0 5px; }
+  table.lines td.total { font-weight: 700; }
+  table.lines td.earnings-empty { border: none; }
+  .note { font-size: 11px; margin: 8px 0 5px; white-space: pre-wrap; overflow-wrap: anywhere; }
   .note b { text-decoration: underline; }
-  .totals-row { display: flex; justify-content: space-between; font-size: 12.5px; font-weight: 700; margin-top: 4px; }
-  .net-row { text-align: right; font-size: 14px; font-weight: 700; margin-top: 5px; }
+  table.lines td.net-payable { font-size: 14px; background: #7cfc00; }
+  table.lines th, table.lines td.net-payable { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .meta { margin-top: 12px; font-size: 12px; }
   .meta-row { display: flex; margin-bottom: 3px; }
   .meta-row .k { width: 150px; font-weight: 700; }
@@ -234,12 +240,14 @@ export function GenerateSalarySlipDialog({ open, onOpenChange }: GenerateSalaryS
   .sign-name { font-size: 16px; font-weight: 700; font-family: Georgia, 'Times New Roman', serif; margin-bottom: 3px; }
   .sign-designation { font-size: 12.5px; margin-bottom: 8px; }
   .sign-contact { font-size: 11.5px; margin: 2px 0; }
+  .generated-notice { font-size: 8px; line-height: 1.3; margin: 2px 0; }
   .sign-contact a { color: inherit; text-decoration: underline; }
   .footer { margin-top: 14px; padding-top: 6px; border-top: 1px solid #000; text-align: center; font-size: 10px; color: #333; }
   @media print { body { padding: 0; margin: 0; } }
+  ${letterhead ? "body.letterhead { min-height: 232mm; display: flex; align-items: center; justify-content: center; }" : ""}
 </style>
 </head>
-<body>
+<body${letterhead ? ' class="letterhead"' : ""}>
   <div class="slip">
     <div class="logo-row"><img src="${escapeHtml(COMPANY_LOGO_URL)}" alt="Pioneer Construction & Fabrication Co. logo" /></div>
     <h1 class="title">Salary Slip</h1>
@@ -248,7 +256,7 @@ export function GenerateSalarySlipDialog({ open, onOpenChange }: GenerateSalaryS
     <table class="info">
       <tr>
         <td class="info-left">
-          <div class="kv"><span class="k">Employee ID:</span><span>${escapeHtml(employeeId)}</span></div>
+          <div class="kv"><span class="k">Employee ID:</span><span>${escapeHtml(employeeId.trim())}</span></div>
           <div class="kv"><span class="k">Name:</span><span><b>${escapeHtml(name)}</b></span></div>
           <div class="kv"><span class="k">Days:</span><span><b>${escapeHtml(days || "-")}</b></span></div>
         </td>
@@ -268,16 +276,11 @@ export function GenerateSalarySlipDialog({ open, onOpenChange }: GenerateSalaryS
       </thead>
       <tbody>
         ${bodyRows}
+        ${netPayableRow}
       </tbody>
     </table>
 
-    <div class="note"><b>Note:</b> The Company is Responsible for Paying all Types of government taxes imposed on the Employee&rsquo;s Salary</div>
-
-    <div class="totals-row">
-      <span>Total Earnings&nbsp;&nbsp;&nbsp;${escapeHtml(formatAmount(totalEarnings))}/-</span>
-      <span>Total Deductions&nbsp;&nbsp;&nbsp;${totalDeductions > 0 ? escapeHtml(formatAmount(totalDeductions)) : "-"}</span>
-    </div>
-    <div class="net-row">Net Payable&nbsp;&nbsp;&nbsp;${escapeHtml(formatAmount(netPayable))}/-</div>
+    ${includeNote && note.trim() ? `<div class="note"><b>Note:</b> ${escapeHtml(note.trim())}</div>` : ""}
 
     <div class="meta">
       <div class="meta-row"><span class="k">Status:</span><span>${escapeHtml(status || "-")}</span></div>
@@ -291,11 +294,14 @@ export function GenerateSalarySlipDialog({ open, onOpenChange }: GenerateSalaryS
       <div class="sign-designation">${escapeHtml(signDesignation || "")}</div>
       ${signEmail.trim() ? `<div class="sign-contact">Email: ${escapeHtml(signEmail)}</div>` : ""}
       ${signContact.trim() ? `<div class="sign-contact">Contact # ${escapeHtml(signContact)}</div>` : ""}
+      <div class="generated-notice">This is a computer-generated salary slip and does not require a signature.</div>
     </div>
 
     <div class="footer">
-      H#39, Saigol Estate, backside Doctor&rsquo;s Hospital, Lahore. Ph: 0321-8888177, 0321-5991402<br />
-      Email: pioneer_pcf@hotmail.com
+      <div class="footer-address">
+        H#39, Saigol Estate, backside Doctor&rsquo;s Hospital, Lahore. Ph: 0321-8888177, 0321-5991402<br />
+        Email: pioneer_pcf@hotmail.com
+      </div>
     </div>
   </div>
 </body>
@@ -347,19 +353,14 @@ export function GenerateSalarySlipDialog({ open, onOpenChange }: GenerateSalaryS
         <div className="space-y-5">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <div>
-              <Label>Employee ID</Label>
-              <div className="mt-1 flex items-center gap-2">
-                <Input value={employeeId} readOnly className="font-mono" />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  onClick={() => setEmployeeId(nextEmployeeId())}
-                  aria-label="Regenerate Employee ID"
-                >
-                  <RefreshCw className="h-4 w-4" />
-                </Button>
-              </div>
+              <Label htmlFor="salary-slip-employee-id">Employee ID *</Label>
+              <Input
+                id="salary-slip-employee-id"
+                value={employeeId}
+                onChange={(e) => setEmployeeId(e.target.value)}
+                className="mt-1 font-mono"
+                placeholder="Enter employee ID"
+              />
             </div>
             <div>
               <Label>Name *</Label>
@@ -423,6 +424,32 @@ export function GenerateSalarySlipDialog({ open, onOpenChange }: GenerateSalaryS
           </div>
 
           <Separator />
+
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <Checkbox id="salary-slip-include-note" checked={includeNote} onCheckedChange={(checked) => setIncludeNote(checked === true)} />
+              <Label htmlFor="salary-slip-include-note">Print note</Label>
+            </div>
+            <Label htmlFor="salary-slip-note">Note (optional)</Label>
+            <Textarea
+              id="salary-slip-note"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              className="mt-1"
+              placeholder="Enter a custom note. Leave blank to omit it from the printed slip."
+            />
+          </div>
+
+          <div>
+            <div className="flex items-center gap-2">
+              <Checkbox id="salary-slip-letterhead" checked={letterhead} onCheckedChange={(checked) => setLetterhead(checked === true)} />
+              <Label htmlFor="salary-slip-letterhead">Print on company letterhead</Label>
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Centers the slip in the clear area of an A4 letterhead, reserving 40 mm at the top,
+              25 mm at the bottom, and 20 mm on each side. Print at 100% scale with browser headers and footers off.
+            </p>
+          </div>
 
           <div className="grid gap-4 sm:grid-cols-3">
             <div>
